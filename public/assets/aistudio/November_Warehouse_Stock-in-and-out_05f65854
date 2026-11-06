@@ -1,0 +1,70 @@
+Material Code,Category,Brand,Item Name,Supplier,Storage Location,Primary UoM,Issue UoM,Conversion Factor
+RM-FLR-001,Flour & Grains,Continental,Continental All Purpose Flour,JCT Wheat & Sugar Products,Dry Room 1,Sack,kg,25.00
+RM-FLR-002,Flour & Grains,Isla,3rd Class Isla Flour,Lucky Roma Trading,Dry Room 1,Sack,kg,25.00
+RM-FLR-003,Flour & Grains,Rossa,1st Class Hard Flour,Lucky Roma Trading,Dry Room 1,Sack,kg,25.00
+RM-FLR-004,Flour & Grains,General Milling,General Milling Soft Flour ,,Dry Room 1,Sack,kg,25.00
+RM-FLR-005,Flour & Grains,Master Chef,100% Pure Cornstarch (Gawgaw),,Dry Room 1,Sack,kg,25.00
+RM-FLR-006,Flour & Grains,General Milling,Soft Cake Flour (Low-Protein / Chlorinated),,Dry Room 1,Sack,kg,25.00
+RM-DRY-005,Flour & Grains,Good Seed Co.,Desiccated Coconut (Medium / Fine Grade 500g),JCT Wheat & Sugar Products,Dry Room 1,Bag,kg,0.50
+RM-FAT-001,Fats & Oils,Magnolia Buttercup,Buttercup Margarine / Butter,P.L. Sebastian Corporation,Cold Room,Block,kg,1.00
+RM-FAT-002,Fats & Oils,Marca Leon,Marca Leon Coconut Oil,Lucky Roma Trading,Wet Room,Tin Can,kg,17.00
+RM-FAT-003,Fats & Oils,Sunny Suy,Vegetable Shortening,Lucky Roma Trading,Wet Room,Laton,kg,30.00
+RM-FAT-004,Fats & Oils,Alpha Margarine,Margarine,JCT Wheat & Sugar Products,Wet Room,Laton,kg,40.00
+RM-FAT-005,Fats & Oils,Unlabeled,Palm Oil,Lucky Roma Trading,Wet Room,Tin Can,kg,17.00
+RM-FAT-006,Fats & Oils,Sunny Suy / Bakers,Refined Vegetable Cooking Oil,Lucky Roma Trading,Wet Room,Tin Can,kg,17.00
+RM-SWT-001,Sweeteners,Crystal Sugar Co.,Crystal Brown Sugar,"Davao Great Wall Trading, Inc.",Dry Room 1,Sack,kg,50.00
+RM-SWT-002,Sweeteners,Busco Cane,Refined White Sugar,"Davao Great Wall Trading, Inc.",Dry Room 1,Sack,kg,50.00
+RM-SWT-003,Sweeteners & Salt,Fidelis / Master Chef,Refined Iodized Fine Salt (ASIN Law RA 8172),P.L. Sebastian Corporation,Dry Room 1,Sack,kg,25.00
+RM-SWT-004,Sweeteners,Peotraco / Victoria,Confectioners / Powdered Icing Sugar,Davao Great Wall Trading,Dry Room 1,Pack,kg,2.00
+RM-DRY-001,Dairy & Eggs,Coop,Fresh Eggs,Local Poultry Coop,Wet Room,Tray,pcs,30.00
+RM-DRY-002,Dairy & Eggs,Master Chef,Condensada (1kg Tin Can),Lucky Roma Trading,Wet Room,Tin Can,kg,1.00
+RM-DRY-003,Dairy & Eggs,Jersey,Evaporada (370ml Tin Can),Golden Fortune Trading Incorporated,Wet Room,Box,can,48.00
+RM-DRY-004,Dairy & Eggs,Farmland A.,Skim Milk,JCT Wheat & Sugar Products,Dry Room 1,Sack,kg,25.00
+RM-LEV-001,Leavening & Additives,Gloripan,Gloripan Instant Dry Yeast,JCT Wheat & Sugar Products,Dry Room 1,Box,kg,10.00
+RM-LEV-002,Leavening & Additives,Calumet,Calumet Baking Powder,JCT Wheat & Sugar Products,Dry Room 1,Bag,kg,14.00
+RM-LEV-003,Leavening & Additives,Food Grade FCC,Calcium Propionate (CSP Bread Mold Inhibitor),P.L. Sebastian Corporation,Dry Room 1,Pack,kg,1.00
+RM-LEV-004,Leavening & Additives,Food Grade FCC,Potassium Sorbate (Granular Antimicrobial),P.L. Sebastian Corporation,Dry Room 1,Pack,kg,1.00
+RM-LEV-005,Leavening & Additives,Baker's Choice (GMC),Baker's Choice Non-Bromated Bread Improver,P.L. Sebastian Corporation,Dry Room 1,Pack,kg,1.00
+RM-FLV-001,Flavors & Colors,Unibake,Unibake Ube Flavor & Color Blend,JCT Wheat & Sugar Products,Wet Room,Bottle,L,5.00
+RM-FLV-002,Flavors & Colors,Kanegie Food,Vanilla Flavor FF,Lucky Roma Trading,Wet Room,Gallon,L,3.79
+RM-FLV-003,Flavors & Colors,Neco,Neco Egg Yellow Food Coloring Powder (12x500g),Davao Great Wall Trading,Dry Room 1,Box,kg,6.00
+RM-FLV-004,Flavors & Colors,McCormick / Pure,Pure Ground Cinnamon Powder (Biscocho Glaze),P.L. Sebastian Corporation,Dry Room 1,Pack,kg,1.00
+RM-FLV-005,Flavors & Colors,Dutché,Dutché Special Alkalized Dark Cocoa Powder,P.L. Sebastian Corporation,Dry Room 1,Pack,kg,1.00
+PM-BOX-001,Packaging Materials,Jang-Jang,Jang-Jang Master Carton Box,C-One,Dry Room 2,Rim,pcs,20.00
+UT-GAS-001,Utilities & Fuel,Solane,Solane LPG Tank,D'Unibuenas Corporation,Wet Room,Tank,tank,1.00
+PM-PAP-001,Packaging Materials,Mandaue Libertad,Glassine Wax Paper Sheets (Otap Wrapping),Mandaue Libertad,Dry Room 2,Rim,pcs,500.00
+PM-PAP-002,Packaging Materials,Pattrern Paper,Baking Pan Pattern Paper (Laminated Sheets),JCT Wheat & Sugar Products,Dry Room 2,Rim,pcs,500.00
+PM-FLM-001,Packaging Materials,Mercury,Plastic Cellophane Roll 25x50,C-One,Dry Room 2,Rim,pcs,100.00
+PM-FLM-002,Packaging Materials,Mercury,Plastic Cellophane Roll 9x18,C-One,Dry Room 2,Rim,pcs,500.00
+PM-BAG-001,Packaging Materials,Calypso / Sabako,Calypso Poly Bag 7x14,C-One,Dry Room 2,Pack,pcs,100.00
+PM-BAG-002,Packaging Materials,C-One / Coop,Poly Bag 7x11 Expandable,C-One,Dry Room 2,Rim,pcs,500.00
+PM-BAG-003,Packaging Materials,C-One / Sabako,Poly Bag 5x6 (001 / 002),C-One,Dry Room 2,Rim,pcs,500.00
+PM-BAG-004,Packaging Materials,C-One / Sabako,Poly Bag 4x6 (001 / 002),C-One,Dry Room 2,Rim,pcs,500.00
+PM-BAG-005,Packaging Materials,C-One / Calypso,Calypso Poly Bag 6x10-01,C-One,Dry Room 2,Rim,pcs,500.00
+PM-BAG-006,Packaging Materials,C-One / Calypso,Calypso Poly Bag 6x10-02,C-One,Dry Room 2,Rim,pcs,500.00
+PM-BAG-007,Packaging Materials,C-One / Sabako / Cutty Shark,Poly Bag 10x18 (General / Ice Bag),C-One,Dry Room 2,Rim,pcs,500.00
+PM-BAG-008,Packaging Materials,Generic,Tasty Bread Bag 10x18,C-One,Dry Room 2,Pack,pcs,100.00
+PM-BAG-009,Packaging Materials,Generic,Special Bread Bag 5x12 SP,C-One,Dry Room 2,Pack,pcs,100.00
+PM-BAG-010,Packaging Materials,Generic,Long Bread Bag 7x14 SP,C-One,Dry Room 2,Pack,pcs,100.00
+PM-CUP-001,Packaging Materials,Master Chef,Baking Cups 5 1/2 oz,C-One,Dry Room 2,Box,pcs,"1,000.00"
+PM-CUP-002,Packaging Materials,Master Chef,Baking Cups 2 oz (Circle),C-One,Dry Room 2,Box,pcs,"1,000.00"
+PM-CUP-003,Packaging Materials,Generic,Mamon Paper Cups 3 1/2,C-One,Dry Room 2,Box,pcs,500.00
+PM-CUP-004,Packaging Materials,Generic,Torta Paper Cups 3 1/2,C-One,Dry Room 2,Box,pcs,500.00
+PM-BAG-011,Packaging Materials,Generic,Sando Bag Carrier (Medium / Large),C-One,Dry Room 2,Pack,pcs,100.00
+OP-PPE-001,Operational Supplies,Generic,Disposable Gowning Shoe Covers,C-One,Dry Room 2,Bag,pcs,100.00
+RM-ING-054,Dairy & Eggs,Jersey,Condensed Creamer (390g Tin Can),Lucky Roma Trading,Wet Room,Box,can,48.00
+RM-LEV-006,Leavening & Additives,Generic / Local,Carbonato 1 kg,JCT Wheat & Sugar Products,Dry Room 1,Pack,kg,1.00
+RM-LEV-007,Leavening & Additives,Generic / Local,Carbonato 500g,JCT Wheat & Sugar Products,Dry Room 1,Pack,kg,0.50
+RM-DRY-006,Flour & Grains,Generic / Local,Sesame Seed 1 kg,Lucky Roma Trading,Dry Room 1,Pack,kg,1.00
+PM-TAP-001,Packaging Materials,Generic,Sealer Tape,C-One,Dry Room 2,Roll,pcs,1.00
+PM-TAP-002,Packaging Materials,Generic,Packing tape 1.5 cm 1 inch,C-One,Dry Room 2,Roll,pcs,1.00
+PM-TAP-003,Packaging Materials,Generic,Packing tape 5 cm 1/2 inch,C-One,Dry Room 2,Roll,pcs,1.00
+RM-ING-055,Baking Supplies,Bakers Field,Bakers Field Whip it,P.L. Sebastian Corporation,Dry Room 1,Pouch,kg,1.00
+RM-LEV-008,Leavening & Additives,Generic,Baking Soda 500g,P.L. Sebastian Corporation,Dry Room 1,Pack,kg,0.50
+PM-BAG-012,Packaging Materials,Donewell,Donewell 16x24 x 500 pcs,C-One,Dry Room 2,Rim,pcs,500.00
+PM-FLM-003,Packaging Materials,Generic,Smoke Plastic 14x20 x 500pcs,C-One,Dry Room 2,Pack,pcs,1.00
+PM-BAG-014,Packaging Materials,Generic,tasty bread sm,C-One,Dry Room 2,Pack,pcs,1.00
+PM-CUP-006,Packaging Materials,Bakerite,bakerite baking cups 3 oz,C-One,Dry Room 2,Box,pcs,1.00
+PM-BAG-016,Packaging Materials,Joker Excel,joker excel 8x14,C-One,Dry Room 2,Pack,pcs,1.00
+RM-FLV-006,Flavors & Colors,Neco,Neco Choco brown 500g,Davao Great Wall Trading,Dry Room 1,Can,kg,0.50
+RM-FLV-007,Flavors & Colors,Neco,Neco choco brown 125g,Davao Great Wall Trading,Dry Room 1,Can,kg,0.13

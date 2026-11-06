@@ -1,0 +1,8 @@
+{
+  "name": "Jang-Jang Bakeshop Systems",
+  "description": "Warehouse Management System (WMS), inventory tracking, and bakery operations for Jang-Jang Bakeshop & Kingdom Confectionary.",
+  "permissions": [],
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

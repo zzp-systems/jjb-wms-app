@@ -1,0 +1,508 @@
+﻿JANG-JANG BAKESHOP & OUTLET NETWORK
+KINGDOM CONFECTIONARY BUSINESS LINES
+STANDARD OPERATING PROCEDURE & MANUAL OF OPERATIONS
+
+
+
+
+=======================================================================
+DOCUMENT ID:     SOP-WAR-002 / SOP-PRO-004
+REVISION:        Rev. 04 (Unified Production, NPD SLA, Climate Contingency & Digital Batch Sync)
+EFFECTIVE DATE:  October 24, 2026
+CATEGORY:        Operations, Material Logistics, Facility Engineering & Quality Compliance
+JURISDICTION:    Indangan Central Manufacturing Plant, Sasa Facility, and All Retail Bakery 
+                Outlets (Laurice Delicacies – Bakerohan D.C., Pan de Verde – Communal D.C., 
+                and Satellite Outlets)
+IDEATED, PREPARED & DRAFTED BY:
+                Zaphyr Zur Pomicpic
+                Systems and Operations Director / Advisor | Technical Writer
+AUTHORIZATION:   Angelina P. Sun (Head of Administration)
+OPERATIONAL OVERSIGHT:
+                Alwen Hermogeno (Master Head Baker)
+                Ramil Capada (Building & Equipment Manager / Senior Baking Advisor)
+                Grace P. Suico (FSCO & QA Control Director)
+CORE MANTRA:     "Bawat Piraso, Dekalidad—from Receiving to Dispatch"
+=======================================================================
+
+
+RETAIL OUTLET NETWORK & PERSONNEL ROSTER
+________________
+
+
+1. Pan De Verde Outlet
+* Location: Purok 8, Communal, Davao City
+* Branch Management & Staff:
+   * Bakery Manager: Jhoanna Tejano
+   * Head Baker: Feliciano T. Gomera
+   * Assistant Baker: Benjamin S. Plaza II
+   * Assistant Baker: Wowie E Albia
+   * Cashier: Relaine Kris Lustre
+   * Logistics / Driver: Othniel Tilan
+   * Maintenance & Sanitation Supervisor: Sarah Baguio
+________________
+
+
+2. Laurice Delicacies Outlet
+Logo: https://zzp-systems.github.io/jjb-systems/Laurice%20Delicacies%20Logo.png
+* Location: Lower Quary, Barangay 5-A, Bankerohan, Davao City
+* Branch Management & Staff:
+   * Bakery Manager: Anecita S. Blase
+   * Logistics Manager: Roberto S. Blase
+   * Head Baker: Raffy Boy P. Cortes
+   * Assistant Baker: Jhon Rudymar S. Cortes
+   * Assistant Baker: Raymart Boy S. Cortes
+   * Assistant Baker: Ricardo Jr. M Sajol
+   * Cashier: Leah Bernal
+________________
+
+
+3. Central Production & Administrative Oversight (Indangan Facility)
+* Systems and Operations Director / Advisor: Zaphyr Zur Pomicpic
+* Head of Administration: Angelina P. Sun
+* Master Head Baker: Alwen Hermogeno
+* Building & Equipment Manager / Senior Baking Advisor: Ramil Capada
+* FSCO & QA Control Director: Grace P. Suico
+* Warehouse Supervisor: Jade Q. Dela Cruz
+* Ingredient Batching Preparer: Romeo B. Malusay
+* Finance Directors & Costing Officers: Jeanifer S. Sauping & Maria Charito Basoc
+
+
+
+
+
+1. POLICY & GOVERNANCE
+1.1 Purpose & Strategic Scope
+This Standard Operating Procedure establishes definitive operational, engineering, food safety, administrative, and inventory governance over raw material storage, ingredient scaling, digital batch tracking, recipe integrity, thermal validation, and recipe modifications across all central manufacturing facilities and retail bakery outlets of the Jang-Jang Bakeshop network and Kingdom Confectionary Business Lines.
+1.2 Mandatory Operational Directives & Non-Negotiable Prohibitions
+Core Policy Directive: "No Official Batching Without Prior Administrative Formulation Approval & Costing."
+1. Strict Prohibition on Unbatched Raw Material Ordering:
+   * Bakery outlets (Laurice Delicacies – Bakerohan D.C. and Pan de Verde – Communal D.C.) and station bakers are categorically barred from ordering, requisitioning, or receiving unbatched bulk commodities (such as 25 kg flour sacks, bulk unweighed sugar, or bulk shortening slabs) directly from warehouse storage.
+   * All raw materials released into production must arrive exclusively as pre-formulated, unitized, sealed batch kits scaled and certified by the Ingredient Batching Preparer (Romeo B. Malusay).
+2. Prohibition of Floor Formula Modifications & Off-Book Baking:
+   * Outlet bakers and production personnel are strictly forbidden from baking any bread, bun, pastry, or delicacy lacking prior written approval and official recipe costing from Central Administration.
+   * Off-book flour blending, hydration tampering, sweetness adjustments, fat substitutions, unauthorized dough fermentation tweaking, or running unauthorized test batches using company inventory is strictly prohibited.
+   * No unapproved baked product may be placed on retail sales display counters without corporate pricing, approved packaging, and formal administrative clearance.
+3. Mandatory Multi-Tier Evaluation Gateway:
+   * Every commercial formulation must complete administrative yield costing, mechanical capacity and thermal profiling, rheological dough analysis, and cGMP/food safety compliance review prior to commercial scheduling.
+4. Mandatory Recipe Matching Mandate:
+   * No ingredient will be scaled, sieved, or issued unless matched directly to an active code in the Official Master Formulation Register (e.g., Biscocho BIS-001, Otap OTP-001, or officially approved outlet bread lines).
+5. Physical Access Restriction & Controlled Ingress:
+   * Raw materials remain segregated in designated warehouse storage rooms (Dry Room 1, Cold Room, Wet Room) under the sole custody of Jade Q. Dela Cruz. Outlet bakers are prohibited from entering warehouse storage rooms.
+   * Material handoffs occur exclusively through the warehouse staging Dutch door/counter. Pre-batched recipe kits enter production strictly through the Medium Care (Grey) Zone transfer airlock.
+6. Zero Concealment Policy:
+   * Any process drift, batch scaling discrepancy, thermal breach, mechanical anomaly, or formula defect must be logged immediately. Concealment of deviations triggers immediate progressive disciplinary action.
+2. WORKFLOW ARCHITECTURE & FLOWCHARTS
+2.1 Standard Daily Batch Requisition & Floor Execution Flow
+
+
+
+
+
+
+[ Step 1: Authorized Digital Outlet Requisition ]
+ Outlet Baker submits Form-PRO-001 via Digital Terminal (SKU, Multiplier, Costing Code)
+                        │
+                        ▼
+[ Step 2: Recipe Matching & Material Pull List ]
+ Romeo B. Malusay matches SKU in Master Register, auto-calculates gram weights,
+ generates digital Raw Material Pull List, and stages Form-ING-001
+                        │
+                        ▼
+[ Step 3: Upstream Warehouse Material Transfer (FEFO) ]
+ Romeo presents Form-ING-001 at Staging Window to Jade Q. Dela Cruz;
+ Jade verifies inventory across Dry Room 1, Cold Room, and Wet Room;
+ Releases bulk lots under FEFO discipline and logs supplier lot numbers
+                        │
+                        ▼
+[ Step 4: Sifting, Scale Calibration & Precision Scaling ]
+ Romeo verifies digital bench scales (Govt Seals #798073 & #798074 / Form-CAL-001),
+ screens flour through 40-mesh stainless sieve, scales unitized batch kits
+                        │
+                        ▼
+[ Step 5: Grey Zone Transfer & Outlet Floor Execution ]
+ Pre-batched kits transfer into Medium Care (Grey) Zone; Receiving Baker inspects,
+ countersigns Form-ING-001, mixes to 26°C–28°C, bakes to CCP-1 (> 95°C),
+ and commits finished unit counts to Digital Shift Yield Logs
+
+2.2 New Product Development (NPD) Pipeline Flow (5-Day SLA)
+
+
+
+
+
+
+[ Stage 1: Proposal Submission (Form-NPD-001) ]
+ Station / Outlet Baker submits concept, baker's percentages, shelf-life target,
+ and commercial justification
+                        │
+                        ▼
+[ Stage 2: Technical, Rheological & Engineering Review — 72-Hour Window ]
+ • Alwen Hermogeno: Hydration/windowpane test, shear friction, fermentation curves
+ • Ramil Capada: Mechanical stress, Deck radiant vs Rotary convection profiles, CCP-1 (> 95°C)
+ • Grace P. Suico: Water activity (aw < 0.60 dry / mold hurdles), cGMP & allergen validation
+                        │
+                        ▼
+[ Stage 3: Costing & Commercial Feasibility — 48-Hour Window ]
+ Jeanifer S. Sauping & Maria Charito Basoc map gram weights to active ingredient costs,
+ factor < 2.0% scrap, packaging, and calculate wholesale cost and target SRP
+                        │
+                        ▼
+[ Stage 4: Executive Authorization & Register Integration ]
+ Angelina P. Sun reviews consolidated dossier, assigns System SKU (e.g., BRD-COMM-001),
+ and delivers master formula to Romeo B. Malusay's register for active batching
+
+3. STEP-BY-STEP OPERATIONAL PROCEDURES
+PROCEDURE A: Daily Central Batch Requisition, Precision Scaling, Issuance & Line Execution
+* Step 1: Production Requisition Submission (Form-PRO-001)
+   1. The Station Baker or Outlet In-Charge submits Form-PRO-001 via the dedicated terminal before the scheduled shift cutoff.
+   2. The requisition must specify:
+      * Product Line SKU and commercial item title.
+      * Target batch multiplier and required finished unit count.
+      * Authorized Administration Approval Code / Costing Reference.
+   3. Requisitions for unlisted, uncosted, or experimental varieties are automatically rejected by the system.
+* Step 2: Recipe Matching & Sizing by Romeo B. Malusay
+   1. Cross-reference Form-PRO-001 against the Official Master Formulation Register cards corresponding to the target production facility or retail outlet (Laurice Delicacies vs. Pan de Verde specifications).
+   2. Compute exact component gram weights based on approved baker's percentages (flour basis = 100.0%).
+   3. Generate the internal Raw Material Pull List and populate target weights onto Form-ING-001 (Ingredient Batching, Scaling & Issuance Record).
+* Step 3: Upstream Warehouse Material Transfer (Jade Q. Dela Cruz)
+   1. Romeo B. Malusay presents Form-ING-001 at the warehouse staging window / Dutch door.
+   2. Jade Q. Dela Cruz verifies stock and issues raw materials strictly under First-Expired, First-Out (FEFO) inventory rotation rules (SOP-WAR-001):
+      * Dry Room 1: Dry commodities (flours, sugars, starches) must originate from clean, pallet-elevated, sealed High-Density Polyethylene (HDPE) bins equipped with dedicated scoops.
+      * Cold Room (0°C to -4°C): Dairy and temperature-sensitive specialty fats.
+      * Wet Room / Tempering Staging: Butter and shortening blocks must complete verified tempering to 18°C–20°C prior to issuance.
+   3. Jade logs raw material supplier lot numbers, bag/container quantities, and release timestamps onto Form-ING-001 before transferring materials across the hatch.
+* Step 4: Mechanical Sifting, Scale Calibration & Precision Scaling
+   1. Calibration Verification: Romeo inspects digital bench scales against government calibration seals (Seal Nos. #798073 and #798074), performs zero-point verification, and logs data on Form-CAL-001.
+   2. Mechanical Sifting: Pass all dry flour through a 40-mesh stainless steel sifting screen to aerate the flour, eliminate compact lumps, and intercept foreign matter.
+   3. Unitized Batch Kitting: Scale ingredients into sanitized, color-coded containers and attach a completed Batch Identification Tag detailing:
+      * Product SKU Code and Commercial Item Name
+      * Batch Number, Lot Traceability Codes, and Preparation Date
+      * Net Component Gram Weights (Flour, Sugar, Fats, Additives, Leaveners)
+* Step 5: Grey Zone Transfer, Mixing & Thermal Execution
+   1. Transfer sealed batch kits across the Medium Care (Grey) Zone airlock to designated line mixers.
+   2. The receiving baker inspects kit seals, checks tag quantities against production requirements, and countersigns the issuance log on Form-ING-001.
+   3. Mixing Dynamics: Execute standardized spiral mixing cycles, monitoring shear friction factors to achieve a finished dough exit temperature strictly between 26°C and 28°C.
+   4. Thermal Lethality (CCP-1): Bake loaves to reach an internal core product temperature exceeding 95°C, ensuring full microbial lethality without scorching or structural collapse.
+   5. Yield Reconciliation: At shift conclusion, outlet bakers record finished unit output on the Digital Shift Yield Log, reconciling actual output against theoretical formulation yields. Discrepancies exceeding $\pm 2.0\%$ trigger an immediate supervisory audit.
+PROCEDURE B: New Product Development (NPD) & Formulation Modification Protocol
+* Stage 1: Proposal Submission (Form-NPD-001)
+   1. Bakers seeking to modify existing formulas (hydration shift, sweetness adjustment, fat substitution) or propose original recipes submit Form-NPD-001.
+   2. Proposals must document item category, target outlet, full formula in baker's percentages, target shelf-life, and commercial concept justification. Floor testing without this submission is prohibited.
+* Stage 2: Technical, Rheological & Engineering Review (Joint Evaluation)
+   1. Master Baker Rheological Validation (Alwen Hermogeno – Master Head Baker):
+      * Hydration & Extensibility: Evaluates water absorption rates and gluten matrix structure using the standardized windowpane membrane test.
+      * Mixing Cycle Feasibility: Establishes spiral mixer rotational shear duration, optimal speed steps, and dough friction factors to guarantee mass exit temperatures between 26°C and 28°C.
+      * Proofing Behavior: Analyzes yeast gas production rates and dough expansion volume curves to establish maximum proofing dwell times and prevent structural collapse.
+   2. Engineering & Thermal Profiling (Ramil Capada – Building & Equipment Manager):
+      * Senior Craft & Mechanical Oversight: Leverages historical Master Head Baker domain knowledge combined with physical plant engineering to audit mixer gear stress, motor capacity, and line feasibility.
+      * Thermal Profile Matching: Determines oven compatibility based on crust and crumb requirements:
+         * Deck Oven Radiant Profile: Analyzes bottom conduction and radiant top heat for artisan loaves and hearth crusts requiring stable base heat transfer.
+         * Rotary Rack Convection Airflow: Evaluates laminar heated airflow for moisture evacuation efficiency, uniform expansion, and balanced crust caramelization.
+      * Lethality Validation (CCP-1): Confirms thermal transfer parameters deliver core internal product temperatures > 95°C across all oven rack positions.
+   3. Food Safety & Stability Evaluation (Grace P. Suico – FSCO & QA Control Director):
+      * Audits formulation against allergen segregation standards and cGMP regulations.
+      * Enforces water activity thresholds:  for dry, shelf-stable delicacies (Biscocho, Otap) and verifies mold-inhibition hurdles for moist crumb lines.
+      * Formulates packaging barrier specifications and regulatory labeling copy.
+   * Stage 3: Costing & Commercial Feasibility (Jeanifer S. Sauping & Maria Charito Basoc)
+   1. Map component weights to live raw material purchasing costs from Jade Q. Dela Cruz's warehouse logs.
+   2. Factor in operational scrap allowances (capped at < 2.0%), secondary packaging materials, and utility overhead.
+   3. Establish batch yields, wholesale transfer costs, and recommended retail prices (SRP) to safeguard margin targets.
+   * Stage 4: Administrative Authorization & System Integration (Angelina P. Sun)
+   1. The Head of Administration evaluates the combined technical, engineering, safety, and financial dossier.
+   2. Upon written executive approval:
+   * Assign an Official System SKU Code (e.g., BRD-COMM-001).
+   * Integrate master formulation cards into Romeo B. Malusay’s active register.
+   * Unlock requisitioning permissions on Form-PRO-001.
+PROCEDURE C: Controlled Test-Bake Protocol (Trial Batches)
+   1. Trial runs for sensory evaluation require an approved Sample Batch Request countersigned by the Master Head Baker.
+   2. Romeo B. Malusay scales a single micro-batch, marking containers with high-visibility "R&D / TRIAL BATCH ONLY" tape.
+   3. R&D trial bakes must remain strictly isolated from commercial production lines.
+   4. Commercial Prohibition: Under no circumstances may R&D trial bakes be distributed, placed on retail display shelves, or sold to customers. Unused trial bakes must be logged and discarded under QA oversight.
+PROCEDURE D: 5-Day Service Level Agreement (SLA) for NPD Review Pipeline
+To prevent administrative bottlenecks and discourage unauthorized floor experimentation, all Form-NPD-001 submissions are governed by a strict 5-business-day turnaround SLA:
+
+
+
+
+
+
+[ Day 0: Submission ] Form-NPD-001 logged into System
+        │
+        ▼
+[ Days 1–3: Stage 2 Technical Review (72 Hours Max) ]
+ Alwen Hermogeno (Rheology), Ramil Capada (Engineering), Grace P. Suico (Safety/FSCO)
+ Must sign off or reject with written technical feedback within 72 hours.
+        │
+        ▼
+[ Days 4–5: Stage 3 Costing Review (48 Hours Max) ]
+ Jeanifer S. Sauping & Maria Charito Basoc
+ Complete ingredient cost mapping, scrap modeling, and SRP calculation.
+        │
+        ▼
+[ Day 5: Final Disposition ]
+ Delivered to Angelina P. Sun for executive sign-off and Master Register activation.
+
+   1. Reviewer Accountability: Stage 2 reviewers (Hermogeno, Capada, Suico) have exactly 72 hours from digital submission to evaluate dough machinability, oven thermal dynamics, and water activity/cGMP compliance. Stage 3 reviewers (Sauping, Basoc) have exactly 48 hours following technical clearance to finalize the COGS and retail margin model.
+   2. Automated Escalation: If a submission remains unreviewed past hour 72 of Stage 2 or hour 48 of Stage 3, an automated escalation flag is transmitted to Angelina P. Sun (Head of Administration). The responsible officer must provide an immediate operational justification.
+   3. Transparent Status Tracking: The submitting station or outlet baker can check the real-time status of Form-NPD-001 (Pending Stage 2, Pending Stage 3, Approved, or Returned for Revision) via the digital terminal. Rejections must cite specific technical, financial, or safety non-conformances.
+PROCEDURE E: Emergency Ambient Weather & Climate Adjustment Protocol (Davao Regional Agro-Climatic Control)
+Given the tropical rainforest climate of Davao City (Indangan, Sasa, Bakerohan, and Communal), where ambient bakery room temperatures regularly reach 30°C to 34°C and relative humidity fluctuates between 75% and 90%, environmental heat accelerates yeast fermentation and drives dough mass temperatures above the critical 28°C threshold.
+To maintain dough integrity without requiring a full NPD resubmission, the Master Head Baker is authorized to enforce temporary climate adjustments:
+   1. Authority & Scope:
+   * Alwen Hermogeno (Master Head Baker), in technical consultation with Ramil Capada, is the sole authority permitted to issue a formal Dough Climate Adjustment Notice (Form-CAN-001).
+   * This authority is limited strictly to adjusting water hydration percentages and mixing liquid temperatures (ice substitution). Adjustments to flour, yeast, sugar, salt, or fat ratios remain strictly prohibited without formal NPD approval.
+   2. Standard Permissible Climate Adjustments:
+   * Hydration Window: Base formulation water weight may be adjusted by a maximum of $\pm 1.0\%$ to $\pm 1.5\%$ to compensate for atmospheric humidity shifts and flour moisture equilibrium.
+Chilled Water / Ice Substitution: To counteract mixing friction heat and ambient bakery temperatures, bakers must substitute chipped/flaked ice for calculated formula water according to the standardized bakery calculation:
+
+
+   *    * Scaled ice must melt completely during initial low-speed spiral mixing before gluten development commences.
+   3. Execution & Documentation:
+   * Alwen Hermogeno posts the physical and digital Form-CAN-001 notice at Romeo Malusay’s batching station and transmits it to outlet leads.
+   * The notice is valid for a maximum duration of 48 hours or until the regional weather advisory (e.g., southwest monsoon rainfront or extreme heat index) subsides.
+   * Romeo B. Malusay logs the active Form-CAN-001 reference code on Form-ING-001 during batch kit preparation.
+PROCEDURE F: Digital Batch Verification & Multi-Terminal Synchronization
+All batch requisitions, warehouse inventory deductions, batch kit verifications, and yield reconciliations must be processed through the centralized Google Sheets & Apps Script Batch Commit Engine with built-in concurrency controls (LockService architecture):
+   1. Hardware Terminal Deployments:
+   * Terminal 1 (Warehouse): Jade Q. Dela Cruz – Raw material lot deduction, FEFO validation, supplier receiving.
+   * Terminal 2 (Batching Room): Romeo B. Malusay – Formula cross-referencing, digital pull list generation, calibration logging, batch tag printing.
+   * Terminal 3 (Production Floor - Indangan): Shift Line Bakers – Batch kit receipt verification, dough temperature logging.
+   * Terminal 4 (Laurice Delicacies - Bakerohan D.C.): Outlet Baker In-Charge – Daily Form-PRO-001 requisitioning, shift yield reconciliation.
+   * Terminal 5 (Pan de Verde - Communal D.C.): Outlet Baker In-Charge – Daily Form-PRO-001 requisitioning, shift yield reconciliation.
+   * Terminal 6 (Administrative / Finance Office): Angelina P. Sun / Jeanifer S. Sauping – Master register maintenance, costing updates, audit reporting.
+   2. Concurrency Control & Data Integrity:
+   * Script-level mutex locks (LockService.getScriptLock()) prevent race conditions when multiple terminals commit requisitions or deduct inventory simultaneously.
+   * A transaction must complete data validation (verifying active SKU code, unexpired warehouse lot, and scale balance confirmation) before committing to the live ledger.
+   3. Traceability & Yield Reconciliation Workflow:
+   * Requisition orders submitted via Terminal 4 or 5 generate a unique alphanumeric Transaction Hash / Batch ID linking the order to Romeo's scaling terminal and Jade's warehouse inventory records.
+   * At shift end, outlet bakers enter actual baked unit output. The system automatically computes the scrap/yield variance:
+$$\text{Yield Variance (\%)} = \left\vert{} \frac{\text{Actual Units} - \text{Theoretical Formula Yield}}{\text{Theoretical Formula Yield}} \right\vert{} \times 100$$
+   * Variances exceeding 2.0% immediately trigger a system alert sent to Finance and the QA Director for investigation.
+      4. Offline Fallback Protocol:
+      * If an internet outage disconnects an outlet terminal, the baker must revert to hard-copy, sequentially numbered Form-PRO-001 pads.
+      * The offline batch must be manually verified via telephone call directly with Romeo Malusay prior to dough mixing.
+      * All hard-copy logs must be back-entered into the digital system within two hours of network restoration.
+4. RESPONSIBILITY & OVERSIGHT MATRIX
+
+
+Role
+	Designee
+	Operational Responsibilities
+	Sign-Off Authority
+	Warehouse Supervisor
+	Jade Q. Dela Cruz
+	• Maintains raw inventory across Dry Room 1, Cold Room, and Wet Room.
+
+
+• Enforces 100% pallet elevation, bin hygiene (HDPE), and FEFO rotation.
+
+
+• Monitors fat block tempering (18°C–20°C) and cold chain limits (0°C to -4°C).
+
+
+• Issues bulk goods only to Romeo B. Malusay via staging window.
+	Raw Material Release on Form-ING-001
+	Ingredient Batching Preparer
+	Romeo B. Malusay
+	• Sole authorized recipient of bulk warehouse inventory.
+
+
+• Verifies scale calibration balances (Form-CAL-001).
+
+
+• Executes 40-mesh flour sifting and precision ingredient scaling.
+
+
+• Assembles and labels sealed, unitized batch kits for line dispatch.
+	Batch Scaling Certification on Form-ING-001
+	Master Head Baker
+	Alwen Hermogeno
+	• Primary technical lead for baking craft and dough rheology.
+
+
+• Evaluates gluten windowpane test, mixing shear friction, and proofing curves.
+
+
+• Audits dough exit temperatures (26°C–28°C).
+
+
+• Issues Form-CAN-001 for emergency climate hydration/ice adjustments.
+
+
+• Completes Stage 2 NPD technical reviews within 72-hour SLA.
+	Technical & Rheology Clearance on Form-NPD-001 (Stage 2); Form-CAN-001
+	Building & Equipment Manager (Senior Baking Advisor)
+	Ramil Capada
+	• Former Master Head Baker; manages facility equipment engineering.
+
+
+• Partners with Alwen Hermogeno on complex dough line feasibility.
+
+
+• Thermal profiling: Deck radiant profile vs. Rotary rack convection airflow.
+
+
+• Enforces equipment lethality parameters (CCP-1 core product temp > 95°C).
+
+
+• Audits mixer shear performance and oven mechanical integrity.
+	Facility & Thermal Profile Clearance on Form-NPD-001 (Stage 2)
+	Food Safety Compliance Officer (FSCO) & QA Director
+	Grace P. Suico
+	• Directs food safety compliance and plant-wide quality assurance.
+
+
+• Audits cGMP, sanitation, and allergen cross-contact risks.
+
+
+• Verifies water activity ( for dry lines) and mold hurdles.
+
+
+• Conducts random floor/outlet audits (weights, hydration logs, storage bins).
+
+
+• Oversees non-conforming batch quarantine and disposal protocols.
+	Food Safety & cGMP Clearance on Form-NPD-001 (Stage 2); Form-NCR-001
+	Finance Director & Costing Officer
+	Jeanifer S. Sauping & Maria Charito Basoc
+	• Maps gram weights to active raw material prices from warehouse logs.
+
+
+• Calculates unit COGS, standard yield, scrap (< 2.0%), and packaging cost.
+
+
+• Sets wholesale transfer costs and recommended retail prices (SRP).
+
+
+• Completes Stage 3 NPD costing modeling within 48-hour SLA.
+	Financial Viability Sign-Off on Form-NPD-001 (Stage 3)
+	Head of Administration
+	Angelina P. Sun
+	• Final executive authority over commercial formulations and line additions.
+
+
+• Assigns official system SKU codes to Master Formulation Register.
+
+
+• Receives automated SLA escalation alerts and enforces administrative discipline.
+
+
+• Authorizes master production calendars and final commercial product sign-offs.
+	Final Commercial Sign-Off on Form-NPD-001; Disciplinary Action
+	Station & Outlet Bakers
+	Outlet Head Bakers & Station In-Charge
+	• Submit daily batch requisitions via Form-PRO-001.
+
+
+• Inspect and countersign sealed batch kits at the Grey Zone.
+
+
+• Execute mixing (26°C–28°C), proofing, and baking (> 95°C core) to exact specs.
+
+
+• Maintain Shift Yield Logs reconciling finished output vs. formula targets.
+	Batch Kit Receipt on Form-ING-001; NPD Proposals on Form-NPD-001
+	5. QUALITY AUDITING, NON-CONFORMANCE & DISCIPLINARY SANCTIONS
+5.1 Quality Governance & Random Floor Audits
+      1. QA Inspectors and Operations Management conduct regular, unannounced floor audits across plant stations and retail outlets (Laurice Delicacies and Pan de Verde).
+      2. Audits cover:
+      * Verification of scaled dough piece weights and dough exit temperatures (26°C–28°C).
+      * Verification of oven core lethality probes (CCP-1: core temperature ).
+      * Audit of terminal transaction hashes, station hydration logs, and shift reconciliation sheets.
+      * Physical inspection of outlet storage areas to confirm total absence of unbatched bulk raw ingredients or unauthorized additives.
+5.2 Quarantine & Non-Conformance Protocol (Form-NCR-001)
+         1. Immediate Tagging: Any dough batch mixed without an authorized Form-ING-001 log, containing unapproved ingredient substitutions, or failing thermal lethality standards must be halted immediately and affixed with a physical RED "QUARANTINE" TAG via Form-NCR-001.
+         2. Financial Loss Allocation: The full ingredient cost, packaging waste, and labor/utility overhead of the condemned batch will be charged directly as an operational loss to the offending outlet or production line cost center.
+         3. Condemnation & Disposal: Quarantined products must never be reworked, blended, or salvaged without written authorization from both the Head of Administration and the FSCO & QA Control Director.
+5.3 Progressive Disciplinary Policy
+Violations of batching governance, unauthorized formula tweaking, off-book baking, or concealment of deviations will be penalized under SOP-HR-ORI-002 and Article 297 of the Philippine Labor Code:
+         * First Offense: Documented Written Warning, formal corrective counseling, and mandatory unpaid retraining on centralized material governance.
+         * Second Offense: Final Written Warning and immediate suspension without pay pending a formal administrative inquiry conference.
+         * Third Offense: Escalation to the Head of Administration and HR Directorate for formal termination of employment on grounds of willful disobedience and gross neglect of duty.
+5.4 Operational Contingency Matrix
+
+
+Scenario
+	Operational Failure Point
+	Immediate Corrective Protocol
+	Scale Calibration Drift
+	Platform scale fails zero-balance check or calibration seal (#798073 / #798074) is tampered/damaged.
+	Halt scaling immediately. Tag scale out of service. Switch to secondary verified bench scale, log transfer on Form-CAL-001, and contact certified technician.
+	Warehouse Material Depletion
+	Stock is expired or inventory levels fall below authorized batch requirements.
+	Jade Q. Dela Cruz halts release and flags lot under Form-NCR-001. Notify Romeo B. Malusay to freeze Form-PRO-001. Bypassing with unapproved substitutes is strictly prohibited.
+	Flour Contaminant Interception
+	40-mesh sifting screen captures foreign body, metal particulate, or pest matter.
+	Halt sifting. Tag entire flour lot under Form-NCR-001 quarantine. Inspect screen for punctures. Escalate to Jade Dela Cruz and FSCO & QA Director Grace P. Suico for vendor root-cause audit.
+	Fat Tempering Temperature Breach
+	Shortening/butter block exceeds 20°C (oil separation) or falls below 18°C (solid lump formation).
+	Reject fat release. Return to controlled tempering staging. Do not release into production until probe thermometer verifies core temp is between 18°C and 20°C.
+	Thermal Lethality Defect (< 95°C)
+	Baked goods exit oven with internal crumb core temperature below 95°C.
+	Immediately quarantine affected rack via Form-NCR-001. Adjust oven zone temperature or rack dwell time under Ramil Capada’s direction. Do not release underbaked goods to packaging.
+	Terminal Network Concurrency Lock Failure
+	Digital Apps Script commit engine fails due to local telecommunication outage or lock timeout.
+	Terminal switches to Offline Cache Mode. Station in-charge logs transaction on physical sequentially numbered Form-PRO-001 pad. Baker confirms transaction via direct telephone verification with Romeo Malusay prior to scaling. Back-enter data within two hours of network restoration.
+	6. VERIFICATION CHECKLIST & AUDIT CADENCE
+
+
+
+
+
+
+==================================================================================================
+PRE-SHIFT QUALITY, CLIMATE & BATCHING VERIFICATION CHECKLIST
+==================================================================================================
+[ ] 1. DIGITAL SCALES INSPECTED: Platform bench scales zero-balanced; Government Seals 
+      #798073 & #798074 verified intact; logged on Form-CAL-001.[cite: 1]
+[ ] 2. 40-MESH SIFTER CHECKED: Stainless steel screen intact, clean, and free of 
+      punctures, tears, or particulate residue.[cite: 1]
+[ ] 3. DIGITAL REQUISITION VERIFIED: All requested SKUs matched against Master Formulation 
+      Register; system costing references validated; pull list generated.[cite: 1]
+[ ] 4. WAREHOUSE FEFO COMPLIANCE: Dry goods drawn from clean HDPE bins; fat block 
+      temperatures confirmed between 18°C–20°C; cold room at 0°C to -4°C.[cite: 1]
+[ ] 5. UNITIZED BATCH IDENTIFICATION: Color-coded batch containers sealed with Batch 
+      Identification Tags detailing lot traceability and component weights.[cite: 1]
+[ ] 6. AMBIENT WEATHER CHECK: Ambient temperature and relative humidity measured. If room temp
+      exceeds 30°C, verify if Form-CAN-001 (Hydration/Ice Adjustment) has been authorized.
+[ ] 7. DOUGH EXIT TEMPERATURE VERIFIED: Mixed dough mass exit temperature measured 
+      with calibrated probe and confirmed strictly within the 26°C–28°C target range.[cite: 1]
+[ ] 8. CCP-1 THERMAL LETHALITY VALIDATED: Core baked loaf temperature probe verifies 
+      internal crumb heat exceeds 95°C prior to rack cooling.
+[ ] 9. DIGITAL YIELD RECONCILIATION: Finished unit count committed to Digital Shift Yield 
+      Log; discrepancy reconciled against theoretical yield (variance capped at < 2.0%).
+[ ] 10. TRIAL BAKE ISOLATION: Any test-bake kits explicitly marked "R&D / TRIAL BATCH 
+       ONLY" and strictly barred from entering sales display counters.[cite: 1]
+==================================================================================================
+
+DOCUMENT AUTHORIZATION & SIGN-OFF
+Ideated, Prepared & Drafted By:
+[Signed]
+Zaphyr Zur Pomicpic
+Systems and Operations Director / Advisor | Technical Writer
+Prepared By:
+[Signed]
+Romeo B. Malusay
+Ingredient Batching Preparer[cite: 1]
+Reviewed & Technical Clearance By:
+[Signed]
+Jade Q. Dela Cruz
+Warehouse Supervisor[cite: 1]
+[Signed]
+Alwen Hermogeno
+Master Head Baker[cite: 1]
+[Signed]
+Ramil Capada
+Building & Equipment Manager / Senior Baking Advisor[cite: 1]
+[Signed]
+Grace P. Suico
+FSCO & QA Control Director[cite: 1]
+[Signed]
+Jeanifer S. Sauping
+Finance Director[cite: 1]
+Approved & Mandated By:
+[Signed]
+Angelina P. Sun
+Head of Administration[cite: 1]
+Jang-Jang Bakeshop & Kingdom Confectionary Business Lines
+Would you like me to draft the Google Apps Script architecture specifications and LockService concurrency code for the Multi-Terminal Daily Transaction Logging Engine?
