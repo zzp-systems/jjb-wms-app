@@ -1,8 +1,9 @@
 import React, { useState, useMemo } from 'react';
 import { 
   Search, Filter, AlertTriangle, Package, Clock, Warehouse, 
-  ArrowUpRight, ArrowDownRight, Layers, Eye, RefreshCw
+  ArrowUpRight, ArrowDownRight, Layers, Eye, RefreshCw, BarChart3, Sparkles
 } from 'lucide-react';
+import SignatureProductsDashboard from './SignatureProductsDashboard';
 
 export default function ExecutiveDashboard({ 
   inventory, 
@@ -15,6 +16,7 @@ export default function ExecutiveDashboard({
   const [selectedCategory, setSelectedCategory] = useState('ALL');
   const [statusFilter, setStatusFilter] = useState('ALL'); // ALL, LOW_STOCK, EXPIRING_SOON, HEALTHY
   const [selectedItemLots, setSelectedItemLots] = useState(null);
+  const [activeView, setActiveView] = useState('FEFO'); // 'FEFO' | 'SIGNATURE_RECHARTS'
 
   // Categories list
   const categories = useMemo(() => {
@@ -76,7 +78,48 @@ export default function ExecutiveDashboard({
 
   return (
     <div className="space-y-6">
-      {/* Executive KPI Summary Cards */}
+      {/* Top View Mode Switcher: Raw Materials FEFO vs Recharts Signature Delicacies */}
+      <div className="bg-white p-2 rounded-2xl border border-[#E2D1B8] shadow-sm flex flex-col sm:flex-row justify-between items-center gap-3">
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <button
+            onClick={() => setActiveView('FEFO')}
+            className={`flex-1 sm:flex-none px-4 py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 ${
+              activeView === 'FEFO'
+                ? 'bg-[#3D1C52] text-white shadow-sm'
+                : 'bg-[#FAF6EE] text-gray-700 hover:bg-gray-200 border border-[#E2D1B8]'
+            }`}
+          >
+            <Warehouse size={15} className={activeView === 'FEFO' ? 'text-[#C8963E]' : 'text-gray-500'} />
+            <span>1. Raw Materials Perpetual Array &amp; FEFO</span>
+          </button>
+          <button
+            onClick={() => setActiveView('SIGNATURE_RECHARTS')}
+            className={`flex-1 sm:flex-none px-4 py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 ${
+              activeView === 'SIGNATURE_RECHARTS'
+                ? 'bg-[#C8963E] text-[#240e32] shadow-sm font-extrabold'
+                : 'bg-[#FAF6EE] text-gray-700 hover:bg-gray-200 border border-[#E2D1B8]'
+            }`}
+          >
+            <BarChart3 size={15} className={activeView === 'SIGNATURE_RECHARTS' ? 'text-[#240e32]' : 'text-[#C8963E]'} />
+            <span>2. Signature Products Analytics (Recharts: Biscocho &amp; Otap)</span>
+            <span className="text-[10px] bg-[#5B2E7A] text-white px-1.5 py-0.2 rounded-full font-bold ml-1">
+              New
+            </span>
+          </button>
+        </div>
+
+        <div className="text-xs text-gray-500 font-medium px-2 hidden lg:block">
+          {activeView === 'FEFO' 
+            ? 'Monitoring 69 bulk raw material lots across 4 bodega chambers' 
+            : 'Visualizing finished goods burn rates, WIP, and Biscocho & Otap reserve buffers'}
+        </div>
+      </div>
+
+      {activeView === 'SIGNATURE_RECHARTS' ? (
+        <SignatureProductsDashboard onNavigateToBatching={() => onQuickAction('batching')} />
+      ) : (
+        <div className="space-y-6">
+          {/* Executive KPI Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Total Stock Valuation */}
         <div className="bg-white p-4 rounded-xl border border-[#E2D1B8] shadow-sm border-l-4 border-l-[#5B2E7A] flex items-center justify-between">
@@ -453,6 +496,8 @@ export default function ExecutiveDashboard({
           </div>
         )}
       </div>
+        </div>
+      )}
 
       {/* MODAL: FEFO Lot Details Viewer */}
       {selectedItemLots && (

@@ -1,5 +1,5 @@
 {
-  "name": "jjb-systems",
+  "name": "jjb-wms-app",
   "private": true,
   "version": "1.0.0",
   "type": "module",
@@ -7,12 +7,17 @@
     "dev": "vite --host 0.0.0.0 --port 3000",
     "build": "vite build",
     "preview": "vite preview --host 0.0.0.0 --port 3000",
-    "lint": "vite build --mode development"
+    "lint": "vite build --mode development",
+    "deploy": "npm run build && wrangler pages deploy dist --project-name=jjb-wms-app",
+    "d1:create": "wrangler d1 create jjb-wms-db",
+    "d1:apply-local": "wrangler d1 execute jjb-wms-db --local --file=./schema.sql",
+    "d1:apply-remote": "wrangler d1 execute jjb-wms-db --remote --file=./schema.sql"
   },
   "dependencies": {
     "lucide-react": "^0.263.1",
     "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "react-dom": "^18.2.0",
+    "recharts": "^3.10.1"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.0.3",

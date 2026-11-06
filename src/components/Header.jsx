@@ -1,8 +1,7 @@
-import React from 'react';
 import { 
   Warehouse, Scale, Truck, FileText, CheckCircle2, 
   Wifi, WifiOff, Smartphone, Laptop, AlertOctagon, Send,
-  ShoppingCart, FileSpreadsheet
+  ShoppingCart, FileSpreadsheet, History, BarChart3
 } from 'lucide-react';
 
 export const ROLES = [
@@ -139,6 +138,7 @@ export default function Header({
       <nav className="bg-[#240e32] px-2 flex overflow-x-auto gap-1 border-t border-[#5B2E7A]/40 scrollbar-none">
         {[
           { id: 'dashboard', label: '1. Live FEFO Inventory', icon: Warehouse, badge: lowStockCount > 0 ? `${lowStockCount} Low` : null, badgeColor: 'bg-[#D68910]' },
+          { id: 'signature', label: 'Signature Delicacies (Recharts)', icon: BarChart3, badge: 'Biscocho & Otap', badgeColor: 'bg-[#C8963E]' },
           { id: 'receiving', label: '2. Inbound Receiving', icon: Truck, roleHighlight: 'Jade Q. Dela Cruz' },
           { 
             id: 'issuance', 
@@ -156,6 +156,7 @@ export default function Header({
             badgeColor: 'bg-[#C8963E]', 
             roleHighlight: 'Romeo B. Malusay' 
           },
+          { id: 'orderHistory', label: 'Order History', icon: History, badge: 'Mock Data', badgeColor: 'bg-[#5B2E7A]' },
           { id: 'adjustments', label: '5. Adjustments & Quarantine', icon: AlertOctagon },
           { id: 'reports', label: '6. Reports & PO Generator', icon: ShoppingCart },
           { id: 'eod', label: '7. 23:45 EOD Report', icon: Send, badge: 'Daily 23:45', badgeColor: 'bg-[#1E7A3E]' },

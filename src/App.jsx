@@ -8,6 +8,8 @@ import AdjustmentsModule from './components/AdjustmentsModule';
 import ReportsModule from './components/ReportsModule';
 import EodReportModule from './components/EodReportModule';
 import AuditTrailModule from './components/AuditTrailModule';
+import OrderHistory from './components/OrderHistory';
+import SignatureProductsDashboard from './components/SignatureProductsDashboard';
 
 import { MASTER_MATERIALS, STORAGE_ROOMS } from './data/materialsData';
 import { MASTER_RECIPES, OUTLETS } from './data/recipesData';
@@ -638,6 +640,20 @@ export default function App() {
             auditLogs={auditLogs}
             onResetData={handleResetData}
             onExportJson={handleExportJson}
+          />
+        )}
+
+        {/* TAB: SIGNATURE PRODUCTS INVENTORY ANALYTICS (RECHARTS) */}
+        {activeTab === 'signature' && (
+          <SignatureProductsDashboard
+            onNavigateToBatching={() => setActiveTab('batching')}
+          />
+        )}
+
+        {/* TAB: OUTLET & WHOLESALE ORDER HISTORY (MOCK DATA SERVICE) */}
+        {activeTab === 'orderHistory' && (
+          <OrderHistory
+            currentRole={currentRole}
           />
         )}
       </main>

@@ -1,0 +1,14 @@
+# Cloudflare Pages & D1 Configuration for JJB-WMS
+# Project: jjb-wms-app (Jang-Jang Bakeshop & Kingdom Confectionary)
+
+name = "jjb-wms-app"
+pages_build_output_dir = "dist"
+compatibility_date = "2024-01-01"
+
+# Cloudflare D1 Database Binding
+# Execute: npx wrangler d1 create jjb-wms-db
+# Replace the database_id below with the UUID returned from the command above
+[[d1_databases]]
+binding = "DB"
+database_name = "jjb-wms-db"
+database_id = "00000000-0000-0000-0000-000000000000"
