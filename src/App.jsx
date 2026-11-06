@@ -121,6 +121,7 @@ export default function App() {
     if (isOffline) return;
 
     const interval = setInterval(async () => {
+      if (document.hidden) return; // skip heartbeat when tab is backgrounded
       try {
         const res = await fetch(WORKER_SYNC_URL, {
           method: 'POST',
@@ -139,11 +140,10 @@ export default function App() {
       } catch (err) {
         // Fallback gracefully in standalone offline preview mode
       }
-    }, 4000);
+    }, 5 * 60 * 1000); // 5 minutes
 
     return () => clearInterval(interval);
   }, [isOffline, inventory.length, batchOrders.length]);
-
   // 23:45 PHT NIGHTLY EOD WATCHER
   useEffect(() => {
     const checkEodTime = () => {
