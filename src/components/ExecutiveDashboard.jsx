@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { 
   Search, Filter, AlertTriangle, Package, Clock, Warehouse, 
-  ArrowUpRight, ArrowDownRight, Layers, Eye, RefreshCw, BarChart3, Sparkles
+  ArrowUpRight, ArrowDownRight, Layers, Eye, RefreshCw, BarChart3, Sparkles,
+  FileSpreadsheet, Upload, Download
 } from 'lucide-react';
 import SignatureProductsDashboard from './SignatureProductsDashboard';
 
@@ -9,7 +10,8 @@ export default function ExecutiveDashboard({
   inventory, 
   isMobileMode, 
   onQuickAction,
-  storageRooms 
+  storageRooms,
+  onOpenImportModal
 }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedRoom, setSelectedRoom] = useState('ALL');
@@ -119,8 +121,29 @@ export default function ExecutiveDashboard({
         <SignatureProductsDashboard onNavigateToBatching={() => onQuickAction('batching')} />
       ) : (
         <div className="space-y-6">
+          {/* Fresh Start / Physical Count Import Banner */}
+          <div className="bg-gradient-to-r from-[#FAF6EE] to-[#FFF9EE] p-4 rounded-xl border border-[#C8963E]/40 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-[#C8963E]/20 text-[#3D1C52] flex items-center justify-center font-bold flex-shrink-0">
+                <FileSpreadsheet size={20} className="text-[#C8963E]" />
+              </div>
+              <div>
+                <p className="text-xs font-bold text-[#3D1C52]">Starting with Fresh Warehouse Data?</p>
+                <p className="text-[11px] text-gray-600">
+                  Download the official 69-material CSV template, input your exact counted physical quantities (by unit), and upload to calibrate your opening baseline.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={onOpenImportModal}
+              className="bg-[#3D1C52] hover:bg-[#240e32] text-[#E5C585] text-xs font-bold px-4 py-2 rounded-lg shadow-sm whitespace-nowrap flex items-center gap-1.5 transition flex-shrink-0"
+            >
+              <Upload size={13} /> Upload Inventory CSV
+            </button>
+          </div>
+
           {/* Executive KPI Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Total Stock Valuation */}
         <div className="bg-white p-4 rounded-xl border border-[#E2D1B8] shadow-sm border-l-4 border-l-[#5B2E7A] flex items-center justify-between">
           <div>
@@ -225,7 +248,14 @@ export default function ExecutiveDashboard({
         </div>
 
         {/* Quick Action Buttons for Jade on Floor */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={onOpenImportModal}
+            className="bg-[#C8963E] hover:bg-[#b58330] text-[#240e32] text-xs font-bold px-3 py-1.5 rounded shadow flex items-center gap-1.5 transition"
+            title="Upload CSV of physical inventory counts to calibrate opening baseline"
+          >
+            <FileSpreadsheet size={14} /> Import Baseline CSV
+          </button>
           <button
             onClick={() => onQuickAction('receiving')}
             className="bg-[#1E7A3E] hover:bg-[#165c2f] text-white text-xs font-bold px-3 py-1.5 rounded shadow flex items-center gap-1 transition"

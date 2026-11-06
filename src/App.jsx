@@ -10,6 +10,7 @@ import EodReportModule from './components/EodReportModule';
 import AuditTrailModule from './components/AuditTrailModule';
 import OrderHistory from './components/OrderHistory';
 import SignatureProductsDashboard from './components/SignatureProductsDashboard';
+import InitialDataImportModal from './components/InitialDataImportModal';
 
 import { MASTER_MATERIALS, STORAGE_ROOMS } from './data/materialsData';
 import { MASTER_RECIPES, OUTLETS } from './data/recipesData';
@@ -66,6 +67,7 @@ export default function App() {
   const [toastMessage, setToastMessage] = useState(null);
   const [prefilledItem, setPrefilledItem] = useState(null);
   const [lastEodTriggerDate, setLastEodTriggerDate] = useState(null);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
   // Sync state to LocalStorage
   useEffect(() => { saveToStorage('inventory', inventory); }, [inventory]);
@@ -476,6 +478,81 @@ export default function App() {
     showToast(`Imported count updates for ${updates.length} inventory items!`);
   };
 
+  // One-Time Physical Count Baseline Import (Fresh Start Engine)
+  const handleApplyInventoryImport = ({ newInventory, mode, clearHistory, summary }) => {
+    setInventory(newInventory);
+
+    if (clearHistory) {
+      setReceivingReports([]);
+      setWithdrawals([]);
+      setBatchOrders([]);
+      setAdjustments([]);
+      setQuarantineList([]);
+    }
+
+    recordAudit(
+      "OPENING_BASELINE_CSV_IMPORT",
+      `Imported fresh opening inventory for ${summary.totalItems} materials totaling ₱${summary.totalValuation.toLocaleString()} (${summary.totalWeightKg.toLocaleString()} kg). Mode: ${mode}. History cleared: ${clearHistory}`
+    );
+
+    // Sync baseline to Cloudflare Worker & D1
+    if (!isOffline) {
+      fetch(WORKER_SYNC_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          idempotencyKey: `BASELINE_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+          eventType: 'OPENING_BASELINE_CSV_IMPORT',
+          actor: summary.actor,
+          totalItems: summary.totalItems,
+          totalValuation: summary.totalValuation,
+          mode,
+          timestamp: new Date().toISOString()
+        })
+      }).catch(() => {});
+    }
+
+    showToast(`Opening Inventory Baseline applied! ${summary.totalItems} material counts initialized.`);
+  };
+
+  // Reset/Zero Out all materials to start completely fresh
+  const handleZeroOutAll = ({ actor, clearHistory }) => {
+    const zeroed = MASTER_MATERIALS.map(m => ({
+      ...m,
+      currentBalance: 0,
+      lots: []
+    }));
+    setInventory(zeroed);
+
+    if (clearHistory) {
+      setReceivingReports([]);
+      setWithdrawals([]);
+      setBatchOrders([]);
+      setAdjustments([]);
+      setQuarantineList([]);
+    }
+
+    recordAudit(
+      "INVENTORY_ZERO_OUT",
+      `All 69 warehouse materials reset to 0.00 quantity for fresh production start. By: ${actor}`
+    );
+
+    if (!isOffline) {
+      fetch(WORKER_SYNC_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          idempotencyKey: `ZERO_OUT_${Date.now()}`,
+          eventType: 'INVENTORY_ZERO_OUT',
+          actor,
+          timestamp: new Date().toISOString()
+        })
+      }).catch(() => {});
+    }
+
+    showToast("Warehouse inventory zeroed out successfully! Ready for fresh inbound receiving.");
+  };
+
   // Quick Action from Dashboard
   const handleQuickAction = (action, item = null) => {
     setPrefilledItem(item);
@@ -556,6 +633,7 @@ export default function App() {
         pendingBulkApprovalCount={pendingBulkApprovalCount}
         lowStockCount={lowStockCount}
         onQuickEod={() => setActiveTab('eod')}
+        onOpenImportModal={() => setIsImportModalOpen(true)}
       />
 
       {/* Main View Container */}
@@ -567,6 +645,7 @@ export default function App() {
             isMobileMode={isMobileMode}
             onQuickAction={handleQuickAction}
             storageRooms={STORAGE_ROOMS}
+            onOpenImportModal={() => setIsImportModalOpen(true)}
           />
         )}
 
@@ -636,6 +715,7 @@ export default function App() {
             currentRole={currentRole}
             onImportInventoryCsv={handleImportInventoryCsv}
             onRecordAudit={recordAudit}
+            onOpenImportModal={() => setIsImportModalOpen(true)}
           />
         )}
 
@@ -675,6 +755,17 @@ export default function App() {
           />
         )}
       </main>
+
+      {/* Fresh Data & Physical Count CSV Baseline Import Modal */}
+      <InitialDataImportModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        masterMaterials={MASTER_MATERIALS}
+        currentInventory={inventory}
+        onApplyImport={handleApplyInventoryImport}
+        onZeroOutAll={handleZeroOutAll}
+        actorName={currentRole}
+      />
 
       {/* Corporate Operational Footer */}
       <footer className="bg-[#240e32] text-white py-4 px-6 text-center text-xs border-t border-[#C8963E]/30 mt-auto">

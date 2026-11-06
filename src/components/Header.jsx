@@ -25,7 +25,8 @@ export default function Header({
   pendingBatchCount = 0,
   pendingBulkApprovalCount = 0,
   lowStockCount = 0,
-  onQuickEod
+  onQuickEod,
+  onOpenImportModal
 }) {
   const activeRoleObj = ROLES.find(r => r.name === currentRole) || ROLES[0];
 
@@ -121,6 +122,16 @@ export default function Header({
               ))}
             </select>
           </div>
+
+          {/* One-Time Fresh Data CSV Import */}
+          <button
+            onClick={onOpenImportModal}
+            className="bg-[#240e32] hover:bg-[#1a0a24] text-[#E5C585] border border-[#C8963E]/60 font-bold text-xs px-2.5 py-1.5 rounded shadow flex items-center gap-1.5 transition"
+            title="Upload Opening Physical Inventory Count CSV or Reset to Zero Baseline"
+          >
+            <FileSpreadsheet size={13} className="text-[#C8963E]" />
+            <span className="hidden lg:inline">Fresh Data /</span> Import CSV
+          </button>
 
           {/* Quick EOD Action */}
           <button

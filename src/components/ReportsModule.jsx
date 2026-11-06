@@ -16,7 +16,8 @@ export default function ReportsModule({
   quarantineList,
   currentRole,
   onImportInventoryCsv,
-  onRecordAudit
+  onRecordAudit,
+  onOpenImportModal
 }) {
   const [activeSubTab, setActiveSubTab] = useState('po_generator'); // 'po_generator' | 'ledger' | 'csv_bridge'
   const [timeframe, setTimeframe] = useState('ALL'); // 'ALL' | 'TODAY' | 'WEEK' | 'MONTH' | 'CUSTOM'
@@ -659,9 +660,18 @@ export default function ReportsModule({
                   Update stock levels directly by uploading or pasting a CSV file with updated physical counts
                 </p>
               </div>
-              <span className="text-[11px] font-mono text-[#5B2E7A] bg-purple-50 px-2 py-0.5 rounded border border-purple-200">
-                Format: ItemCode, CurrentBalanceSec
-              </span>
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={onOpenImportModal}
+                  className="bg-[#C8963E] hover:bg-[#b08030] text-[#240e32] text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm flex items-center gap-1.5 transition"
+                >
+                  <FileSpreadsheet size={14} /> Launch Full CSV Baseline Import Wizard
+                </button>
+                <span className="text-[11px] font-mono text-[#5B2E7A] bg-purple-50 px-2 py-0.5 rounded border border-purple-200">
+                  Format: ItemCode, CurrentBalanceSec
+                </span>
+              </div>
             </div>
 
             {importStatus && (
