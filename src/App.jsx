@@ -96,6 +96,22 @@ export default function App() {
       details
     };
     setAuditLogs(prev => [newLog, ...prev]);
+
+    // Push transactional audit event to Cloudflare Worker / D1 Edge
+    if (!isOffline) {
+      fetch(WORKER_SYNC_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          idempotencyKey: `AUDIT_${newLog.id}_${Math.random().toString(36).substring(2, 7)}`,
+          eventType: 'WMS_AUDIT_EVENT',
+          action,
+          actor: newLog.actor,
+          details,
+          timestamp: newLog.timestamp
+        })
+      }).catch(() => {});
+    }
   };
 
   // 4-SECOND SYNC POLLING LOOP (/api/sync)
@@ -108,6 +124,8 @@ export default function App() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
+            idempotencyKey: `HEARTBEAT_${Date.now()}`,
+            eventType: 'HEARTBEAT_POLL',
             timestamp: new Date().toISOString(),
             inventoryCount: inventory.length,
             batchOrdersCount: batchOrders.length
