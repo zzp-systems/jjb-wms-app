@@ -1,35 +1,10 @@
-# Dependencies
 node_modules/
-.pnp
-.pnp.js
-
-# Production build
 dist/
-build/
-
-# Cloudflare Wrangler & D1
-.wrangler/
-.mf/
-
-# Environment Variables
 .env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-
-# Logs
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-
-# Editor & OS files
+.env.*
+!.env.example
+.wrangler/
+.aistudio/
 .DS_Store
-Thumbs.db
-.vscode/
-.idea/
-
-# Testing & Artifacts
-.playwright-cli/
-coverage/
+*.log
+_archives/
