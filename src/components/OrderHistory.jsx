@@ -1,13 +1,19 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   ShoppingBag, Search, Filter, RefreshCw, CheckCircle2, Clock, 
   Truck, AlertCircle, FileText, Printer, ArrowUpRight, 
-  DollarSign, Package, Calendar, ChevronRight, User, MapPin
+  DollarSign, Package, Calendar, ChevronRight, User, MapPin,
+  Utensils, Coffee, Layers, Tag
 } from 'lucide-react';
 import { mockOrderService } from '../services/mockOrderService';
 
-export default function OrderHistory({ currentRole }) {
-  const [orders, setOrders] = useState([]);
+export default function OrderHistory({ 
+  currentRole,
+  batchOrders = [],
+  withdrawals = [],
+  onUpdateOrderStatus
+}) {
+  const [wholesaleOrders, setWholesaleOrders] = useState([]);
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -16,19 +22,19 @@ export default function OrderHistory({ currentRole }) {
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [updatingId, setUpdatingId] = useState(null);
 
-  // Fetch orders from mock service
-  const loadOrders = async () => {
+  // Fetch past wholesale orders from mock service
+  const loadWholesaleOrders = async () => {
     setLoading(true);
     try {
       const [orderList, summaryStats] = await Promise.all([
         mockOrderService.fetchOrderHistory({
           search: searchTerm,
-          status: selectedStatus,
-          channel: selectedChannel
+          status: selectedStatus === 'ALL' ? 'ALL' : selectedStatus,
+          channel: 'ALL'
         }),
         mockOrderService.getOrderStats()
       ]);
-      setOrders(orderList);
+      setWholesaleOrders(orderList);
       setStats(summaryStats);
     } catch (err) {
       console.error("Failed to fetch order history:", err);
@@ -38,21 +44,172 @@ export default function OrderHistory({ currentRole }) {
   };
 
   useEffect(() => {
-    loadOrders();
-  }, [selectedStatus, selectedChannel]);
+    loadWholesaleOrders();
+  }, [selectedStatus]);
 
-  // Handle search with debounce/trigger
-  const handleSearchSubmit = (e) => {
-    e.preventDefault();
-    loadOrders();
-  };
+  // Convert batchOrders into unified order format
+  const formattedBatchOrders = useMemo(() => {
+    return (batchOrders || []).map(b => {
+      const estimatedCost = (b.requestedQtyPcs || 100) * 4.5; // Estimated flour + sugar + shortening cost
+      return {
+        orderId: b.orderId,
+        formType: 'Form-ORD-001',
+        orderType: 'RECIPE_BATCH',
+        orderDate: b.requestDate || new Date().toISOString().slice(0, 10),
+        deliveryDate: b.targetDate || 'Same-day Scaling',
+        customerOrOutlet: b.outletName || 'Outlet / Production Line',
+        contactPerson: b.requestedBy || 'Branch Baker',
+        contactNumber: 'Plant Internal Intercom / Dispatch',
+        channel: 'Recipe Batched Ingredients (Form-ORD-001)',
+        categoryTag: b.outletName?.toLowerCase().includes('mess') ? 'MESS_HALL' : 'BATCHING',
+        deliveryDriver: b.status === 'RELEASED' ? (b.releasedTo || 'Othniel Tilan / Roberto Blase') : 'Pending Romeo Malusay Kitting',
+        status: b.status === 'BATCHED_KITTED' ? 'Batched / Kitted' :
+                b.status === 'RELEASED' ? 'Delivered' : 'In Production',
+        rawStatus: b.status,
+        items: [
+          {
+            sku: b.recipeSku || 'RECIPE-MIX',
+            name: `${b.recipeName} (${b.batchMultiplier || 1.0}x Scale)`,
+            qty: b.requestedQtyPcs || 100,
+            unit: 'pcs yield',
+            unitPrice: 4.50,
+            subtotal: estimatedCost
+          }
+        ],
+        totalCost: estimatedCost,
+        logisticsFee: 0,
+        paymentTerms: 'Internal Plant Production Allocation',
+        paymentStatus: 'Reconciled via Bodega',
+        notes: b.notes || `Requisition for ${b.outletName}`,
+        sourceData: b
+      };
+    });
+  }, [batchOrders]);
 
-  // Status update through mock service
+  // Convert withdrawals into unified order format
+  const formattedWithdrawals = useMemo(() => {
+    return (withdrawals || []).map(w => {
+      const isMessHall = (w.requestingEntity || w.requestingLine || '').toLowerCase().includes('mess') ||
+                         (w.purpose || '').toLowerCase().includes('meal') ||
+                         (w.purpose || '').toLowerCase().includes('snack');
+      
+      const itemsList = (w.items || []).map(it => {
+        const qty = it.qtyIssuedSec || it.requestedQtySec || it.qty || 1;
+        const uom = it.secondaryUom || it.uom || 'kg';
+        const costPerUnit = it.unitCost || 65;
+        return {
+          sku: it.materialCode || it.itemCode || 'RM-RAW',
+          name: it.name || it.description || 'Raw Material Item',
+          qty: qty,
+          unit: uom,
+          unitPrice: costPerUnit,
+          subtotal: (it.estimatedCost) || (qty * costPerUnit)
+        };
+      });
+
+      const totalCalculated = itemsList.reduce((sum, it) => sum + it.subtotal, 0) || w.totalCost || 1200;
+
+      return {
+        orderId: w.slipNo || w.withdrawalNo || `WS-${Date.now().toString().slice(-6)}`,
+        formType: 'Form-WAR-001',
+        orderType: 'MATERIAL_WITHDRAWAL',
+        orderDate: w.date || w.withdrawalDate || new Date().toISOString().slice(0, 10),
+        deliveryDate: w.date || w.withdrawalDate || 'Immediate Issuance',
+        customerOrOutlet: w.requestingEntity || w.requestingLine || (isMessHall ? 'Indangan Facility Mess Hall' : 'Plant Floor'),
+        contactPerson: w.requestedBy || w.requisitionedBy || 'Indangan Facility Staff',
+        contactNumber: 'Plant Internal Staff',
+        channel: isMessHall 
+          ? 'Mess Hall Staff Meals & Snacks (Form-WAR-001)' 
+          : 'Raw Material Withdrawal (Form-WAR-001)',
+        categoryTag: isMessHall ? 'MESS_HALL' : 'WITHDRAWAL',
+        deliveryDriver: w.receivedBy || w.requisitionedBy || 'Bodega Floor Release',
+        status: (w.status === 'ISSUED & RECONCILED' || w.status === 'RELEASED') ? 'Delivered' : 'Pending Release',
+        rawStatus: w.status,
+        items: itemsList,
+        totalCost: totalCalculated,
+        logisticsFee: 0,
+        paymentTerms: isMessHall ? 'Company Subsidized Staff Meals' : 'Operational Cost Center',
+        paymentStatus: 'Approved & Deducted',
+        notes: w.purpose || w.notes || 'Warehouse raw material withdrawal',
+        sourceData: w
+      };
+    });
+  }, [withdrawals]);
+
+  // Combine wholesale orders, recipe batch orders, and material withdrawals
+  const allUnifiedOrders = useMemo(() => {
+    const wholesaleFormatted = (wholesaleOrders || []).map(o => ({
+      ...o,
+      formType: 'Form-ORD-002',
+      orderType: 'WHOLESALE_DISPATCH',
+      categoryTag: 'WHOLESALE'
+    }));
+
+    return [...formattedBatchOrders, ...formattedWithdrawals, ...wholesaleFormatted];
+  }, [formattedBatchOrders, formattedWithdrawals, wholesaleOrders]);
+
+  // Filtered orders based on user selection
+  const filteredOrders = useMemo(() => {
+    return allUnifiedOrders.filter(order => {
+      // Channel Filter
+      if (selectedChannel === 'RECIPE_BATCHING' && order.orderType !== 'RECIPE_BATCH') return false;
+      if (selectedChannel === 'MATERIAL_WITHDRAWALS' && order.orderType !== 'MATERIAL_WITHDRAWAL') return false;
+      if (selectedChannel === 'MESS_HALL' && order.categoryTag !== 'MESS_HALL') return false;
+      if (selectedChannel === 'WHOLESALE' && order.orderType !== 'WHOLESALE_DISPATCH') return false;
+      if (selectedChannel === 'OUTLETS' && !order.customerOrOutlet.toLowerCase().includes('outlet') && !order.customerOrOutlet.toLowerCase().includes('pan de verde') && !order.customerOrOutlet.toLowerCase().includes('laurice')) return false;
+      if (selectedChannel === 'PRODUCTION_LINES' && !order.customerOrOutlet.toLowerCase().includes('hall') && !order.customerOrOutlet.toLowerCase().includes('line')) return false;
+
+      // Status Filter
+      if (selectedStatus !== 'ALL') {
+        if (order.status !== selectedStatus) return false;
+      }
+
+      // Search Query
+      if (searchTerm.trim()) {
+        const query = searchTerm.toLowerCase();
+        const matchesId = order.orderId.toLowerCase().includes(query);
+        const matchesTarget = order.customerOrOutlet.toLowerCase().includes(query);
+        const matchesPerson = order.contactPerson.toLowerCase().includes(query);
+        const matchesItem = order.items.some(it => it.name.toLowerCase().includes(query) || it.sku.toLowerCase().includes(query));
+        if (!matchesId && !matchesTarget && !matchesPerson && !matchesItem) return false;
+      }
+
+      return true;
+    });
+  }, [allUnifiedOrders, selectedChannel, selectedStatus, searchTerm]);
+
+  // Dynamic statistics
+  const dynamicStats = useMemo(() => {
+    const totalCost = filteredOrders.reduce((sum, o) => sum + (o.totalCost || 0), 0);
+    const deliveredCount = filteredOrders.filter(o => o.status === 'Delivered').length;
+    const inProgressCount = filteredOrders.filter(o => o.status !== 'Delivered').length;
+    const messHallCount = filteredOrders.filter(o => o.categoryTag === 'MESS_HALL').length;
+
+    return {
+      totalOrders: filteredOrders.length,
+      totalCost,
+      deliveredCount,
+      inProgressCount,
+      messHallCount
+    };
+  }, [filteredOrders]);
+
+  // Status update handler
   const handleStatusChange = async (orderId, newStatus) => {
     setUpdatingId(orderId);
     try {
-      await mockOrderService.updateOrderStatus(orderId, newStatus);
-      await loadOrders();
+      // Check if it's a wholesale order
+      const isWholesale = wholesaleOrders.some(o => o.orderId === orderId);
+      if (isWholesale) {
+        await mockOrderService.updateOrderStatus(orderId, newStatus);
+        await loadWholesaleOrders();
+      } else if (onUpdateOrderStatus) {
+        // Map to batch order status
+        const mappedStatus = newStatus === 'Batched / Kitted' ? 'BATCHED_KITTED' :
+                             newStatus === 'Delivered' ? 'RELEASED' : 'PENDING_BATCHING';
+        onUpdateOrderStatus(orderId, mappedStatus);
+      }
+
       if (selectedOrder && selectedOrder.orderId === orderId) {
         setSelectedOrder(prev => ({ ...prev, status: newStatus }));
       }
@@ -67,32 +224,35 @@ export default function OrderHistory({ currentRole }) {
   const renderStatusBadge = (status) => {
     switch (status) {
       case 'Delivered':
+      case 'ISSUED & RECONCILED':
         return (
-          <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-green-100 text-[#1E7A3E] border border-green-200 flex items-center gap-1">
-            <CheckCircle2 size={12} /> Delivered
+          <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-green-100 text-[#1E7A3E] border border-green-200 flex items-center gap-1">
+            <CheckCircle2 size={12} /> Delivered / Issued
           </span>
         );
       case 'Batched / Kitted':
         return (
-          <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-purple-100 text-[#5B2E7A] border border-purple-200 flex items-center gap-1">
+          <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-purple-100 text-[#5B2E7A] border border-purple-200 flex items-center gap-1">
             <Package size={12} /> Batched / Kitted
           </span>
         );
       case 'Pending Release':
+      case 'PENDING_ISSUANCE':
         return (
-          <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-[#D68910] border border-amber-200 flex items-center gap-1">
+          <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-100 text-[#D68910] border border-amber-200 flex items-center gap-1">
             <Clock size={12} /> Pending Release
           </span>
         );
       case 'In Production':
+      case 'PENDING_BATCHING':
         return (
-          <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-800 border border-blue-200 flex items-center gap-1">
+          <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-blue-100 text-blue-800 border border-blue-200 flex items-center gap-1">
             <RefreshCw size={12} className="animate-spin" /> In Production
           </span>
         );
       default:
         return (
-          <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-gray-100 text-gray-800 border border-gray-200">
+          <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-gray-100 text-gray-800 border border-gray-200">
             {status}
           </span>
         );
@@ -105,107 +265,123 @@ export default function OrderHistory({ currentRole }) {
       <div className="bg-white p-4 md:p-6 rounded-2xl border border-[#E2D1B8] shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <span className="text-[11px] font-bold uppercase tracking-wider bg-[#5B2E7A]/10 text-[#5B2E7A] px-2.5 py-0.5 rounded border border-[#5B2E7A]/20">
-              Form-ORD-002 · Sales &amp; Dispatch Archive
+            <span className="text-[11px] font-bold uppercase tracking-wider bg-[#5B2E7A] text-white px-2.5 py-0.5 rounded font-mono">
+              Unified Requisitions &amp; Order Register
             </span>
-            <span className="text-xs text-gray-500">Live Mock Service</span>
+            <span className="text-xs text-gray-500">Live Bodega Ledger</span>
           </div>
           <h2 className="text-xl md:text-2xl font-serif font-bold text-[#3D1C52] mt-1">
-            Outlet &amp; Wholesale Order History
+            Outlet, Line &amp; Mess Hall Order History
           </h2>
           <p className="text-xs md:text-sm text-gray-600">
-            Complete transaction ledger of past finished product requisitions, wholesale delivery dispatches, and real-time total order costing.
+            Unified chronological ledger of all Recipe Batched Ingredients orders, Raw Material withdrawals (including Indangan Mess Hall staff meals/snacks), and past wholesale dispatches.
           </p>
         </div>
 
         <button
-          onClick={loadOrders}
+          onClick={loadWholesaleOrders}
           disabled={loading}
           className="bg-[#5B2E7A] hover:bg-[#3D1C52] text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-sm flex items-center gap-2 transition disabled:opacity-50"
         >
           <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
-          <span>Refresh Orders</span>
+          <span>Sync Ledger</span>
         </button>
       </div>
 
       {/* Summary KPI Cards */}
-      {stats && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-white p-4 rounded-xl border border-[#E2D1B8] shadow-sm border-l-4 border-l-[#C8963E] flex items-center justify-between">
-            <div>
-              <p className="text-[11px] text-gray-500 font-bold uppercase tracking-wider">Total Sales / Cost Volume</p>
-              <h3 className="text-xl md:text-2xl font-bold font-serif text-[#C8963E] mt-0.5">
-                ₱{stats.totalCost.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </h3>
-              <p className="text-[11px] text-gray-500 mt-1">Sum of all past logged orders</p>
-            </div>
-            <div className="bg-[#C8963E]/10 p-3 rounded-lg text-[#C8963E]">
-              <DollarSign size={24} />
-            </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-white p-4 rounded-xl border border-[#E2D1B8] shadow-sm border-l-4 border-l-[#C8963E] flex items-center justify-between">
+          <div>
+            <p className="text-[11px] text-gray-500 font-bold uppercase tracking-wider">Total Ledger Valuation</p>
+            <h3 className="text-xl md:text-2xl font-bold font-serif text-[#C8963E] mt-0.5">
+              ₱{dynamicStats.totalCost.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </h3>
+            <p className="text-[11px] text-gray-500 mt-1">Across {dynamicStats.totalOrders} total orders &amp; slips</p>
           </div>
-
-          <div className="bg-white p-4 rounded-xl border border-[#E2D1B8] shadow-sm border-l-4 border-l-[#5B2E7A] flex items-center justify-between">
-            <div>
-              <p className="text-[11px] text-gray-500 font-bold uppercase tracking-wider">Total Orders Logged</p>
-              <h3 className="text-xl md:text-2xl font-bold font-serif text-[#3D1C52] mt-0.5">
-                {stats.totalOrders} Orders
-              </h3>
-              <p className="text-[11px] text-gray-500 mt-1">Outlets &amp; Wholesale combined</p>
-            </div>
-            <div className="bg-[#5B2E7A]/10 p-3 rounded-lg text-[#5B2E7A]">
-              <ShoppingBag size={24} />
-            </div>
-          </div>
-
-          <div className="bg-white p-4 rounded-xl border border-[#E2D1B8] shadow-sm border-l-4 border-l-[#1E7A3E] flex items-center justify-between">
-            <div>
-              <p className="text-[11px] text-gray-500 font-bold uppercase tracking-wider">Delivered &amp; Fulfilled</p>
-              <h3 className="text-xl md:text-2xl font-bold font-serif text-[#1E7A3E] mt-0.5">
-                {stats.deliveredCount} Orders
-              </h3>
-              <p className="text-[11px] text-gray-500 mt-1">Sign-off received by drivers</p>
-            </div>
-            <div className="bg-[#1E7A3E]/10 p-3 rounded-lg text-[#1E7A3E]">
-              <CheckCircle2 size={24} />
-            </div>
-          </div>
-
-          <div className="bg-white p-4 rounded-xl border border-[#E2D1B8] shadow-sm border-l-4 border-l-[#D68910] flex items-center justify-between">
-            <div>
-              <p className="text-[11px] text-gray-500 font-bold uppercase tracking-wider">Active In-Pipeline</p>
-              <h3 className="text-xl md:text-2xl font-bold font-serif text-[#D68910] mt-0.5">
-                {stats.inProgressCount} Orders
-              </h3>
-              <p className="text-[11px] text-gray-500 mt-1">Kitted or awaiting dispatch</p>
-            </div>
-            <div className="bg-[#D68910]/10 p-3 rounded-lg text-[#D68910]">
-              <Truck size={24} />
-            </div>
+          <div className="bg-[#C8963E]/10 p-3 rounded-lg text-[#C8963E]">
+            <DollarSign size={24} />
           </div>
         </div>
-      )}
 
-      {/* Search and Filters Bar */}
+        <div className="bg-white p-4 rounded-xl border border-[#E2D1B8] shadow-sm border-l-4 border-l-[#5B2E7A] flex items-center justify-between">
+          <div>
+            <p className="text-[11px] text-gray-500 font-bold uppercase tracking-wider">Batched / In-Production</p>
+            <h3 className="text-xl md:text-2xl font-bold font-serif text-[#3D1C52] mt-0.5">
+              {dynamicStats.inProgressCount} Active
+            </h3>
+            <p className="text-[11px] text-gray-500 mt-1">Scaling or awaiting release</p>
+          </div>
+          <div className="bg-[#5B2E7A]/10 p-3 rounded-lg text-[#5B2E7A]">
+            <Package size={24} />
+          </div>
+        </div>
+
+        <div className="bg-white p-4 rounded-xl border border-[#E2D1B8] shadow-sm border-l-4 border-l-[#1E7A3E] flex items-center justify-between">
+          <div>
+            <p className="text-[11px] text-gray-500 font-bold uppercase tracking-wider">Completed / Dispatched</p>
+            <h3 className="text-xl md:text-2xl font-bold font-serif text-[#1E7A3E] mt-0.5">
+              {dynamicStats.deliveredCount} Fulfilled
+            </h3>
+            <p className="text-[11px] text-gray-500 mt-1">Received by drivers &amp; lines</p>
+          </div>
+          <div className="bg-[#1E7A3E]/10 p-3 rounded-lg text-[#1E7A3E]">
+            <CheckCircle2 size={24} />
+          </div>
+        </div>
+
+        <div className="bg-white p-4 rounded-xl border border-[#E2D1B8] shadow-sm border-l-4 border-l-[#D68910] flex items-center justify-between">
+          <div>
+            <p className="text-[11px] text-gray-500 font-bold uppercase tracking-wider">Mess Hall Requisitions</p>
+            <h3 className="text-xl md:text-2xl font-bold font-serif text-[#D68910] mt-0.5">
+              {dynamicStats.messHallCount} Meals/Snacks
+            </h3>
+            <p className="text-[11px] text-gray-500 mt-1">Indangan staff food service</p>
+          </div>
+          <div className="bg-[#D68910]/10 p-3 rounded-lg text-[#D68910]">
+            <Utensils size={24} />
+          </div>
+        </div>
+      </div>
+
+      {/* Filter Channel Tabs Bar */}
+      <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
+        {[
+          { id: 'ALL', label: `All Transactions (${allUnifiedOrders.length})` },
+          { id: 'RECIPE_BATCHING', label: `Recipe Batch Orders (${formattedBatchOrders.length})` },
+          { id: 'MATERIAL_WITHDRAWALS', label: `Material Withdrawals (${formattedWithdrawals.length})` },
+          { id: 'MESS_HALL', label: `Indangan Mess Hall (${allUnifiedOrders.filter(o => o.categoryTag === 'MESS_HALL').length})` },
+          { id: 'OUTLETS', label: 'Retail Outlets (Pan de Verde & Laurice)' },
+          { id: 'PRODUCTION_LINES', label: 'Biscocho & Otap Halls' },
+          { id: 'WHOLESALE', label: `Wholesale Orders (${wholesaleOrders.length})` }
+        ].map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => setSelectedChannel(tab.id)}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition border ${
+              selectedChannel === tab.id
+                ? 'bg-[#3D1C52] text-white border-[#3D1C52] shadow-sm'
+                : 'bg-white text-gray-600 border-[#E2D1B8] hover:bg-[#FAF6EE]'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Search and Status Dropdowns */}
       <div className="bg-white p-4 rounded-xl border border-[#E2D1B8] shadow-sm flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
-        <form onSubmit={handleSearchSubmit} className="relative flex-1">
+        <div className="relative flex-1">
           <Search size={16} className="absolute left-3 top-3 text-gray-400" />
           <input
             type="text"
-            placeholder="Search order ID (e.g. ORD-2026-1104), outlet/customer, product..."
+            placeholder="Search order ID (BORD / WS / ORD), requester (baker/staff), outlet, product..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-9 pr-20 py-2 text-xs border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C8963E]"
+            className="w-full pl-9 pr-4 py-2 text-xs border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C8963E]"
           />
-          <button
-            type="submit"
-            className="absolute right-1.5 top-1.5 px-3 py-1 bg-[#5B2E7A] text-white text-xs font-bold rounded hover:bg-[#3D1C52]"
-          >
-            Search
-          </button>
-        </form>
+        </div>
 
         <div className="flex gap-2 flex-wrap items-center">
-          {/* Status Filter */}
           <div className="flex items-center gap-1.5">
             <Filter size={14} className="text-gray-400" />
             <select
@@ -213,24 +389,13 @@ export default function OrderHistory({ currentRole }) {
               onChange={(e) => setSelectedStatus(e.target.value)}
               className="text-xs p-2 border border-gray-300 rounded-lg bg-white font-medium focus:outline-none focus:ring-2 focus:ring-[#C8963E]"
             >
-              <option value="ALL">All Order Statuses</option>
-              <option value="Delivered">Delivered</option>
+              <option value="ALL">All Statuses</option>
+              <option value="Delivered">Delivered / Issued</option>
               <option value="Batched / Kitted">Batched / Kitted</option>
               <option value="Pending Release">Pending Release</option>
-              <option value="In Production">In Production</option>
+              <option value="In Production">In Production / Batching</option>
             </select>
           </div>
-
-          {/* Channel Filter */}
-          <select
-            value={selectedChannel}
-            onChange={(e) => setSelectedChannel(e.target.value)}
-            className="text-xs p-2 border border-gray-300 rounded-lg bg-white font-medium focus:outline-none focus:ring-2 focus:ring-[#C8963E]"
-          >
-            <option value="ALL">All Sales Channels</option>
-            <option value="Retail Outlet Requisition">Retail Outlet Requisitions</option>
-            <option value="Wholesale Commercial / Institutional">Wholesale / Institutional</option>
-          </select>
 
           {(searchTerm || selectedStatus !== 'ALL' || selectedChannel !== 'ALL') && (
             <button
@@ -241,86 +406,110 @@ export default function OrderHistory({ currentRole }) {
               }}
               className="text-xs text-gray-500 hover:text-gray-800 underline px-2"
             >
-              Reset
+              Reset Filters
             </button>
           )}
         </div>
       </div>
 
-      {/* Orders List / Table */}
+      {/* Unified Orders Register Table */}
       <div className="bg-white rounded-xl border border-[#E2D1B8] shadow-sm overflow-hidden">
         <div className="px-6 py-3.5 bg-[#FAF6EE] border-b border-[#E2D1B8] flex justify-between items-center flex-wrap gap-2">
           <div className="flex items-center gap-2">
             <h3 className="font-serif font-bold text-[#3D1C52]">
-              Historical Orders Register
+              Order &amp; Requisition Ledger
             </h3>
             <span className="text-xs bg-[#5B2E7A]/10 text-[#5B2E7A] px-2.5 py-0.5 rounded-full font-bold">
-              {orders.length} orders retrieved
+              {filteredOrders.length} transactions displayed
             </span>
           </div>
           <p className="text-[11px] text-gray-500">
-            Powered by Mock Order Data Service with simulated latency
+            Real-time feed of Recipe Batching, Bodega Withdrawals &amp; Wholesale Logistics
           </p>
         </div>
 
-        {loading ? (
-          <div className="p-12 text-center text-gray-500">
-            <RefreshCw size={28} className="animate-spin text-[#C8963E] mx-auto mb-3" />
-            <p className="font-semibold text-sm">Querying order archive from mock data service...</p>
-            <p className="text-xs text-gray-400 mt-1">Retrieving line items, pricing, and fulfillment state</p>
-          </div>
-        ) : orders.length === 0 ? (
+        {filteredOrders.length === 0 ? (
           <div className="p-12 text-center text-gray-500">
             <ShoppingBag size={32} className="text-gray-300 mx-auto mb-2" />
-            <p className="font-semibold text-sm">No past orders match your search filters.</p>
-            <p className="text-xs text-gray-400 mt-1">Try resetting the status or channel dropdowns above.</p>
+            <p className="font-semibold text-sm">No orders or requisitions match your search filters.</p>
+            <p className="text-xs text-gray-400 mt-1">Try selecting a different channel tab or resetting your query above.</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead className="bg-[#5B2E7A] text-white">
                 <tr>
-                  <th className="p-3">Order ID</th>
-                  <th className="p-3">Order &amp; Target Date</th>
-                  <th className="p-3">Customer / Outlet</th>
-                  <th className="p-3">Channel</th>
-                  <th className="p-3">Itemized Products</th>
-                  <th className="p-3 text-right">Total Cost (PHP)</th>
+                  <th className="p-3">Order / Slip Ref</th>
+                  <th className="p-3">Date &amp; Schedule</th>
+                  <th className="p-3">Requesting Line / Outlet</th>
+                  <th className="p-3">Requisitioned By</th>
+                  <th className="p-3">Category / Channel</th>
+                  <th className="p-3">Products / Materials</th>
+                  <th className="p-3 text-right">Est. Cost (PHP)</th>
                   <th className="p-3 text-center">Status</th>
                   <th className="p-3 text-center">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#E2D1B8]">
-                {orders.map((order) => {
-                  const itemCount = order.items.reduce((sum, it) => sum + it.qty, 0);
+                {filteredOrders.map((order) => {
+                  const itemCount = order.items.reduce((sum, it) => sum + (it.qty || 1), 0);
+                  const isMessHall = order.categoryTag === 'MESS_HALL';
 
                   return (
-                    <tr key={order.orderId} className="hover:bg-[#FAF6EE]/50 transition-colors">
+                    <tr 
+                      key={order.orderId} 
+                      className={`transition-colors ${
+                        isMessHall ? 'bg-amber-50/40 hover:bg-amber-50' : 'hover:bg-[#FAF6EE]/50'
+                      }`}
+                    >
                       <td className="p-3 font-mono font-bold text-[#5B2E7A]">
                         <button
                           onClick={() => setSelectedOrder(order)}
-                          className="hover:underline text-left"
+                          className="hover:underline text-left block"
                         >
                           {order.orderId}
                         </button>
+                        <span className={`text-[9px] font-mono font-bold px-1.5 py-0.2 rounded inline-block mt-0.5 ${
+                          order.formType === 'Form-ORD-001' ? 'bg-purple-100 text-purple-800' :
+                          order.formType === 'Form-WAR-001' ? 'bg-emerald-100 text-emerald-800' :
+                          'bg-indigo-100 text-indigo-800'
+                        }`}>
+                          {order.formType}
+                        </span>
                       </td>
+
                       <td className="p-3">
                         <div className="font-semibold text-gray-900">{order.orderDate}</div>
-                        <div className="text-[11px] text-gray-500 flex items-center gap-1 mt-0.5">
-                          <Truck size={11} /> Delivery: {order.deliveryDate}
+                        <div className="text-[10px] text-gray-500 flex items-center gap-1 mt-0.5">
+                          <Truck size={10} /> {order.deliveryDate}
                         </div>
                       </td>
+
                       <td className="p-3">
-                        <div className="font-bold text-gray-900">{order.customerOrOutlet}</div>
-                        <div className="text-[11px] text-gray-500">{order.contactPerson}</div>
+                        <div className="font-bold text-gray-900 flex items-center gap-1.5">
+                          {isMessHall && <Utensils size={12} className="text-amber-600 flex-shrink-0" />}
+                          <span>{order.customerOrOutlet}</span>
+                        </div>
+                        {isMessHall && (
+                          <span className="text-[10px] font-bold text-amber-800 bg-amber-100 px-1.5 py-0.2 rounded mt-0.5 inline-block">
+                            Staff Meals &amp; Snacks
+                          </span>
+                        )}
                       </td>
+
                       <td className="p-3">
-                        <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-gray-100 text-gray-700">
+                        <div className="font-medium text-gray-800">{order.contactPerson}</div>
+                        <div className="text-[10px] text-gray-500">{order.contactNumber}</div>
+                      </td>
+
+                      <td className="p-3">
+                        <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-700 block truncate max-w-[160px]">
                           {order.channel}
                         </span>
                       </td>
+
                       <td className="p-3 max-w-xs">
-                        <div className="space-y-1">
+                        <div className="space-y-0.5">
                           {order.items.slice(0, 2).map((it, idx) => (
                             <div key={idx} className="text-[11px] text-gray-700 truncate">
                               <span className="font-bold text-[#5B2E7A]">{it.qty} {it.unit}</span> · {it.name}
@@ -333,20 +522,23 @@ export default function OrderHistory({ currentRole }) {
                           )}
                         </div>
                       </td>
+
                       <td className="p-3 text-right font-mono font-bold text-sm text-[#3D1C52]">
                         ₱{order.totalCost.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </td>
+
                       <td className="p-3 text-center">
                         <div className="inline-flex justify-center">
                           {renderStatusBadge(order.status)}
                         </div>
                       </td>
+
                       <td className="p-3 text-center">
                         <div className="flex items-center justify-center gap-1.5">
                           <button
                             onClick={() => setSelectedOrder(order)}
                             className="px-2.5 py-1 bg-[#FAF6EE] text-[#5B2E7A] border border-[#E2D1B8] hover:border-[#5B2E7A] rounded text-[11px] font-bold shadow-sm transition flex items-center gap-1"
-                            title="Inspect itemized sales order & invoice"
+                            title="Inspect itemized requisition slip & invoice"
                           >
                             <FileText size={12} /> View Slip
                           </button>
@@ -361,7 +553,7 @@ export default function OrderHistory({ currentRole }) {
         )}
       </div>
 
-      {/* MODAL: Full Itemized Order & Cost Breakdown (Form-ORD-002) */}
+      {/* MODAL: Full Itemized Order & Requisition Slip */}
       {selectedOrder && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
           <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-[#C8963E]/40 space-y-4 my-8">
@@ -370,15 +562,17 @@ export default function OrderHistory({ currentRole }) {
               <div>
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] font-bold uppercase tracking-wider bg-[#5B2E7A] text-white px-2 py-0.5 rounded font-mono">
-                    Form-ORD-002
+                    {selectedOrder.formType}
                   </span>
                   <span className="text-xs font-mono font-bold text-[#5B2E7A]">{selectedOrder.orderId}</span>
                 </div>
                 <h3 className="text-lg md:text-xl font-serif font-bold text-gray-900 mt-1">
-                  Outlet Sales Order &amp; Requisition Slip
+                  {selectedOrder.orderType === 'RECIPE_BATCH' ? 'Outlet Recipe Batched Ingredients Order' :
+                   selectedOrder.orderType === 'MATERIAL_WITHDRAWAL' ? 'Warehouse Raw Material Withdrawal Slip' :
+                   'Outlet Sales Order & Requisition Slip'}
                 </h3>
                 <p className="text-xs text-gray-500">
-                  Jang-Jang Bakeshop &amp; Kingdom Confectionary · Indangan Plant
+                  Jang-Jang Bakeshop &amp; Kingdom Confectionary · Indangan Plant FDA LTO #3000013388488
                 </p>
               </div>
               <button
@@ -393,30 +587,30 @@ export default function OrderHistory({ currentRole }) {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 bg-[#FAF6EE] p-4 rounded-xl border border-[#E2D1B8] text-xs">
               <div className="space-y-1.5">
                 <div>
-                  <span className="text-gray-500 text-[10px] uppercase font-bold block">Customer / Destination Outlet:</span>
+                  <span className="text-gray-500 text-[10px] uppercase font-bold block">Requesting Line / Outlet / Department:</span>
                   <span className="font-bold text-gray-900 text-sm">{selectedOrder.customerOrOutlet}</span>
                 </div>
                 <div>
-                  <span className="text-gray-500 text-[10px] uppercase font-bold block">Contact Person &amp; Phone:</span>
-                  <span className="text-gray-800">{selectedOrder.contactPerson} ({selectedOrder.contactNumber})</span>
+                  <span className="text-gray-500 text-[10px] uppercase font-bold block">Requisitioned By (Baker / Staff Name):</span>
+                  <span className="text-gray-800 font-semibold">{selectedOrder.contactPerson}</span>
                 </div>
                 <div>
-                  <span className="text-gray-500 text-[10px] uppercase font-bold block">Sales Channel:</span>
+                  <span className="text-gray-500 text-[10px] uppercase font-bold block">Requisition Category / Purpose:</span>
                   <span className="text-gray-800 font-medium">{selectedOrder.channel}</span>
                 </div>
               </div>
 
               <div className="space-y-1.5">
                 <div>
-                  <span className="text-gray-500 text-[10px] uppercase font-bold block">Order Date &amp; Time:</span>
+                  <span className="text-gray-500 text-[10px] uppercase font-bold block">Request Date:</span>
                   <span className="font-mono text-gray-800">{selectedOrder.orderDate}</span>
                 </div>
                 <div>
-                  <span className="text-gray-500 text-[10px] uppercase font-bold block">Scheduled Delivery Time:</span>
+                  <span className="text-gray-500 text-[10px] uppercase font-bold block">Scheduled Delivery / Fulfillment Time:</span>
                   <span className="font-mono text-gray-800">{selectedOrder.deliveryDate}</span>
                 </div>
                 <div>
-                  <span className="text-gray-500 text-[10px] uppercase font-bold block">Assigned Delivery Driver:</span>
+                  <span className="text-gray-500 text-[10px] uppercase font-bold block">Assigned Handler / Driver:</span>
                   <span className="text-gray-800 font-semibold">{selectedOrder.deliveryDriver}</span>
                 </div>
               </div>
@@ -438,10 +632,10 @@ export default function OrderHistory({ currentRole }) {
                   onChange={(e) => handleStatusChange(selectedOrder.orderId, e.target.value)}
                   className="p-1 border border-gray-300 rounded text-xs font-semibold bg-white cursor-pointer"
                 >
-                  <option value="In Production">In Production</option>
+                  <option value="In Production">In Production / Batching</option>
                   <option value="Batched / Kitted">Batched / Kitted</option>
                   <option value="Pending Release">Pending Release</option>
-                  <option value="Delivered">Delivered</option>
+                  <option value="Delivered">Delivered / Issued</option>
                 </select>
                 {updatingId === selectedOrder.orderId && (
                   <RefreshCw size={12} className="animate-spin text-[#C8963E]" />
@@ -474,24 +668,18 @@ export default function OrderHistory({ currentRole }) {
                           {it.qty} {it.unit}
                         </td>
                         <td className="p-2.5 text-right font-mono text-gray-600">
-                          ₱{it.unitPrice.toLocaleString('en-PH', { minimumFractionDigits: 2 })}
+                          ₱{it.unitPrice?.toLocaleString('en-PH', { minimumFractionDigits: 2 }) || '0.00'}
                         </td>
                         <td className="p-2.5 text-right font-mono font-bold text-gray-900">
-                          ₱{it.subtotal.toLocaleString('en-PH', { minimumFractionDigits: 2 })}
+                          ₱{it.subtotal?.toLocaleString('en-PH', { minimumFractionDigits: 2 }) || '0.00'}
                         </td>
                       </tr>
                     ))}
                   </tbody>
                   <tfoot className="bg-[#FAF6EE] font-bold text-xs border-t border-gray-200">
-                    <tr>
-                      <td colSpan="4" className="p-2.5 text-right text-gray-600">Logistics &amp; Delivery Handling:</td>
-                      <td className="p-2.5 text-right font-mono text-gray-800">
-                        ₱{selectedOrder.logisticsFee.toLocaleString('en-PH', { minimumFractionDigits: 2 })}
-                      </td>
-                    </tr>
                     <tr className="border-t border-[#E2D1B8]">
                       <td colSpan="4" className="p-3 text-right text-[#3D1C52] text-sm font-bold uppercase">
-                        Total Order Cost:
+                        Total Order / Requisition Valuation:
                       </td>
                       <td className="p-3 text-right font-mono text-base font-bold text-[#3D1C52]">
                         ₱{selectedOrder.totalCost.toLocaleString('en-PH', { minimumFractionDigits: 2 })}
@@ -505,11 +693,11 @@ export default function OrderHistory({ currentRole }) {
             {/* Payment & Instructions Footer */}
             <div className="bg-gray-50 p-3 rounded-lg border border-gray-200 text-xs flex justify-between items-center">
               <div>
-                <span className="font-bold text-gray-700">Payment Terms: </span>
-                <span className="text-gray-600">{selectedOrder.paymentTerms} ({selectedOrder.paymentStatus})</span>
+                <span className="font-bold text-gray-700">Allocation Terms: </span>
+                <span className="text-gray-600">{selectedOrder.paymentTerms}</span>
               </div>
               <div className="text-right">
-                <span className="font-bold text-gray-700">Notes: </span>
+                <span className="font-bold text-gray-700">Remarks: </span>
                 <span className="text-gray-600 italic">{selectedOrder.notes || 'None'}</span>
               </div>
             </div>

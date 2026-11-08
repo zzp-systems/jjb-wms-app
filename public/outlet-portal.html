@@ -3,143 +3,530 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>JJB Outlet &amp; Line Requisition Portal | Jang-Jang Bakeshop</title>
+  <title>JJB Outlet &amp; Production Line Requisition Portal | Jang-Jang Bakeshop</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
   <style>
     body { font-family: 'Inter', sans-serif; }
+    .font-serif { font-family: 'Playfair Display', serif; }
   </style>
 </head>
 <body class="bg-[#FAF6EE] text-[#2A1B2E] min-h-screen flex flex-col">
-  <!-- Top Corporate Bar -->
+  <!-- Top Corporate Strip -->
   <header class="bg-[#3D1C52] text-white p-4 shadow-md border-b border-[#C8963E]/40">
-    <div class="max-w-4xl mx-auto flex items-center justify-between">
+    <div class="max-w-4xl mx-auto flex items-center justify-between flex-wrap gap-3">
       <div class="flex items-center gap-3">
-        <div class="w-10 h-10 rounded-full bg-white p-1 border border-[#C8963E] flex items-center justify-center">
+        <div class="w-10 h-10 rounded-full bg-white p-1 border-2 border-[#C8963E] flex items-center justify-center shadow">
           <img src="https://raw.githubusercontent.com/zzp-systems/jjb-systems/refs/heads/main/jjb-logo-transaparent.png" alt="Logo" class="w-full h-full object-contain">
         </div>
         <div>
-          <h1 class="font-bold text-lg leading-tight">JJB Outlet Requisition Portal</h1>
-          <p class="text-xs text-[#E5C585]">Pan de Verde &amp; Laurice Delicacies Order Terminal</p>
+          <h1 class="font-bold text-base md:text-lg leading-tight">JJB Outlet &amp; Line Requisition Portal</h1>
+          <p class="text-xs text-[#E5C585]">Jang-Jang Bakeshop &amp; Kingdom Confectionary · Indangan Plant FDA LTO #3000013388488</p>
         </div>
       </div>
-      <a href="/" class="text-xs bg-[#C8963E] hover:bg-[#b58330] text-[#240e32] font-bold px-3 py-1.5 rounded transition">
-        ← Open Bodega WMS
+      <a href="/" class="text-xs bg-[#C8963E] hover:bg-[#b58330] text-[#240e32] font-bold px-3 py-1.5 rounded-xl transition shadow flex items-center gap-1">
+        ← Open Bodega WMS Terminal
       </a>
     </div>
   </header>
 
-  <main class="flex-1 max-w-4xl mx-auto w-full p-4 md:p-6 space-y-6">
-    <div class="bg-white p-6 rounded-2xl border border-[#E2D1B8] shadow-sm space-y-4">
-      <div class="border-b pb-3">
-        <span class="text-[11px] font-mono font-bold bg-[#5B2E7A] text-white px-2 py-0.5 rounded">Form-ORD-001</span>
-        <h2 class="text-xl font-bold text-[#3D1C52] mt-1">Submit Daily Outlet Recipe Batch Order</h2>
-        <p class="text-xs text-gray-500">Orders submitted here are instantly routed to Romeo Malusay's scaling workbench queue.</p>
+  <!-- Main Kiosk Container -->
+  <main class="flex-1 max-w-4xl mx-auto w-full p-4 md:p-6 space-y-5">
+    
+    <!-- Portal Introduction Banner -->
+    <div class="bg-gradient-to-r from-[#240e32] to-[#3D1C52] text-white p-5 rounded-2xl border border-[#C8963E]/40 shadow-lg flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      <div>
+        <div class="flex items-center gap-2">
+          <span class="bg-[#C8963E] text-[#240e32] text-[10px] font-bold px-2 py-0.5 rounded uppercase">
+            Self-Service Floor Terminal
+          </span>
+          <span class="text-xs text-[#E5C585]">SOP-WAR-002 / SOP-PRO-004</span>
+        </div>
+        <h2 class="text-xl font-bold font-serif text-white mt-1">Requisition Intake Kiosk</h2>
+        <p class="text-xs text-gray-300">
+          For Retail Outlets, Commercial Baking Halls, and Indangan Facility Mess Hall (Staff Meals &amp; Snacks).
+        </p>
+      </div>
+      <div class="text-right text-xs bg-white/10 px-3 py-1.5 rounded-xl border border-white/10 hidden md:block">
+        <span class="text-[#E5C585] font-bold">Fulfillment Desks:</span>
+        <p class="text-gray-200 text-[11px]">Romeo Malusay (Kitting)</p>
+        <p class="text-emerald-400 text-[11px]">Jade Dela Cruz (Materials)</p>
+      </div>
+    </div>
+
+    <!-- Mode Selector Tabs -->
+    <div class="bg-white p-1.5 rounded-2xl border border-[#E2D1B8] shadow-sm flex gap-2">
+      <button
+        id="tabBtnRecipe"
+        type="button"
+        onclick="switchTab('recipe')"
+        class="flex-1 py-2.5 px-4 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 bg-[#3D1C52] text-white shadow"
+      >
+        <span>1. Order Recipe Batched Ingredients (`Form-ORD-001`)</span>
+      </button>
+      <button
+        id="tabBtnMaterial"
+        type="button"
+        onclick="switchTab('material')"
+        class="flex-1 py-2.5 px-4 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 bg-[#FAF6EE] text-gray-700 hover:bg-gray-100"
+      >
+        <span>2. Request Raw Materials &amp; Packaging (`Form-WAR-001`)</span>
+        <span class="text-[10px] bg-[#1E7A3E] text-white px-1.5 py-0.2 rounded font-bold">Mess Hall &amp; Floor</span>
+      </button>
+    </div>
+
+    <!-- ============================================================= -->
+    <!-- FORM 1: RECIPE BATCHED INGREDIENTS (Form-ORD-001) -->
+    <!-- ============================================================= -->
+    <div id="recipeSection" class="bg-white p-6 rounded-2xl border border-[#E2D1B8] shadow-sm space-y-4">
+      <div class="border-b border-gray-100 pb-3 flex justify-between items-center flex-wrap gap-2">
+        <div>
+          <span class="text-[10px] font-mono font-bold bg-[#5B2E7A] text-white px-2 py-0.5 rounded">
+            Form-ORD-001 · Outlet Batch Requisition
+          </span>
+          <h3 class="text-lg font-bold font-serif text-[#3D1C52] mt-1">Recipe Batched Ingredients Order</h3>
+          <p class="text-xs text-gray-500">Orders placed here queue directly into Romeo Malusay's scaling workbench queue.</p>
+        </div>
       </div>
 
-      <form id="orderForm" class="space-y-4 text-xs">
+      <form id="recipeOrderForm" class="space-y-4 text-xs">
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <!-- Requesting Location -->
           <div>
-            <label class="block font-bold text-gray-700 mb-1">Target Outlet / Facility</label>
-            <select id="outletSelect" class="w-full p-2.5 border rounded-lg bg-white font-medium">
-              <option value="pan-de-verde">Pan de Verde Outlet (Communal)</option>
-              <option value="laurice-delicacies">Laurice Delicacies Outlet (Bankerohan)</option>
-              <option value="indangan-biscocho">Indangan - Biscocho Commercial Hall</option>
-              <option value="indangan-otap">Indangan - Otap Laminated Hall</option>
+            <label class="block font-bold text-gray-700 mb-1">Requesting Production Line / Outlet *</label>
+            <select id="recipeOutletSelect" class="w-full p-2.5 border border-gray-300 rounded-xl bg-white font-medium focus:ring-2 focus:ring-[#C8963E]" required>
+              <option value="Pan de Verde Outlet (Communal, Davao City)">Pan de Verde Outlet (Communal, Davao City)</option>
+              <option value="Laurice Delicacies Outlet (Bankerohan, Davao City)">Laurice Delicacies Outlet (Bankerohan, Davao City)</option>
+              <option value="Indangan - Biscocho Commercial Hall">Indangan - Biscocho Commercial Hall</option>
+              <option value="Indangan - Otap Laminated Hall">Indangan - Otap Laminated Hall</option>
+              <option value="Indangan - Hearth Bread Production Line">Indangan - Hearth Bread Production Line</option>
+              <option value="Indangan - Pastry, Cake & Sweets Line">Indangan - Pastry, Cake &amp; Sweets Line</option>
+              <option value="Indangan Facility Mess Hall (Staff Meals & Snacks)">Indangan Facility Mess Hall (Staff Meals &amp; Snacks)</option>
+              <option value="Other Department (Write-in below)">Other Production Line / Branch (Write-in)</option>
             </select>
           </div>
 
+          <!-- Requisitioned By -->
           <div>
-            <label class="block font-bold text-gray-700 mb-1">Product Recipe Formulation</label>
-            <select id="recipeSelect" class="w-full p-2.5 border rounded-lg bg-white font-medium">
-              <option value="BRD-PAN-3KG">BRD-PAN-3KG: Classic Davao Pandesal (3-Kilo Scaled Kit - 85 pcs)</option>
-              <option value="BRD-PAN-6KG">BRD-PAN-6KG: Classic Davao Pandesal (6-Kilo Scaled Kit - 170 pcs)</option>
-              <option value="BRD-PAN-001">BRD-PAN-001: Classic Davao Pandesal (Half-Sack 12.5kg - 450 pcs)</option>
-              <option value="BRD-UBE-001">BRD-UBE-001: Special Ube Cheese Pandesal (300 pcs)</option>
-              <option value="PST-ENS-001">PST-ENS-001: Special Butter Ensaymada (200 pcs)</option>
-              <option value="BRD-MON-001">BRD-MON-001: Classic Monay &amp; Sweet Loaf (250 pcs)</option>
-              <option value="BIS-001">BIS-001: Biscocho Toasted Bread Delicacy (1,000 pcs)</option>
-              <option value="OTP-001">OTP-001: Otap Layered Puff Pastry (1,200 pcs)</option>
+            <label class="block font-bold text-gray-700 mb-1">Requisitioned By (Baker / Staff Name) *</label>
+            <input 
+              type="text" 
+              id="recipePersonInput" 
+              placeholder="e.g. Feliciano Gomera / Jhoanna Tejano" 
+              class="w-full p-2.5 border border-gray-300 rounded-xl font-medium focus:ring-2 focus:ring-[#C8963E]"
+              required
+            >
+          </div>
+
+          <!-- Recipe Formulation -->
+          <div class="md:col-span-2">
+            <label class="block font-bold text-gray-700 mb-1">Standardized Master Recipe Formulation *</label>
+            <select id="recipeSelect" class="w-full p-2.5 border border-gray-300 rounded-xl bg-white font-medium focus:ring-2 focus:ring-[#C8963E]" required>
+              <option value="BRD-PAN-3KG|Classic Davao Pandesal (3-Kilo Scaled Kit)|85">BRD-PAN-3KG: Classic Davao Pandesal (3-Kilo Scaled Kit - 85 pcs yield)</option>
+              <option value="BRD-PAN-6KG|Classic Davao Pandesal (6-Kilo Scaled Kit)|170">BRD-PAN-6KG: Classic Davao Pandesal (6-Kilo Scaled Kit - 170 pcs yield)</option>
+              <option value="BRD-PAN-001|Classic Davao Pandesal (Half-Sack 12.5kg)|450">BRD-PAN-001: Classic Davao Pandesal (Half-Sack 12.5kg - 450 pcs yield)</option>
+              <option value="BRD-UBE-001|Special Ube Cheese Pandesal|300">BRD-UBE-001: Special Ube Cheese Pandesal (300 pcs yield)</option>
+              <option value="PST-ENS-001|Special Butter Ensaymada|200">PST-ENS-001: Special Butter Ensaymada (200 pcs yield)</option>
+              <option value="BRD-MON-001|Classic Monay & Sweet Loaf|250">BRD-MON-001: Classic Monay &amp; Sweet Loaf (250 pcs yield)</option>
+              <option value="BIS-001|Biscocho Toasted Bread Delicacy|1000">BIS-001: Biscocho Toasted Bread Delicacy (1,000 pcs yield)</option>
+              <option value="OTP-001|Otap Layered Puff Pastry|1200">OTP-001: Otap Layered Puff Pastry (1,200 pcs yield)</option>
             </select>
           </div>
 
+          <!-- Multiplier -->
           <div>
-            <label class="block font-bold text-gray-700 mb-1">Batch Multiplier</label>
-            <input type="number" id="multiplierInput" value="1.0" min="0.5" step="0.5" class="w-full p-2.5 border rounded-lg font-mono font-bold text-[#5B2E7A]">
+            <label class="block font-bold text-gray-700 mb-1">Batch Scaling Multiplier *</label>
+            <input 
+              type="number" 
+              id="recipeMultiplierInput" 
+              value="1.0" 
+              min="0.25" 
+              max="10" 
+              step="0.25" 
+              class="w-full p-2.5 border border-gray-300 rounded-xl font-mono font-bold text-[#5B2E7A] focus:ring-2 focus:ring-[#C8963E]"
+              required
+            >
           </div>
 
+          <!-- Delivery Date -->
           <div>
-            <label class="block font-bold text-gray-700 mb-1">Needed Delivery Date</label>
-            <input type="date" id="dateInput" class="w-full p-2.5 border rounded-lg font-bold">
+            <label class="block font-bold text-gray-700 mb-1">Needed Delivery Date *</label>
+            <input 
+              type="date" 
+              id="recipeDateInput" 
+              class="w-full p-2.5 border border-gray-300 rounded-xl font-medium focus:ring-2 focus:ring-[#C8963E]"
+              required
+            >
           </div>
         </div>
 
         <div>
-          <label class="block font-bold text-gray-700 mb-1">Ordering Personnel / Branch Baker</label>
-          <input type="text" id="personInput" placeholder="e.g. Feliciano Gomera / Jhoanna Tejano" class="w-full p-2.5 border rounded-lg">
-        </div>
-
-        <div>
-          <label class="block font-bold text-gray-700 mb-1">Special Preparation Instructions</label>
-          <textarea id="notesInput" rows="2" placeholder="e.g. Priority for 06:00 AM delivery. Check ice substitution." class="w-full p-2.5 border rounded-lg"></textarea>
+          <label class="block font-bold text-gray-700 mb-1">Special Preparation Notes &amp; Dispatch Instructions</label>
+          <textarea 
+            id="recipeNotesInput" 
+            rows="2" 
+            placeholder="e.g. Priority dispatch for 06:00 AM delivery van. Ensure bread improver and yeast are pre-separated." 
+            class="w-full p-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#C8963E]"
+          ></textarea>
         </div>
 
         <div class="pt-2 flex justify-end">
-          <button type="submit" class="bg-[#5B2E7A] hover:bg-[#3D1C52] text-white font-bold text-xs px-6 py-3 rounded-lg shadow-md transition flex items-center gap-2">
-            ✓ Dispatch Requisition to Romeo Malusay's Bodega Queue
+          <button 
+            type="submit" 
+            class="bg-[#3D1C52] hover:bg-[#240e32] text-white font-bold text-xs px-6 py-3 rounded-xl shadow-md transition flex items-center gap-2"
+          >
+            <span>✓ Dispatch Requisition to Romeo Malusay's Scaling Queue</span>
           </button>
         </div>
       </form>
     </div>
 
-    <!-- Confirmation Toast -->
-    <div id="confirmBox" class="hidden bg-green-100 border border-green-300 text-green-900 p-4 rounded-xl text-xs space-y-1">
-      <p class="font-bold text-sm">Order Dispatched to Romeo's Queue!</p>
-      <p id="confirmDetails"></p>
+    <!-- ============================================================= -->
+    <!-- FORM 2: RAW MATERIAL & PACKAGING WITHDRAWAL (Form-WAR-001) -->
+    <!-- ============================================================= -->
+    <div id="materialSection" class="hidden bg-white p-6 rounded-2xl border border-[#E2D1B8] shadow-sm space-y-4">
+      <div class="border-b border-gray-100 pb-3 flex justify-between items-center flex-wrap gap-2">
+        <div>
+          <span class="text-[10px] font-mono font-bold bg-[#1E7A3E] text-white px-2 py-0.5 rounded">
+            Form-WAR-001 · Raw Material Requisition
+          </span>
+          <h3 class="text-lg font-bold font-serif text-[#1E7A3E] mt-1">Raw Material &amp; Packaging Withdrawal Request</h3>
+          <p class="text-xs text-gray-500">Request bulk ingredients, fresh eggs, sugar, butter, or packaging for Indangan Mess Hall meals/snacks and plant operations.</p>
+        </div>
+      </div>
+
+      <form id="materialOrderForm" class="space-y-4 text-xs">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <!-- Requesting Line -->
+          <div>
+            <label class="block font-bold text-gray-700 mb-1">Requesting Production Line / Facility *</label>
+            <select id="matLineSelect" class="w-full p-2.5 border border-gray-300 rounded-xl bg-white font-medium focus:ring-2 focus:ring-[#1E7A3E]" required>
+              <option value="Indangan Facility Mess Hall (Staff Meals & Snacks)">Indangan Facility Mess Hall (Staff Meals &amp; Snacks)</option>
+              <option value="Pan de Verde Outlet (Communal, Davao City)">Pan de Verde Outlet (Communal)</option>
+              <option value="Laurice Delicacies Outlet (Bankerohan, Davao City)">Laurice Delicacies Outlet (Bankerohan)</option>
+              <option value="Indangan - Biscocho Commercial Hall">Indangan - Biscocho Commercial Hall</option>
+              <option value="Indangan - Otap Laminated Hall">Indangan - Otap Laminated Hall</option>
+              <option value="Indangan - Hearth Bread Production Line">Indangan - Hearth Bread Production Line</option>
+              <option value="Indangan - Pastry, Cake & Sweets Line">Indangan - Pastry, Cake &amp; Sweets Line</option>
+              <option value="Facility Maintenance & Plant Sanitation">Facility Maintenance &amp; Plant Sanitation</option>
+            </select>
+          </div>
+
+          <!-- Requisitioned By -->
+          <div>
+            <label class="block font-bold text-gray-700 mb-1">Requisitioned By (Baker / Cook / Staff Name) *</label>
+            <input 
+              type="text" 
+              id="matPersonInput" 
+              placeholder="e.g. Chef Mario (Mess Hall Cook) / Ate Nelia" 
+              class="w-full p-2.5 border border-gray-300 rounded-xl font-medium focus:ring-2 focus:ring-[#1E7A3E]"
+              required
+            >
+          </div>
+
+          <!-- Purpose -->
+          <div>
+            <label class="block font-bold text-gray-700 mb-1">Consumption Purpose / Category *</label>
+            <select id="matPurposeSelect" class="w-full p-2.5 border border-gray-300 rounded-xl bg-white font-medium focus:ring-2 focus:ring-[#1E7A3E]">
+              <option value="Facility Mess Hall - Staff Meals & Snacks Consumption">Facility Mess Hall - Staff Meals &amp; Snacks Consumption</option>
+              <option value="Commercial Production Run / Daily Baking">Commercial Production Run / Daily Baking</option>
+              <option value="Emergency Production Line Shortage">Emergency Production Line Shortage</option>
+              <option value="Packaging & Dispatch Bay Supply">Packaging &amp; Dispatch Bay Supply</option>
+              <option value="Miscellaneous Approved Internal Release">Miscellaneous Approved Internal Release</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Materials List -->
+        <div class="border border-gray-200 rounded-xl p-4 bg-[#FAF6EE] space-y-3">
+          <div class="flex justify-between items-center">
+            <span class="font-bold text-xs text-[#3D1C52] uppercase tracking-wider">
+              Requested Material Items:
+            </span>
+            <button 
+              type="button" 
+              onclick="addMaterialRow()"
+              class="bg-[#1E7A3E] hover:bg-[#165c2f] text-white font-bold text-[11px] px-3 py-1.5 rounded-lg shadow transition"
+            >
+              + Add Material
+            </button>
+          </div>
+
+          <div id="materialRowsContainer" class="space-y-2">
+            <!-- Default Rows -->
+            <div class="material-row bg-white p-2.5 rounded-xl border border-gray-200 flex flex-wrap items-center gap-3">
+              <div class="flex-1 min-w-[200px]">
+                <select class="mat-code-select w-full p-2 border border-gray-300 rounded-lg text-xs font-medium">
+                  <option value="RM-DRY-001|Fresh Farm Eggs (Coop)|pcs|7">RM-DRY-001: Fresh Farm Eggs (Coop) · pcs</option>
+                  <option value="RM-SWT-001|Premium Refined White Sugar (Victorias)|kg|78">RM-SWT-001: Refined White Sugar (Victorias) · kg</option>
+                  <option value="RM-SWT-002|Washed Raw Sugar (Brown Sugar)|kg|65">RM-SWT-002: Brown Sugar · kg</option>
+                  <option value="RM-FAT-001|Buttercup Margarine (500g)|block|95">RM-FAT-001: Buttercup Margarine · block</option>
+                  <option value="RM-FAT-001-BUTTER|Magnolia Gold Unsalted Butter|block|135">RM-FAT-001-BUTTER: Magnolia Gold Unsalted Butter · block</option>
+                  <option value="RM-DRY-002|Condensada (Master Chef 1kg)|kg|65">RM-DRY-002: Condensada (Master Chef 1kg) · kg</option>
+                  <option value="RM-DRY-003|Evaporada (Jersey 370ml)|L|28">RM-DRY-003: Evaporada (Jersey 370ml) · L</option>
+                  <option value="RM-DRY-004|Skimmed Milk Powder (Farmland)|kg|154">RM-DRY-004: Skimmed Milk Powder · kg</option>
+                  <option value="RM-FLR-001|Montana Hard Wheat Bread Flour|kg|44">RM-FLR-001: Montana Hard Wheat Bread Flour · kg</option>
+                  <option value="PM-BAG-001|Calypso Poly Bag 7x14|pcs|0.56">PM-BAG-001: Calypso Poly Bag 7x14 · pcs</option>
+                  <option value="PM-CUP-001|Baking Cups 5 1/2 oz|pcs|0.28">PM-CUP-001: Baking Cups 5 1/2 oz · pcs</option>
+                </select>
+              </div>
+              <div class="w-28">
+                <input type="number" min="1" step="any" value="30" placeholder="Quantity" class="mat-qty-input w-full p-2 border border-gray-300 rounded-lg text-xs font-mono font-bold text-[#1E7A3E]">
+              </div>
+              <button type="button" onclick="removeMaterialRow(this)" class="text-red-500 hover:text-red-700 p-1.5 rounded">✕</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="block font-bold text-gray-700 mb-1">Needed By Date *</label>
+            <input type="date" id="matDateInput" class="w-full p-2.5 border border-gray-300 rounded-xl font-medium focus:ring-2 focus:ring-[#1E7A3E]" required>
+          </div>
+          <div>
+            <label class="block font-bold text-gray-700 mb-1">Justification &amp; Notes</label>
+            <input type="text" id="matNotesInput" placeholder="e.g. For Indangan plant staff breakfast and afternoon merienda snacks." class="w-full p-2.5 border border-gray-300 rounded-xl">
+          </div>
+        </div>
+
+        <div class="pt-2 flex justify-end">
+          <button 
+            type="submit" 
+            class="bg-[#1E7A3E] hover:bg-[#165c2f] text-white font-bold text-xs px-6 py-3 rounded-xl shadow-md transition flex items-center gap-2"
+          >
+            <span>✓ Submit Material Requisition to Jade Dela Cruz (`Form-WAR-001`)</span>
+          </button>
+        </div>
+      </form>
+    </div>
+
+    <!-- Confirmation Modal / Toast -->
+    <div id="confirmBox" class="hidden bg-emerald-50 border border-emerald-300 text-emerald-900 p-5 rounded-2xl shadow-lg space-y-2 animate-in fade-in">
+      <div class="flex items-center gap-2 font-bold text-base text-emerald-800">
+        <span>✓ Requisition Successfully Dispatched!</span>
+      </div>
+      <p id="confirmDetails" class="text-xs"></p>
+      <div class="pt-2 flex gap-3 text-xs">
+        <a href="/" class="bg-[#3D1C52] text-white px-4 py-2 rounded-xl font-bold shadow hover:bg-[#240e32]">
+          Open Bodega WMS Dashboard
+        </a>
+        <button onclick="document.getElementById('confirmBox').classList.add('hidden')" class="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-xl font-bold hover:bg-gray-50">
+          Submit Another Requisition
+        </button>
+      </div>
     </div>
   </main>
 
-  <script>
-    document.getElementById('dateInput').value = new Date().toISOString().slice(0, 10);
+  <footer class="bg-[#240e32] text-gray-400 text-center py-4 text-xs border-t border-[#C8963E]/30 mt-auto">
+    <p>Jang-Jang Bakeshop &amp; Kingdom Confectionary · Manual of Operations v4.6</p>
+    <p class="text-[11px] text-[#E5C585]">Indangan Plant FDA LTO #3000013388488 · Davao City, Philippines</p>
+  </footer>
 
-    document.getElementById('orderForm').addEventListener('submit', function(e) {
+  <script>
+    // Set default dates
+    const today = new Date().toISOString().slice(0, 10);
+    document.getElementById('recipeDateInput').value = today;
+    document.getElementById('matDateInput').value = today;
+
+    // Tab Switching
+    function switchTab(tab) {
+      const recipeSec = document.getElementById('recipeSection');
+      const matSec = document.getElementById('materialSection');
+      const tabBtnRecipe = document.getElementById('tabBtnRecipe');
+      const tabBtnMat = document.getElementById('tabBtnMaterial');
+
+      if (tab === 'recipe') {
+        recipeSec.classList.remove('hidden');
+        matSec.classList.add('hidden');
+        tabBtnRecipe.className = "flex-1 py-2.5 px-4 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 bg-[#3D1C52] text-white shadow";
+        tabBtnMat.className = "flex-1 py-2.5 px-4 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 bg-[#FAF6EE] text-gray-700 hover:bg-gray-100";
+      } else {
+        recipeSec.classList.add('hidden');
+        matSec.classList.remove('hidden');
+        tabBtnMat.className = "flex-1 py-2.5 px-4 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 bg-[#1E7A3E] text-white shadow";
+        tabBtnRecipe.className = "flex-1 py-2.5 px-4 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 bg-[#FAF6EE] text-gray-700 hover:bg-gray-100";
+      }
+    }
+
+    // Material Row Adder
+    function addMaterialRow() {
+      const container = document.getElementById('materialRowsContainer');
+      const row = document.createElement('div');
+      row.className = "material-row bg-white p-2.5 rounded-xl border border-gray-200 flex flex-wrap items-center gap-3";
+      row.innerHTML = `
+        <div class="flex-1 min-w-[200px]">
+          <select class="mat-code-select w-full p-2 border border-gray-300 rounded-lg text-xs font-medium">
+            <option value="RM-DRY-001|Fresh Farm Eggs (Coop)|pcs|7">RM-DRY-001: Fresh Farm Eggs (Coop) · pcs</option>
+            <option value="RM-SWT-001|Premium Refined White Sugar (Victorias)|kg|78">RM-SWT-001: Refined White Sugar (Victorias) · kg</option>
+            <option value="RM-SWT-002|Washed Raw Sugar (Brown Sugar)|kg|65">RM-SWT-002: Brown Sugar · kg</option>
+            <option value="RM-FAT-001|Buttercup Margarine (500g)|block|95">RM-FAT-001: Buttercup Margarine · block</option>
+            <option value="RM-FAT-001-BUTTER|Magnolia Gold Unsalted Butter|block|135">RM-FAT-001-BUTTER: Magnolia Gold Unsalted Butter · block</option>
+            <option value="RM-DRY-002|Condensada (Master Chef 1kg)|kg|65">RM-DRY-002: Condensada (Master Chef 1kg) · kg</option>
+            <option value="RM-DRY-003|Evaporada (Jersey 370ml)|L|28">RM-DRY-003: Evaporada (Jersey 370ml) · L</option>
+            <option value="RM-DRY-004|Skimmed Milk Powder (Farmland)|kg|154">RM-DRY-004: Skimmed Milk Powder · kg</option>
+            <option value="RM-FLR-001|Montana Hard Wheat Bread Flour|kg|44">RM-FLR-001: Montana Hard Wheat Bread Flour · kg</option>
+            <option value="PM-BAG-001|Calypso Poly Bag 7x14|pcs|0.56">PM-BAG-001: Calypso Poly Bag 7x14 · pcs</option>
+            <option value="PM-CUP-001|Baking Cups 5 1/2 oz|pcs|0.28">PM-CUP-001: Baking Cups 5 1/2 oz · pcs</option>
+          </select>
+        </div>
+        <div class="w-28">
+          <input type="number" min="1" step="any" value="5" placeholder="Quantity" class="mat-qty-input w-full p-2 border border-gray-300 rounded-lg text-xs font-mono font-bold text-[#1E7A3E]">
+        </div>
+        <button type="button" onclick="removeMaterialRow(this)" class="text-red-500 hover:text-red-700 p-1.5 rounded">✕</button>
+      `;
+      container.appendChild(row);
+    }
+
+    function removeMaterialRow(btn) {
+      const container = document.getElementById('materialRowsContainer');
+      if (container.children.length > 1) {
+        btn.closest('.material-row').remove();
+      }
+    }
+
+    // Handle Recipe Form Submit
+    document.getElementById('recipeOrderForm').addEventListener('submit', function(e) {
       e.preventDefault();
-      const outlet = document.getElementById('outletSelect').value;
-      const recipe = document.getElementById('recipeSelect').value;
-      const multiplier = parseFloat(document.getElementById('multiplierInput').value) || 1.0;
-      const person = document.getElementById('personInput').value || 'Authorized Outlet Baker';
-      
-      const orderId = 'BORD-' + new Date().toISOString().slice(0, 10).replace(/-/g, '') + '-' + Math.floor(100 + Math.random() * 900);
-      
-      // Save directly to localStorage so the main app picks it up
+      const outlet = document.getElementById('recipeOutletSelect').value;
+      const recipeVal = document.getElementById('recipeSelect').value;
+      const [sku, name, yieldStr] = recipeVal.split('|');
+      const multiplier = parseFloat(document.getElementById('recipeMultiplierInput').value) || 1.0;
+      const person = document.getElementById('recipePersonInput').value || 'Authorized Baker';
+      const notes = document.getElementById('recipeNotesInput').value;
+      const targetDate = document.getElementById('recipeDateInput').value;
+
+      const orderId = 'BORD-' + today.replace(/-/g, '') + '-' + Math.floor(100 + Math.random() * 900);
+      const calculatedPcs = Math.round(parseInt(yieldStr, 10) * multiplier);
+
+      const newOrder = {
+        orderId: orderId,
+        requestDate: today,
+        targetDate: targetDate,
+        outletId: outlet.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+        outletName: outlet,
+        recipeSku: sku,
+        recipeName: name,
+        batchMultiplier: multiplier,
+        requestedQtyPcs: calculatedPcs,
+        requestedBy: person,
+        enteredBy: person + ' (Outlet Portal)',
+        status: 'PENDING_BATCHING',
+        bulkRequestStatus: 'NOT_REQUESTED',
+        notes: notes || 'Direct order from branch kiosk terminal'
+      };
+
       try {
         const storageKey = 'JJB_WMS_LIVE_V4_6_STATE_batch_orders';
         const existing = JSON.parse(localStorage.getItem(storageKey) || '[]');
-        const newOrder = {
-          orderId: orderId,
-          requestDate: new Date().toISOString().slice(0, 10),
-          targetDate: document.getElementById('dateInput').value,
-          outletId: outlet,
-          outletName: document.getElementById('outletSelect').selectedOptions[0].text,
-          recipeSku: recipe,
-          recipeName: document.getElementById('recipeSelect').selectedOptions[0].text.split(':')[1]?.trim() || recipe,
-          batchMultiplier: multiplier,
-          requestedQtyPcs: Math.round(100 * multiplier),
-          requestedBy: person,
-          enteredBy: 'Outlet Portal (' + person + ')',
-          status: 'PENDING_BATCHING',
-          bulkRequestStatus: 'NOT_REQUESTED',
-          notes: document.getElementById('notesInput').value || 'Direct order from branch terminal'
-        };
         existing.unshift(newOrder);
         localStorage.setItem(storageKey, JSON.stringify(existing));
       } catch (err) {
         console.error(err);
       }
 
+      // Sync to Worker
+      fetch('/api/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          idempotencyKey: 'PORTAL_RECIPE_' + orderId,
+          eventType: 'OUTLET_BATCH_ORDER',
+          orderId: orderId,
+          recipeName: name,
+          outletName: outlet,
+          requestedQtyPcs: calculatedPcs,
+          timestamp: new Date().toISOString()
+        })
+      }).catch(function() {});
+
       const box = document.getElementById('confirmBox');
-      document.getElementById('confirmDetails').innerText = 'Order ID: ' + orderId + ' (' + recipe + ') is now awaiting Romeo Malusay to request bulk raw materials and precision scale.';
+      document.getElementById('confirmDetails').innerHTML = 
+        'Order <strong>' + orderId + '</strong> for <strong>' + name + '</strong> (' + calculatedPcs + ' pcs) requested by <strong>' + person + '</strong> (' + outlet + ') is registered and queued for Romeo Malusay.';
       box.classList.remove('hidden');
+      box.scrollIntoView({ behavior: 'smooth' });
+    });
+
+    // Handle Material Form Submit
+    document.getElementById('materialOrderForm').addEventListener('submit', function(e) {
+      e.preventDefault();
+      const line = document.getElementById('matLineSelect').value;
+      const person = document.getElementById('matPersonInput').value || 'Staff Requester';
+      const purpose = document.getElementById('matPurposeSelect').value;
+      const neededDate = document.getElementById('matDateInput').value;
+      const notes = document.getElementById('matNotesInput').value;
+
+      const slipNo = 'WS-PORTAL-' + today.replace(/-/g, '') + '-' + Math.floor(100 + Math.random() * 900);
+
+      const rows = document.querySelectorAll('.material-row');
+      const items = [];
+      let totalEstCost = 0;
+
+      rows.forEach(function(row) {
+        const select = row.querySelector('.mat-code-select');
+        const qtyInput = row.querySelector('.mat-qty-input');
+        const [code, desc, uom, unitCostStr] = select.value.split('|');
+        const qty = parseFloat(qtyInput.value) || 1;
+        const unitCost = parseFloat(unitCostStr) || 60;
+        const lineCost = qty * unitCost;
+        totalEstCost += lineCost;
+
+        items.push({
+          materialCode: code,
+          name: desc,
+          qtyRequestedSec: qty,
+          qtyIssuedSec: qty,
+          secondaryUom: uom,
+          lotNumber: 'DEFAULT-LOT',
+          storageRoom: 'Dry Room 1',
+          estimatedCost: lineCost
+        });
+      });
+
+      const newWithdrawal = {
+        slipNo: slipNo,
+        date: neededDate,
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        requestingEntity: line,
+        department: purpose.includes('Mess Hall') ? 'Indangan Facility Mess Hall (Staff Meals & Snacks)' : 'Production Line',
+        purpose: purpose,
+        requestedBy: person,
+        issuedBy: 'Pending Jade Q. Dela Cruz',
+        receivedBy: person,
+        items: items,
+        totalCost: totalEstCost,
+        status: 'ISSUED & RECONCILED',
+        notes: notes || ('Material requisition for ' + line)
+      };
+
+      try {
+        const storageKey = 'JJB_WMS_LIVE_V4_6_STATE_withdrawals';
+        const existing = JSON.parse(localStorage.getItem(storageKey) || '[]');
+        existing.unshift(newWithdrawal);
+        localStorage.setItem(storageKey, JSON.stringify(existing));
+      } catch (err) {
+        console.error(err);
+      }
+
+      // Sync to Worker
+      fetch('/api/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          idempotencyKey: 'PORTAL_MAT_' + slipNo,
+          eventType: 'MATERIAL_WITHDRAWAL',
+          slipNo: slipNo,
+          requestingEntity: line,
+          requestedBy: person,
+          purpose: purpose,
+          timestamp: new Date().toISOString()
+        })
+      }).catch(function() {});
+
+      const box = document.getElementById('confirmBox');
+      document.getElementById('confirmDetails').innerHTML = 
+        'Requisition <strong>' + slipNo + '</strong> requested by <strong>' + person + '</strong> for <strong>' + line + '</strong> (' + items.length + ' materials, Total: ₱' + totalEstCost.toLocaleString() + ') is submitted to Jade Dela Cruz.';
+      box.classList.remove('hidden');
+      box.scrollIntoView({ behavior: 'smooth' });
     });
   </script>
 </body>

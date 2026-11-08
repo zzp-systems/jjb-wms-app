@@ -1,0 +1,76 @@
+Material Code,Description,Category,Storage Room,Primary Unit,Conversion Factor,Secondary Unit,Count Primary Units,Count Secondary Units,Lot Number,Expiration Date,Storage Location
+RM-FLR-001,All Purpose Flour ,Flour & Grains,Dry Room 1,Sack,25,kg,0,0,LOT-RMFLR001-INIT,2027-06-30,Pallet A1
+RM-FLR-002,3rd Class Soft Wheat Flour (Isla - General Milling Corporation),Flour & Grains,Dry Room 1,Sack,25,kg,15,375,LOT-RMFLR002-INIT,2027-06-30,Pallet A1
+RM-FLR-003,1st Class Hard Wheat Flour (Naga Rossa - Asian Grains Corp),Flour & Grains,Dry Room 1,Sack,25,kg,133,3325,LOT-RMFLR003-INIT,2027-06-30,Pallet A1
+RM-FLR-005,Refined Cornstarch (White Tower),Flour & Grains,Dry Room 1,Sack,25,kg,3,75,LOT-RMFLR005-INIT,2027-06-30,Pallet A1
+RM-FLR-006,Soft Cake Flour (Low-Protein / Chlorinated),Flour & Grains,Dry Room 1,Sack,25,kg,0,0,LOT-RMFLR006-INIT,2027-06-30,Pallet A1
+RM-DRY-005,Desiccated Coconut (Good Seed Food Co. - 500g),Flour & Grains,Dry Room 1,Bag,0.5,kg,10,5,LOT-RMDRY005-INIT,2027-06-30,Pallet A1
+RM-FAT-001,Refrigerated Margarine (Buttercup),Fats & Oils,Cold Room,Block,5,kg,74,370,LOT-RMFAT001-INIT,2027-06-30,Pallet A1
+RM-FAT-001,Unsalted Butter (Magnolia Gold),Fats & Oils,Cold Room,Block,5,kg,79,395,LOT-RMFAT001-INIT,2027-06-30,Pallet A1
+RM-FAT-002,Coconut Oil (Marca Leon),Fats & Oils,Wet Room,Tin Can,17,kg,25,425,LOT-RMFAT002-INIT,2027-06-30,Pallet A1
+RM-FAT-003,Vegetable Shortening (Sunny Suy),Fats & Oils,Wet Room,Laton,30,kg,42,1260,LOT-RMFAT003-INIT,2027-06-30,Pallet A1
+RM-FAT-004,Premium Margarine (Sunny Suy),Fats & Oils,Wet Room,Laton,45,kg,2,90,LOT-RMFAT004-INIT,2027-06-30,Pallet A1
+RM-FAT-005,Palm Oil (Unlabeled),Fats & Oils,Wet Room,Tin Can,17,kg,8,136,LOT-RMFAT005-INIT,2027-06-30,Pallet A1
+RM-SWT-001,Crystal Brown Sugar,Sweeteners,Dry Room 1,Sack,50,kg,25,1250,LOT-RMSWT001-INIT,2027-06-30,Pallet A1
+RM-SWT-002,Refined White Sugar,Sweeteners,Dry Room 1,Sack,50,kg,6,300,LOT-RMSWT002-INIT,2027-06-30,Pallet A1
+RM-SWT-003,Refined Iodized Fine Salt ,Sweeteners & Salt,Dry Room 1,Sack,25,kg,0,0,LOT-RMSWT003-INIT,2027-06-30,Pallet A1
+RM-SWT-004,Confectioners / Powdered Icing Sugar,Sweeteners,Dry Room 1,Pack,2,kg,10,20,LOT-RMSWT004-INIT,2027-06-30,Pallet A1
+RM-DRY-001,Fresh Farm Eggs (Coop),Dairy & Eggs,Wet Room,Tray,30,pcs,742,22265,LOT-RMDRY001-INIT,2027-06-30,Pallet A1
+RM-DRY-002,Condensada (Master Chef - 1kg Tin Can / 24 Cans in a Box),Dairy & Eggs,Wet Room,Tin Can,1,kg,"1,178",1178,LOT-RMDRY002-INIT,2027-06-30,Pallet A1
+RM-DRY-003,Evaporada (Jersey - 370ml Tin Can / 48 Cans in a Box),Dairy & Eggs,Wet Room,Tin Can,0.37,L,"1,132",445.84,LOT-RMDRY003-INIT,2027-06-30,Pallet A1
+RM-DRY-004,Skimmed Milk Powder (Farmland - 25kg Sack),Dairy & Eggs,Dry Room 1,Sack,25,kg,10,250,LOT-RMDRY004-INIT,2027-06-30,Pallet A1
+RM-LEV-001,Instant Dry Yeast (Gloripan - 500g Box),Leavening & Additives,Dry Room 1,Box,0.5,kg,5,2.5,LOT-RMLEV001-INIT,2027-06-30,Pallet A1
+RM-LEV-002,Baking Powder (Calumet - 14kg Bag),Leavening & Additives,Dry Room 1,Bag,14,kg,0,0,LOT-RMLEV002-INIT,2027-06-30,Pallet A1
+RM-LEV-003,Calcium Propionate (CSP Bread Mold Inhibitor),Leavening & Additives,Dry Room 1,Pack,1,kg,1,1,LOT-RMLEV003-INIT,2027-06-30,Pallet A1
+RM-LEV-004,Potassium Sorbate (Granular Antimicrobial),Leavening & Additives,Dry Room 1,Pack,1,kg,3,3,LOT-RMLEV004-INIT,2027-06-30,Pallet A1
+RM-LEV-005,Non-Bromated Bread Improver (Baker's Choice - 1kg Pack),Leavening & Additives,Dry Room 1,Pack,1,kg,10,10,LOT-RMLEV005-INIT,2027-06-30,Pallet A1
+RM-FLV-001,Ube Flavor & Color Blend (Unibake - 5L Jug),Flavors & Colors,Wet Room,Bottle,5,L,0,0,LOT-RMFLV001-INIT,2027-06-30,Pallet A1
+RM-FLV-002,Vanilla Flavor FF (Kanegie - 3.79L Gallon),Flavors & Colors,Wet Room,Gallon,3.79,L,13,49.27,LOT-RMFLV002-INIT,2027-06-30,Pallet A1
+PM-PAP-001,Glassine Wax Paper Sheets (Otap Wrapping),Packaging Materials,Dry Room 2,Rim,500,pcs,0,0,LOT-PMPAP001-INIT,2027-06-30,Pallet A1
+PM-PAP-002,Baking Pan Pattern Paper (Laminated Sheets),Packaging Materials,Dry Room 2,Rim,500,pcs,0,0,LOT-PMPAP002-INIT,2027-06-30,Pallet A1
+PM-BOX-001,Jang-Jang Master Shipping Carton Box (50 pk/box),Packaging Materials,Dry Room 2,Rim,20,pcs,27,540,LOT-PMBOX001-INIT,2027-06-30,Pallet A1
+UT-GAS-001,Solane LPG 50kg Industrial Tank,Utilities & Fuel,Wet Room,Tank,1,tank,8,8,LOT-UTGAS001-INIT,2027-06-30,Pallet A1
+RM-FLV-003,Neco Egg Yellow Food Coloring Powder (12x500g),Flavors & Colors,Dry Room 1,Pack,0.5,kg,6,3,LOT-RMFLV003-INIT,2027-06-30,Pallet A1
+RM-FLV-005,Dutché Special Alkalized Dark Cocoa Powder,Flavors & Colors,Dry Room 1,Pack,1,kg,2,2,LOT-RMFLV005-INIT,2027-06-30,Pallet A1
+RM-LEV-006,Carbonato — 1 kg,Leavening & Additives,Dry Room 1,Pack,1,kg,10,10,LOT-RMLEV006-INIT,2027-06-30,Pallet A1
+RM-LEV-007,Carbonato — 500 g,Leavening & Additives,Dry Room 1,Pack,0.5,kg,4,2,LOT-RMLEV007-INIT,2027-06-30,Pallet A1
+RM-DRY-006,Sesame Seed — 1 kg,Flour & Grains,Dry Room 1,Pack,1,kg,8,8,LOT-RMDRY006-INIT,2027-06-30,Pallet A1
+RM-LEV-008,Bakers Field Whip It,Leavening & Additives,Dry Room 1,Pack,1,kg,2,2,LOT-RMLEV008-INIT,2027-06-30,Pallet A1
+RM-LEV-009,Baking Soda — 500 g,Leavening & Additives,Dry Room 1,Box,0.5,kg,5,2.5,LOT-RMLEV009-INIT,2027-06-30,Pallet A1
+RM-FLV-006,Neco Choco brown 500g,Flavors & Colors,Dry Room 1,Tin Can,0.5,kg,3,1.5,LOT-RMFLV006-INIT,2027-06-30,Pallet A1
+RM-FLV-007,Neco choco brown 125g,Flavors & Colors,Dry Room 1,Tin Can,0.125,kg,2,0.25,LOT-RMFLV007-INIT,2027-06-30,Pallet A1
+RM-FLR-007,White Tower Cornstarch — 25 kg,Flour & Grains,Dry Room 1,Sack,25,kg,0,0,LOT-RMFLR007-INIT,2027-06-30,Pallet A1
+RM-FAT-006,Refined Vegetable Cooking Oil,Fats & Oils,Wet Room,Tin Can,17,kg,0,0,LOT-RMFAT006-INIT,2027-06-30,Pallet A1
+RM-DRY-007,Condensed Creamer (Jersey -  390g Tin Can / 48 Cans ina  Box) ,Dairy & Eggs,Wet Room,Box,0.39,kg,709,276.51,LOT-RMDRY007-INIT,2027-06-30,Pallet A1
+PM-ROL-001,Plastic Cellophane Roll 25x50,Packaging Materials,Dry Room 2,Roll,1,pcs,0,0,LOT-PMROL001-INIT,2027-06-30,Pallet A1
+PM-ROL-002,Plastic Cellophane Roll 9x18,Packaging Materials,Dry Room 2,Rim,500,pcs,2,1000,LOT-PMROL002-INIT,2027-06-30,Pallet A1
+PM-BAG-001,Calypso Poly Bag 7x14-01,Packaging Materials,Dry Room 2,Rim,500,pcs,1,600,LOT-PMBAG001-INIT,2027-06-30,Pallet A1
+PM-BAG-002,Poly Bag 7x11-02,Packaging Materials,Dry Room 2,Rim,500,pcs,0,0,LOT-PMBAG002-INIT,2027-06-30,Pallet A1
+PM-BAG-003,Poly Bag 5x6-01,Packaging Materials,Dry Room 2,Rim,500,pcs,2,1000,LOT-PMBAG003-INIT,2027-06-30,Pallet A1
+PM-BAG-004,Poly Bag 4x6-01,Packaging Materials,Dry Room 2,Rim,500,pcs,0,0,LOT-PMBAG004-INIT,2027-06-30,Pallet A1
+PM-BAG-005,Poly Bag 6x10-01,Packaging Materials,Dry Room 2,Rim,500,pcs,6,3200,LOT-PMBAG005-INIT,2027-06-30,Pallet A1
+PM-BAG-006,Poly Bag 6x10-02,Packaging Materials,Dry Room 2,Rim,500,pcs,1,900,LOT-PMBAG006-INIT,2027-06-30,Pallet A1
+PM-BAG-007,Poly Bag 10-18-01,Packaging Materials,Dry Room 2,Rim,500,pcs,1,750,LOT-PMBAG007-INIT,2027-06-30,Pallet A1
+PM-BAG-008,Tasty Bread Bag 10x18,Packaging Materials,Dry Room 2,Rim,500,pcs,1,500,LOT-PMBAG008-INIT,2027-06-30,Pallet A1
+PM-BAG-009,Special Bread Bag 5x12 SP,Packaging Materials,Dry Room 2,Rim,500,pcs,2,1050,LOT-PMBAG009-INIT,2027-06-30,Pallet A1
+PM-BAG-010,Long Bread Bag 7x14 SP,Packaging Materials,Dry Room 2,Rim,500,pcs,3,1500,LOT-PMBAG010-INIT,2027-06-30,Pallet A1
+PM-CUP-001,Baking Cups 5 1/2 oz,Packaging Materials,Dry Room 2,Box,1000,pcs,5,5000,LOT-PMCUP001-INIT,2027-06-30,Pallet A1
+PM-CUP-002,Baking Cups 2 oz (Circle),Packaging Materials,Dry Room 2,Box,1000,pcs,2,2300,LOT-PMCUP002-INIT,2027-06-30,Pallet A1
+PM-CUP-003,Mamon Paper Cups,Packaging Materials,Dry Room 2,Box,1000,pcs,5,5000,LOT-PMCUP003-INIT,2027-06-30,Pallet A1
+PM-CUP-004,Torta Paper Cups,Packaging Materials,Dry Room 2,Box,1000,pcs,1,1000,LOT-PMCUP004-INIT,2027-06-30,Pallet A1
+PM-BAG-011,Sando Bag Carrier (Medium / Large),Packaging Materials,Dry Room 2,Rim,500,pcs,1,560,LOT-PMBAG011-INIT,2027-06-30,Pallet A1
+PM-TPE-001,Sealer Tape,Packaging Materials,Dry Room 2,Roll,1,pcs,12,12,LOT-PMTPE001-INIT,2027-06-30,Pallet A1
+PM-TPE-002,Packing tape 1.5 cm 1 inch,Packaging Materials,Dry Room 2,Roll,1,pcs,27,27,LOT-PMTPE002-INIT,2027-06-30,Pallet A1
+PM-TPE-003,Packing tape 5 cm 1/2 inch,Packaging Materials,Dry Room 2,Roll,1,pcs,3,3,LOT-PMTPE003-INIT,2027-06-30,Pallet A1
+PM-BAG-012,Donewell 16x24 x 500 pcs,Packaging Materials,Dry Room 2,Rim,500,pcs,4,2050,LOT-PMBAG012-INIT,2027-06-30,Pallet A1
+PM-BAG-013,Smoke Plastic 14x20 x 500pcs,Packaging Materials,Dry Room 2,Rim,500,pcs,1,650,LOT-PMBAG013-INIT,2027-06-30,Pallet A1
+PM-BAG-014,copp 7x11 expandable,Packaging Materials,Dry Room 2,Rim,500,pcs,7,3600,LOT-PMBAG014-INIT,2027-06-30,Pallet A1
+PM-BAG-015,tasty bread sm,Packaging Materials,Dry Room 2,Pack,50,pcs,1,50,LOT-PMBAG015-INIT,2027-06-30,Pallet A1
+PM-BAG-016,sabako 7 x 14,Packaging Materials,Dry Room 2,Rim,500,pcs,1,600,LOT-PMBAG016-INIT,2027-06-30,Pallet A1
+PM-CUP-005,torta cups 3 1/2,Packaging Materials,Dry Room 2,Box,1000,pcs,2,2000,LOT-PMCUP005-INIT,2027-06-30,Pallet A1
+PM-CUP-006,bakerite baking cups 3 oz,Packaging Materials,Dry Room 2,Box,1000,pcs,2,2000,LOT-PMCUP006-INIT,2027-06-30,Pallet A1
+PM-BAG-017,joker excel 8x14,Packaging Materials,Dry Room 2,Rim,500,pcs,1,850,LOT-PMBAG017-INIT,2027-06-30,Pallet A1
+PM-BAG-018,"sabako 4x6 002 1,000per ream",Packaging Materials,Dry Room 2,Rim,1000,pcs,4,4500,LOT-PMBAG018-INIT,2027-06-30,Pallet A1
+PM-BAG-019,"sabako 5x6 002 1,000per ream",Packaging Materials,Dry Room 2,Rim,1000,pcs,0,200,LOT-PMBAG019-INIT,2027-06-30,Pallet A1
+PM-BAG-020,sabako 10x18 500 ream,Packaging Materials,Dry Room 2,Rim,500,pcs,2,1450,LOT-PMBAG020-INIT,2027-06-30,Pallet A1
+PM-BAG-021,"cutty shark ice bag 10x18 1,000ream",Packaging Materials,Dry Room 2,Rim,1000,pcs,4,4300,LOT-PMBAG021-INIT,2027-06-30,Pallet A1

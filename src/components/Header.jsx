@@ -1,7 +1,8 @@
 import { 
   Warehouse, Scale, Truck, FileText, CheckCircle2, 
   Wifi, WifiOff, Smartphone, Laptop, AlertOctagon, Send,
-  ShoppingCart, FileSpreadsheet, History, BarChart3
+  ShoppingCart, FileSpreadsheet, History, BarChart3,
+  Store, Lock
 } from 'lucide-react';
 
 export const ROLES = [
@@ -9,7 +10,8 @@ export const ROLES = [
   { id: "romeo", name: "Romeo B. Malusay", title: "Ingredient Batching Preparer", station: "Dry Room 2 & Batching Workbench" },
   { id: "mariejohn", name: "Mariejohn F. Tacuban", title: "Inventory & Purchasing Manager", station: "Admin & Reconciliation" },
   { id: "grace", name: "Grace P. Suico", title: "FSCO & QA Control Director", station: "QA Bench & Quarantine Control" },
-  { id: "angelina", name: "Angelina P. Sun", title: "Head of Administration / COA", station: "Executive Office" }
+  { id: "angelina", name: "Angelina P. Sun", title: "Head of Administration / COA", station: "Executive Office" },
+  { id: "zaphyr", name: "Zaphyr Zur T. Pomicpic", title: "Systems Director & Architect", station: "Executive & Systems Engineering" }
 ];
 
 export default function Header({ 
@@ -26,7 +28,8 @@ export default function Header({
   pendingBulkApprovalCount = 0,
   lowStockCount = 0,
   onQuickEod,
-  onOpenImportModal
+  onOpenImportModal,
+  onOpenLoginModal
 }) {
   const activeRoleObj = ROLES.find(r => r.name === currentRole) || ROLES[0];
 
@@ -107,9 +110,17 @@ export default function Header({
             )}
           </button>
 
-          {/* Role Switcher */}
-          <div className="flex items-center bg-[#240e32] border border-[#C8963E]/60 rounded px-2 py-1">
-            <span className="text-[10px] text-[#E5C585] font-bold uppercase mr-1.5 hidden md:inline">Role:</span>
+          {/* Role Switcher & Auth Modal Trigger */}
+          <div className="flex items-center gap-1.5 bg-[#240e32] border border-[#C8963E]/60 rounded px-2 py-1">
+            <button
+              onClick={onOpenLoginModal}
+              className="text-[#E5C585] hover:text-white p-1 rounded hover:bg-white/10 transition flex items-center gap-1 text-[11px] font-bold"
+              title="Authenticate Staff Role with Username & Password"
+            >
+              <Lock size={12} className="text-[#C8963E]" />
+              <span className="hidden sm:inline">Auth</span>
+            </button>
+            <span className="text-gray-500">|</span>
             <select
               value={currentRole}
               onChange={(e) => setCurrentRole(e.target.value)}
@@ -145,10 +156,11 @@ export default function Header({
         </div>
       </div>
 
-      {/* Navigation Tabs Bar (Exact 8 Tabs per Phase 4 Architecture) */}
+      {/* Navigation Tabs Bar */}
       <nav className="bg-[#240e32] px-2 flex overflow-x-auto gap-1 border-t border-[#5B2E7A]/40 scrollbar-none">
         {[
           { id: 'dashboard', label: '1. Live FEFO Inventory', icon: Warehouse, badge: lowStockCount > 0 ? `${lowStockCount} Low` : null, badgeColor: 'bg-[#D68910]' },
+          { id: 'portal', label: 'Outlet & Line Portal', icon: Store, badge: 'Requisitions', badgeColor: 'bg-[#1E7A3E]' },
           { id: 'signature', label: 'Signature Delicacies (Recharts)', icon: BarChart3, badge: 'Biscocho & Otap', badgeColor: 'bg-[#C8963E]' },
           { id: 'receiving', label: '2. Inbound Receiving', icon: Truck, roleHighlight: 'Jade Q. Dela Cruz' },
           { 
@@ -167,7 +179,7 @@ export default function Header({
             badgeColor: 'bg-[#C8963E]', 
             roleHighlight: 'Romeo B. Malusay' 
           },
-          { id: 'orderHistory', label: 'Order History', icon: History, badge: 'Mock Data', badgeColor: 'bg-[#5B2E7A]' },
+          { id: 'orderHistory', label: 'Unified Order History', icon: History, badge: 'Orders & Requisitions', badgeColor: 'bg-[#5B2E7A]' },
           { id: 'adjustments', label: '5. Adjustments & Quarantine', icon: AlertOctagon },
           { id: 'reports', label: '6. Reports & PO Generator', icon: ShoppingCart },
           { id: 'eod', label: '7. 23:45 EOD Report', icon: Send, badge: 'Daily 23:45', badgeColor: 'bg-[#1E7A3E]' },

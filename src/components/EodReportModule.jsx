@@ -161,13 +161,40 @@ export default function EodReportModule({
     });
   };
 
-  // Simulate Automated 23:45 Dispatch
-  const handleSimulateAutomatedDispatch = () => {
+  // Trigger Automated 23:45 Dispatch via Cloudflare Edge & GAS
+  const handleSimulateAutomatedDispatch = async () => {
     setDispatchedStatus(true);
+    const plainText = buildPlainTextReport();
+
+    // Dispatch to Cloudflare Worker /api/sync which stores in D1 and relays to Google Apps Script
+    try {
+      await fetch('/api/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          idempotencyKey: `EOD_${selectedDate}_${Date.now()}`,
+          eventType: 'AUTOMATED_EOD_2345_DISPATCH',
+          date: selectedDate,
+          recipients,
+          reportSummary: {
+            receivingCount: todaysReceiving.length,
+            totalReceivingValue,
+            withdrawalsCount: todaysWithdrawals.length,
+            requestedRecipesCount: todaysRequestedRecipes.length,
+            batchedCount: todaysBatchedAndReleased.length
+          },
+          reportText: plainText,
+          timestamp: new Date().toISOString()
+        })
+      });
+    } catch (e) {
+      console.warn("EOD edge sync fallback:", e);
+    }
+
     if (onRecordAudit) {
       onRecordAudit(
         "AUTOMATED_EOD_2345_DISPATCH", 
-        `Automated scheduled settlement broadcast successfully routed to ${recipients.join(', ')}`
+        `Automated scheduled settlement broadcast routed to ${recipients.join(', ')} via Cloudflare Edge / D1`
       );
     }
     setTimeout(() => setDispatchedStatus(false), 5000);

@@ -11,9 +11,12 @@ import AuditTrailModule from './components/AuditTrailModule';
 import OrderHistory from './components/OrderHistory';
 import SignatureProductsDashboard from './components/SignatureProductsDashboard';
 import InitialDataImportModal from './components/InitialDataImportModal';
+import LoginModal from './components/LoginModal';
+import OutletRequisitionPortal from './components/OutletRequisitionPortal';
 
 import { MASTER_MATERIALS, STORAGE_ROOMS } from './data/materialsData';
 import { MASTER_RECIPES, OUTLETS } from './data/recipesData';
+import { AUTH_USERS } from './data/authUsers';
 import { 
   INITIAL_RECEIVING_REPORTS, 
   INITIAL_WITHDRAWALS, 
@@ -59,8 +62,16 @@ export default function App() {
   const [quarantineList, setQuarantineList] = useState(() => getSaved('quarantine', INITIAL_QUARANTINE));
   const [auditLogs, setAuditLogs] = useState(() => getSaved('audit_logs', INITIAL_AUDIT_LOGS));
 
-  // Operational State
-  const [currentRole, setCurrentRole] = useState("Jade Q. Dela Cruz");
+  // Operational & Authentication State
+  const [authUser, setAuthUser] = useState(() => {
+    try {
+      const saved = localStorage.getItem('JJB_WMS_AUTH_USER');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return AUTH_USERS[0]; // Default: Jade Q. Dela Cruz
+  });
+  const [currentRole, setCurrentRole] = useState(() => authUser?.name || "Jade Q. Dela Cruz");
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isMobileMode, setIsMobileMode] = useState(false);
   const [isOffline, setIsOffline] = useState(false);
@@ -68,6 +79,31 @@ export default function App() {
   const [prefilledItem, setPrefilledItem] = useState(null);
   const [lastEodTriggerDate, setLastEodTriggerDate] = useState(null);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+
+  // Sync auth user to LocalStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('JJB_WMS_AUTH_USER', JSON.stringify(authUser));
+    } catch (e) {}
+  }, [authUser]);
+
+  // Keep authUser in sync when currentRole changes
+  const handleRoleChange = (newRoleName) => {
+    setCurrentRole(newRoleName);
+    const matched = AUTH_USERS.find(u => u.name === newRoleName);
+    if (matched) setAuthUser(matched);
+  };
+
+  const handleLoginSuccess = (user) => {
+    setAuthUser(user);
+    setCurrentRole(user.name);
+    setIsLoginModalOpen(false);
+    recordAudit(
+      "STAFF_LOGIN_AUTHENTICATED",
+      `${user.name} (${user.title}) successfully authenticated session at ${user.station}.`
+    );
+    showToast(`Welcome back, ${user.name}! Terminal authenticated.`);
+  };
 
   // Sync state to LocalStorage
   useEffect(() => { saveToStorage('inventory', inventory); }, [inventory]);
@@ -250,7 +286,99 @@ export default function App() {
       `Intake batch order ${newOrder.orderId} for ${newOrder.outletName}: ${newOrder.requestedQtyPcs} pcs of ${newOrder.recipeName}`
     );
 
+    if (!isOffline) {
+      fetch(WORKER_SYNC_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          idempotencyKey: `ORDER_${newOrder.orderId}_${Date.now()}`,
+          eventType: 'OUTLET_BATCH_ORDER',
+          orderId: newOrder.orderId,
+          recipeName: newOrder.recipeName,
+          outletName: newOrder.outletName,
+          requestedQtyPcs: newOrder.requestedQtyPcs,
+          timestamp: new Date().toISOString()
+        })
+      }).catch(() => {});
+    }
+
     showToast(`Order ${newOrder.orderId} queued for Romeo Malusay!`);
+  };
+
+  // WORKFLOW 3-PORTAL: Raw Material / Mess Hall Requisition from Portal
+  const handlePortalSubmitMaterialRequest = (portalReq) => {
+    const slipNo = portalReq.withdrawalNo || `WS-PORTAL-${Date.now().toString().slice(-6)}`;
+    const lineItems = (portalReq.items || []).map(row => {
+      const mat = inventory.find(m => m.code === row.itemCode) || {};
+      return {
+        materialCode: row.itemCode,
+        name: row.description || mat.name || row.itemCode,
+        qtyRequestedSec: row.requestedQtySec,
+        qtyIssuedSec: row.requestedQtySec, // Allocated
+        secondaryUom: row.secondaryUom || 'kg',
+        lotNumber: mat.lots && mat.lots.length > 0 ? mat.lots[0].lotNumber : 'DEFAULT-LOT',
+        storageRoom: mat.room || 'Dry Room 1',
+        estimatedCost: row.estimatedCost || 0,
+        remarks: `Portal req: ${portalReq.purpose || 'Operation'}`
+      };
+    });
+
+    const newWithdrawal = {
+      slipNo,
+      date: portalReq.withdrawalDate || new Date().toISOString().slice(0, 10),
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      requestingEntity: portalReq.requestingLine || 'Indangan Facility',
+      department: portalReq.purpose?.includes('Mess Hall') ? 'Indangan Facility Mess Hall (Staff Meals & Snacks)' : 'Production Floor',
+      purpose: portalReq.purpose || 'Material Requisition',
+      requestedBy: portalReq.requisitionedBy || 'Authorized Staff',
+      issuedBy: `${currentRole} (Warehouse Custodian)`,
+      receivedBy: portalReq.requisitionedBy || 'Floor Staff',
+      items: lineItems,
+      totalCost: portalReq.totalCost || 0,
+      status: "ISSUED & RECONCILED",
+      notes: portalReq.notes || ''
+    };
+
+    setWithdrawals(prev => [newWithdrawal, ...prev]);
+
+    // Deduct stock from inventory
+    setInventory(prevInv => {
+      return prevInv.map(mat => {
+        const item = (portalReq.items || []).find(it => it.itemCode === mat.code);
+        if (!item) return mat;
+        const deducted = item.requestedQtySec || 0;
+        const newBalance = Math.max(0, mat.currentBalance - deducted);
+        const { updatedLots } = deductFefoLots(mat.lots || [], deducted);
+        return {
+          ...mat,
+          currentBalance: newBalance,
+          lots: updatedLots
+        };
+      });
+    });
+
+    recordAudit(
+      "PORTAL_MATERIAL_REQUISITION",
+      `Authorized requisition ${slipNo} for ${newWithdrawal.requestingEntity} by ${newWithdrawal.requestedBy} (${newWithdrawal.purpose})`
+    );
+
+    if (!isOffline) {
+      fetch(WORKER_SYNC_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          idempotencyKey: `REQ_${slipNo}_${Date.now()}`,
+          eventType: 'MATERIAL_WITHDRAWAL',
+          slipNo,
+          requestingEntity: newWithdrawal.requestingEntity,
+          requestedBy: newWithdrawal.requestedBy,
+          purpose: newWithdrawal.purpose,
+          timestamp: new Date().toISOString()
+        })
+      }).catch(() => {});
+    }
+
+    showToast(`Requisition ${slipNo} authorized & inventory deducted!`);
   };
 
   // WORKFLOW 3B: Romeo Requests Bulk Raw Materials from Jade (Step 1 of Handshake)
@@ -621,7 +749,7 @@ export default function App() {
       {/* Main Corporate Header & Tab Navigation */}
       <Header
         currentRole={currentRole}
-        setCurrentRole={setCurrentRole}
+        setCurrentRole={handleRoleChange}
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         isMobileMode={isMobileMode}
@@ -634,6 +762,7 @@ export default function App() {
         lowStockCount={lowStockCount}
         onQuickEod={() => setActiveTab('eod')}
         onOpenImportModal={() => setIsImportModalOpen(true)}
+        onOpenLoginModal={() => setIsLoginModalOpen(true)}
       />
 
       {/* Main View Container */}
@@ -646,6 +775,17 @@ export default function App() {
             onQuickAction={handleQuickAction}
             storageRooms={STORAGE_ROOMS}
             onOpenImportModal={() => setIsImportModalOpen(true)}
+          />
+        )}
+
+        {/* TAB: OUTLET & PRODUCTION LINE REQUISITION PORTAL */}
+        {activeTab === 'portal' && (
+          <OutletRequisitionPortal
+            inventory={inventory}
+            recipes={MASTER_RECIPES}
+            onSubmitBatchOrder={handleSaveBatchOrder}
+            onSubmitMaterialRequest={handlePortalSubmitMaterialRequest}
+            currentRole={currentRole}
           />
         )}
 
@@ -748,13 +888,24 @@ export default function App() {
           />
         )}
 
-        {/* TAB: OUTLET & WHOLESALE ORDER HISTORY (MOCK DATA SERVICE) */}
+        {/* TAB: UNIFIED REQUISITIONS & ORDER HISTORY */}
         {activeTab === 'orderHistory' && (
           <OrderHistory
             currentRole={currentRole}
+            batchOrders={batchOrders}
+            withdrawals={withdrawals}
+            onUpdateOrderStatus={handleUpdateOrderStatus}
           />
         )}
       </main>
+
+      {/* Staff Authentication & Role Security Modal */}
+      <LoginModal
+        isOpen={isLoginModalOpen}
+        onClose={() => setIsLoginModalOpen(false)}
+        onLoginSuccess={handleLoginSuccess}
+        currentUsername={authUser?.username || ''}
+      />
 
       {/* Fresh Data & Physical Count CSV Baseline Import Modal */}
       <InitialDataImportModal
