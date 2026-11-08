@@ -15,7 +15,7 @@ import LoginModal from './components/LoginModal';
 import OutletRequisitionPortal from './components/OutletRequisitionPortal';
 
 import { MASTER_MATERIALS, STORAGE_ROOMS } from './data/materialsData';
-import { MASTER_RECIPES, OUTLETS } from './data/recipesData';
+import { MASTER_RECIPES, OUTLETS, getAllMasterRecipes } from './data/recipesData';
 import { AUTH_USERS } from './data/authUsers';
 import { 
   INITIAL_RECEIVING_REPORTS, 
@@ -86,6 +86,43 @@ export default function App() {
   const [prefilledItem, setPrefilledItem] = useState(null);
   const [lastEodTriggerDate, setLastEodTriggerDate] = useState(null);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [recipes, setRecipes] = useState(() => getAllMasterRecipes());
+
+  // Specialty Recipe Approval Handler
+  const handleApproveSpecialtyRecipe = (proposalId) => {
+    try {
+      const raw = localStorage.getItem('JJB_WMS_LIVE_V4_6_SPECIALTY_RECIPES');
+      let proposals = raw ? JSON.parse(raw) : [];
+      const proposal = proposals.find(p => p.proposalId === proposalId);
+      if (proposal) {
+        proposal.status = 'APPROVED';
+        proposal.approvedAt = new Date().toISOString();
+        proposal.approvedBy = `${currentRole} (Approved for Master Register)`;
+        localStorage.setItem('JJB_WMS_LIVE_V4_6_SPECIALTY_RECIPES', JSON.stringify(proposals));
+        
+        const updatedRecipes = getAllMasterRecipes();
+        setRecipes(updatedRecipes);
+
+        recordAudit(
+          "SPECIALTY_RECIPE_APPROVED",
+          `Romeo Malusay / ${currentRole} approved specialty formulation "${proposal.name}" into Master Formulations register.`
+        );
+        showToast(`Specialty recipe "${proposal.title}" approved and active in Master Formulations!`);
+
+        fetch('/api/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            eventType: 'SPECIALTY_RECIPE_APPROVED',
+            idempotencyKey: `APPV-${proposal.proposalId}-${Date.now()}`,
+            payload: proposal
+          })
+        }).catch(err => console.warn('Background sync error:', err));
+      }
+    } catch (err) {
+      console.error('Error approving specialty recipe:', err);
+    }
+  };
 
   // Sync auth user to LocalStorage
   useEffect(() => {
@@ -430,7 +467,7 @@ export default function App() {
     const order = batchOrders.find(o => o.orderId === orderId);
     if (!order) return;
 
-    const recipe = MASTER_RECIPES.find(r => r.sku === order.recipeSku);
+    const recipe = recipes.find(r => r.sku === order.recipeSku) || MASTER_RECIPES.find(r => r.sku === order.recipeSku);
     if (!recipe) return;
 
     const requiredIngredients = calculateRecipeIngredients(recipe, order.batchMultiplier);
@@ -817,9 +854,10 @@ export default function App() {
         {activeTab === 'portal' && (
           <OutletRequisitionPortal
             inventory={inventory}
-            recipes={MASTER_RECIPES}
+            recipes={recipes}
             onSubmitBatchOrder={handleSaveBatchOrder}
             onSubmitMaterialRequest={handlePortalSubmitMaterialRequest}
+            onSpecialtyRecipeSubmitted={() => setRecipes(getAllMasterRecipes())}
             currentRole={currentRole}
           />
         )}
@@ -858,7 +896,8 @@ export default function App() {
             onUpdateOrderStatus={handleUpdateOrderStatus}
             onBulkReleaseOrders={handleBulkReleaseOrders}
             onRequestBulkMaterials={handleRequestBulkMaterials}
-            recipes={MASTER_RECIPES}
+            onApproveSpecialtyRecipe={handleApproveSpecialtyRecipe}
+            recipes={recipes}
             outlets={OUTLETS}
             inventory={inventory}
             currentRole={currentRole}

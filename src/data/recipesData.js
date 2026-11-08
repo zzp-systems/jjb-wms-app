@@ -5,7 +5,7 @@
 export const MASTER_RECIPES = [
   {
     "sku": "BRD-PAN-3KG",
-    "name": "Classic Davao Pandesal (3-Kilo Scaled Kit)",
+    "name": "Classic Pandesal – 3.0 kg 1st Class Flour Basis | Yield: ~85 pieces (35 g raw dough each)",
     "category": "Breads / Daily Outlets",
     "targetFacility": "Pan de Verde & Laurice Delicacies",
     "standardBatchFlourKg": 3,
@@ -102,11 +102,15 @@ export const MASTER_RECIPES = [
         "isWater": false,
         "isAsNeeded": true
       }
-    ]
+    ],
+    "unitProductionCost": 1.45,
+    "wholesaleTransferPrice": 2.2,
+    "srp": 3,
+    "grossMarginPct": 51.7
   },
   {
     "sku": "BIS-001",
-    "name": "Biscocho Toasted Bread Delicacy",
+    "name": "Biscocho Toasted Bread Delicacy – 25.0 kg 1st Class Hard Wheat Flour Basis | Yield: ~1,000 finished toasted pieces (83 packs)",
     "category": "Pasalubong / Twice-Baked Delicacy",
     "targetFacility": "Indangan Biscocho Hall & Outlets",
     "standardBatchFlourKg": 25,
@@ -203,11 +207,15 @@ export const MASTER_RECIPES = [
         "isWater": false,
         "isAsNeeded": false
       }
-    ]
+    ],
+    "unitProductionCost": 22.5,
+    "wholesaleTransferPrice": 35,
+    "srp": 45,
+    "grossMarginPct": 50
   },
   {
     "sku": "OTP-001",
-    "name": "Otap Layered Laminated Puff Pastry",
+    "name": "Otap Layered Puff Pastry – 25.0 kg Flour Blend (18.75 kg 1st Class + 6.25 kg 3rd Class) | Yield: ~1,200 finished oval pieces (100 dozen)",
     "category": "Laminated Flaky Dry Delicacy",
     "targetFacility": "Indangan Otap Hall & Outlets",
     "standardBatchFlourKg": 25,
@@ -288,11 +296,15 @@ export const MASTER_RECIPES = [
         "isWater": false,
         "isAsNeeded": true
       }
-    ]
+    ],
+    "unitProductionCost": 21.6,
+    "wholesaleTransferPrice": 36,
+    "srp": 48,
+    "grossMarginPct": 55
   },
   {
     "sku": "BRD-PAN-6KG",
-    "name": "Classic Davao Pandesal (6-Kilo Commercial Kit)",
+    "name": "Classic Pandesal – 6.0 kg 1st Class Flour Basis | Yield: ~170 pieces (35 g raw dough each)",
     "category": "Breads / Daily Outlets",
     "targetFacility": "Pan de Verde & Laurice Delicacies",
     "standardBatchFlourKg": 6,
@@ -389,11 +401,15 @@ export const MASTER_RECIPES = [
         "isWater": false,
         "isAsNeeded": true
       }
-    ]
+    ],
+    "unitProductionCost": 1.45,
+    "wholesaleTransferPrice": 2.2,
+    "srp": 3,
+    "grossMarginPct": 51.7
   },
   {
     "sku": "BRD-STR-001",
-    "name": "Star Bread (Pinagong / Estrelled Bread)",
+    "name": "Star Bread – 6.0 kg Flour Blend (4.2 kg 1st Class + 1.8 kg 3rd Class) | Yield: ~100 pieces (80 g each)",
     "category": "Dense-Crumb Sweet Artisan Bread",
     "targetFacility": "Pan de Verde & Laurice Delicacies",
     "standardBatchFlourKg": 6,
@@ -498,11 +514,15 @@ export const MASTER_RECIPES = [
         "isWater": false,
         "isAsNeeded": false
       }
-    ]
+    ],
+    "unitProductionCost": 3.85,
+    "wholesaleTransferPrice": 6,
+    "srp": 8,
+    "grossMarginPct": 51.9
   },
   {
     "sku": "BRD-SPN-001",
-    "name": "Spanish Bread (Filled Bread Roll)",
+    "name": "Spanish Bread – 4.0 kg Flour Blend (3.0 kg 1st Class + 1.0 kg 3rd Class) | Yield: ~130 pieces",
     "category": "Soft Filled Sweet Bread Roll",
     "targetFacility": "Pan de Verde & Laurice Delicacies",
     "standardBatchFlourKg": 4,
@@ -615,11 +635,15 @@ export const MASTER_RECIPES = [
         "isWater": false,
         "isAsNeeded": true
       }
-    ]
+    ],
+    "unitProductionCost": 3.15,
+    "wholesaleTransferPrice": 5.2,
+    "srp": 7,
+    "grossMarginPct": 55
   },
   {
     "sku": "PST-ENS-001",
-    "name": "Special Butter Ensaymada",
+    "name": "Special Butter Ensaymada – 6.0 kg 1st Class Flour Basis | Yield: ~120 coiled units",
     "category": "Brioche / Rich Pastry",
     "targetFacility": "Pan de Verde & Laurice Delicacies",
     "standardBatchFlourKg": 6,
@@ -740,11 +764,15 @@ export const MASTER_RECIPES = [
         "isWater": false,
         "isAsNeeded": false
       }
-    ]
+    ],
+    "unitProductionCost": 6.5,
+    "wholesaleTransferPrice": 11,
+    "srp": 15,
+    "grossMarginPct": 56.7
   },
   {
     "sku": "BRD-BUN-001",
-    "name": "Commercial Table Buns (Burger / Dinner Buns)",
+    "name": "Commercial Table Buns (Burger / Dinner) – 12.0 kg 1st Class Flour Basis | Yield: ~340 pieces (50 g each)",
     "category": "Soft Leavened Table Buns",
     "targetFacility": "Pan de Verde & Laurice Delicacies",
     "standardBatchFlourKg": 12,
@@ -833,11 +861,15 @@ export const MASTER_RECIPES = [
         "isWater": false,
         "isAsNeeded": true
       }
-    ]
+    ],
+    "unitProductionCost": 2.1,
+    "wholesaleTransferPrice": 3.75,
+    "srp": 5,
+    "grossMarginPct": 58
   },
   {
     "sku": "BRD-PTK-001",
-    "name": "Putok Bread (Cracking Crown Roll)",
+    "name": "Putok Bread (Cracking Crown Roll) – 3.0 kg Flour Blend (2.1 kg 1st Class + 0.9 kg 3rd Class) | Yield: ~70 pieces (60 g each)",
     "category": "Stiff-Dough Crown-Cut Hard Sweet Roll",
     "targetFacility": "Pan de Verde & Laurice Delicacies",
     "standardBatchFlourKg": 3,
@@ -942,11 +974,15 @@ export const MASTER_RECIPES = [
         "isWater": false,
         "isAsNeeded": false
       }
-    ]
+    ],
+    "unitProductionCost": 2.6,
+    "wholesaleTransferPrice": 4.5,
+    "srp": 6,
+    "grossMarginPct": 56.7
   },
   {
     "sku": "FRI-SHK-001",
-    "name": "Shakoy Bread (Twisted Fried Sugar Doughnut)",
+    "name": "Shakoy Bread (Twisted Fried Doughnut) – 5.0 kg Flour Blend (2.5 kg APF + 2.5 kg 3rd Class) | Yield: ~140 pieces (50 g each)",
     "category": "Twisted Deep-Fried Yeast Doughnut",
     "targetFacility": "Pan de Verde & Laurice Delicacies",
     "standardBatchFlourKg": 5,
@@ -1035,11 +1071,15 @@ export const MASTER_RECIPES = [
         "isWater": false,
         "isAsNeeded": false
       }
-    ]
+    ],
+    "unitProductionCost": 2.4,
+    "wholesaleTransferPrice": 4.5,
+    "srp": 6,
+    "grossMarginPct": 60
   },
   {
     "sku": "FRI-BNG-001",
-    "name": "Binangkal (Fried Sesame Cookie Ball)",
+    "name": "Binangkal – 3.0 kg Flour Blend (1.5 kg 1st Class + 1.5 kg 3rd Class) | Yield: ~260 pieces (15 g each)",
     "category": "Deep-Fried Sesame Cookie Delicacy",
     "targetFacility": "Pan de Verde & Laurice Delicacies",
     "standardBatchFlourKg": 3,
@@ -1128,11 +1168,15 @@ export const MASTER_RECIPES = [
         "isWater": false,
         "isAsNeeded": false
       }
-    ]
+    ],
+    "unitProductionCost": 1.15,
+    "wholesaleTransferPrice": 2.1,
+    "srp": 3,
+    "grossMarginPct": 61.7
   },
   {
     "sku": "FRI-DGH-001",
-    "name": "Fried Yeast Doughnut",
+    "name": "Fried Yeast Doughnut – 5.0 kg All-Purpose Flour Basis | Yield: ~150 ring units",
     "category": "Fried Sweet Yeast Ring",
     "targetFacility": "Pan de Verde & Laurice Delicacies",
     "standardBatchFlourKg": 5,
@@ -1229,11 +1273,15 @@ export const MASTER_RECIPES = [
         "isWater": false,
         "isAsNeeded": true
       }
-    ]
+    ],
+    "unitProductionCost": 2.35,
+    "wholesaleTransferPrice": 4.5,
+    "srp": 6,
+    "grossMarginPct": 60.8
   },
   {
     "sku": "PST-HOP-001",
-    "name": "Traditional Hopia / Pig-Pie",
+    "name": "Traditional Hopia / Pig-Pie – 2.0 kg Flour Blend (1.0 kg 1st Class + 1.0 kg 3rd Class) | Yield: ~120 pieces",
     "category": "Traditional Flaky Stuffed Pastry",
     "targetFacility": "Pan de Verde & Laurice Delicacies",
     "standardBatchFlourKg": 2,
@@ -1314,11 +1362,15 @@ export const MASTER_RECIPES = [
         "isWater": false,
         "isAsNeeded": false
       }
-    ]
+    ],
+    "unitProductionCost": 4.2,
+    "wholesaleTransferPrice": 7.5,
+    "srp": 10,
+    "grossMarginPct": 58
   },
   {
     "sku": "PST-HPN-001",
-    "name": "Hopia Panet (Thin-Crusted Mung Bean Hopia)",
+    "name": "Hopia Panet (Mung Bean / Kundol) – 1.0 kg Flour Blend (0.75 kg 3rd Class + 0.25 kg 1st Class) | Yield: ~80 pieces",
     "category": "Thin-Crusted Flaky Hopia Variant",
     "targetFacility": "Pan de Verde & Laurice Delicacies",
     "standardBatchFlourKg": 1,
@@ -1375,11 +1427,15 @@ export const MASTER_RECIPES = [
         "isWater": false,
         "isAsNeeded": false
       }
-    ]
+    ],
+    "unitProductionCost": 3.9,
+    "wholesaleTransferPrice": 7.5,
+    "srp": 10,
+    "grossMarginPct": 61
   },
   {
     "sku": "PST-HMN-001",
-    "name": "Half Moon Pastry",
+    "name": "Half Moon Pastry – 3.0 kg 3rd Class Flour Basis | Yield: ~110 crescent-shaped pieces",
     "category": "Soft Crescent Cake / Short-Crust Pastry",
     "targetFacility": "Pan de Verde & Laurice Delicacies",
     "standardBatchFlourKg": 3,
@@ -1468,11 +1524,15 @@ export const MASTER_RECIPES = [
         "isWater": false,
         "isAsNeeded": false
       }
-    ]
+    ],
+    "unitProductionCost": 4.1,
+    "wholesaleTransferPrice": 7.5,
+    "srp": 10,
+    "grossMarginPct": 59
   },
   {
     "sku": "PST-CSB-001",
-    "name": "Rich Cheese Bar",
+    "name": "Rich Cheese Bar – 2.0 kg All-Purpose Flour Basis | Yield: ~100 rectangular bar pieces",
     "category": "Rich Baked Dessert Bar",
     "targetFacility": "Pan de Verde & Laurice Delicacies",
     "standardBatchFlourKg": 2,
@@ -1553,11 +1613,15 @@ export const MASTER_RECIPES = [
         "isWater": false,
         "isAsNeeded": false
       }
-    ]
+    ],
+    "unitProductionCost": 4.5,
+    "wholesaleTransferPrice": 7.5,
+    "srp": 10,
+    "grossMarginPct": 55
   },
   {
     "sku": "CKI-CRK-001",
-    "name": "Kringcles (Chocolate Crinkle Cookies)",
+    "name": "Crinkle Cookies – 2.5 kg 3rd Class Flour | Yield: ~220 cookies",
     "category": "Rich Fudge Crinkle Cookie",
     "targetFacility": "Pan de Verde & Laurice Delicacies",
     "standardBatchFlourKg": 2.5,
@@ -1654,11 +1718,15 @@ export const MASTER_RECIPES = [
         "isWater": false,
         "isAsNeeded": false
       }
-    ]
+    ],
+    "unitProductionCost": 1.95,
+    "wholesaleTransferPrice": 3.6,
+    "srp": 5,
+    "grossMarginPct": 61
   },
   {
     "sku": "BRD-PTS-001",
-    "name": "Patatas Bread",
+    "name": "Patatas Bread – 3.0 kg 3rd Class Flour Basis | Yield: ~90 pieces",
     "category": "Molded Potato-Shaped Soft Bread",
     "targetFacility": "Pan de Verde & Laurice Delicacies",
     "standardBatchFlourKg": 3,
@@ -1731,11 +1799,15 @@ export const MASTER_RECIPES = [
         "isWater": false,
         "isAsNeeded": false
       }
-    ]
+    ],
+    "unitProductionCost": 2.95,
+    "wholesaleTransferPrice": 5.2,
+    "srp": 7,
+    "grossMarginPct": 57.9
   },
   {
     "sku": "BRD-SWT-001",
-    "name": "Sweetheart Bread",
+    "name": "Sweetheart Bread – 3.0 kg Flour Blend (2.0 kg 1st Class + 1.0 kg 3rd Class) | Yield: ~85 heart-shaped pieces",
     "category": "Shaped Heart Bread with Red Center",
     "targetFacility": "Pan de Verde & Laurice Delicacies",
     "standardBatchFlourKg": 3,
@@ -1832,11 +1904,15 @@ export const MASTER_RECIPES = [
         "isWater": false,
         "isAsNeeded": false
       }
-    ]
+    ],
+    "unitProductionCost": 3.4,
+    "wholesaleTransferPrice": 6,
+    "srp": 8,
+    "grossMarginPct": 57.5
   },
   {
     "sku": "DEL-BGB-001",
-    "name": "Bagong Bayan Reconstituted Delicacy",
+    "name": "Bagong Bayan Reconstituted Delicacy – 12.0 kg Starch Base (6.0 kg 3rd Class Flour + 6.0 kg Breadcrumbs) | Yield: ~350 pieces",
     "category": "Reconstituted Toasted Bakery Delicacy",
     "targetFacility": "Pan de Verde & Laurice Delicacies",
     "standardBatchFlourKg": 12,
@@ -1941,11 +2017,15 @@ export const MASTER_RECIPES = [
         "isWater": false,
         "isAsNeeded": false
       }
-    ]
+    ],
+    "unitProductionCost": 2.8,
+    "wholesaleTransferPrice": 5.8,
+    "srp": 8,
+    "grossMarginPct": 65
   },
   {
     "sku": "DEL-BGP-001",
-    "name": "Bagong Bayan Panit (Red Outer Shell Skin)",
+    "name": "Bagong Bayan Panit (Red Shell) – 3.0 kg 1st Class Flour Basis | Yield: Wraps ~350 pieces",
     "category": "Thin Crust Casing for Bagong Bayan",
     "targetFacility": "Pan de Verde & Laurice Delicacies",
     "standardBatchFlourKg": 3,
@@ -2010,11 +2090,15 @@ export const MASTER_RECIPES = [
         "isWater": true,
         "isAsNeeded": false
       }
-    ]
+    ],
+    "unitProductionCost": 0.65,
+    "wholesaleTransferPrice": 1,
+    "srp": 1.5,
+    "grossMarginPct": 56.7
   },
   {
     "sku": "DEL-DBC-001",
-    "name": "Double Body Coconut Delicacy",
+    "name": "Double Body Coconut Delicacy – 3.0 kg 3rd Class Flour Basis | Yield: ~100 paired twin units",
     "category": "Layered Coconut Syrup Delicacy",
     "targetFacility": "Pan de Verde & Laurice Delicacies",
     "standardBatchFlourKg": 3,
@@ -2111,11 +2195,15 @@ export const MASTER_RECIPES = [
         "isWater": false,
         "isAsNeeded": true
       }
-    ]
+    ],
+    "unitProductionCost": 3.1,
+    "wholesaleTransferPrice": 5.8,
+    "srp": 8,
+    "grossMarginPct": 61.3
   },
   {
     "sku": "DEL-DBU-001",
-    "name": "Double Body Ube Delicacy",
+    "name": "Double Body Ube Delicacy – 3.0 kg 3rd Class Flour Basis | Yield: ~100 paired purple twin units",
     "category": "Ube-Flavored Layered Coconut Delicacy",
     "targetFacility": "Pan de Verde & Laurice Delicacies",
     "standardBatchFlourKg": 3,
@@ -2212,11 +2300,15 @@ export const MASTER_RECIPES = [
         "isWater": false,
         "isAsNeeded": true
       }
-    ]
+    ],
+    "unitProductionCost": 3.4,
+    "wholesaleTransferPrice": 6.5,
+    "srp": 9,
+    "grossMarginPct": 62.2
   },
   {
     "sku": "DEL-PUD-001",
-    "name": "Reconstituted Bakery Pudding",
+    "name": "Reconstituted Bakery Pudding – 15.0 kg Breadcrumb Base | Yield: ~180 square portions",
     "category": "Reconstituted Baked Sweet Custard",
     "targetFacility": "Pan de Verde & Laurice Delicacies",
     "standardBatchFlourKg": 15,
@@ -2289,11 +2381,15 @@ export const MASTER_RECIPES = [
         "isWater": false,
         "isAsNeeded": false
       }
-    ]
+    ],
+    "unitProductionCost": 4.8,
+    "wholesaleTransferPrice": 10.5,
+    "srp": 15,
+    "grossMarginPct": 68
   },
   {
     "sku": "STM-SPO-001",
-    "name": "Siopao Steamed Bun Dough",
+    "name": "Siopao Steamed Bun Dough – 1.5 kg Starch Base (1.0 kg APF + 0.5 kg Cornstarch) | Yield: ~35 steamed bun units",
     "category": "Steamed Leavened Bao Dough",
     "targetFacility": "Pan de Verde & Laurice Delicacies",
     "standardBatchFlourKg": 1.5,
@@ -2366,11 +2462,15 @@ export const MASTER_RECIPES = [
         "isWater": false,
         "isAsNeeded": false
       }
-    ]
+    ],
+    "unitProductionCost": 8.5,
+    "wholesaleTransferPrice": 14.5,
+    "srp": 20,
+    "grossMarginPct": 57.5
   },
   {
     "sku": "DES-LCH-001",
-    "name": "Classic Leche Flan",
+    "name": "Classic Leche Flan – 10 Fresh Eggs Basis | Yield: 4 Oval Llanera Molds",
     "category": "Traditional Steamed Custard Dessert",
     "targetFacility": "Pan de Verde & Laurice Delicacies",
     "standardBatchFlourKg": 0,
@@ -2427,11 +2527,15 @@ export const MASTER_RECIPES = [
         "isWater": false,
         "isAsNeeded": false
       }
-    ]
+    ],
+    "unitProductionCost": 38,
+    "wholesaleTransferPrice": 65,
+    "srp": 90,
+    "grossMarginPct": 57.8
   },
   {
     "sku": "BRD-PAN-001",
-    "name": "Classic Davao Pandesal (Half-Sack 12.5kg)",
+    "name": "Classic Pandesal – 12.5 kg Flour Blend (8.75 kg APF + 3.75 kg 3rd Class) | Yield: ~450 pieces (35 g raw dough each)",
     "category": "Breads / Daily Outlets",
     "targetFacility": "Pan de Verde & Laurice Delicacies",
     "standardBatchFlourKg": 12.5,
@@ -2504,11 +2608,15 @@ export const MASTER_RECIPES = [
         "isWater": false,
         "isAsNeeded": false
       }
-    ]
+    ],
+    "unitProductionCost": 1.45,
+    "wholesaleTransferPrice": 2.2,
+    "srp": 3,
+    "grossMarginPct": 51.7
   },
   {
     "sku": "BRD-UBE-001",
-    "name": "Special Ube Cheese Pandesal",
+    "name": "Special Ube Cheese Pandesal – 10.0 kg All-Purpose Flour Basis | Yield: ~300 pieces",
     "category": "Signature Outlet Pastry",
     "targetFacility": "Pan de Verde & Laurice Delicacies",
     "standardBatchFlourKg": 10,
@@ -2573,11 +2681,15 @@ export const MASTER_RECIPES = [
         "isWater": false,
         "isAsNeeded": false
       }
-    ]
+    ],
+    "unitProductionCost": 4.2,
+    "wholesaleTransferPrice": 7,
+    "srp": 10,
+    "grossMarginPct": 58
   },
   {
     "sku": "BRD-MON-001",
-    "name": "Classic Monay & Sweet Loaf",
+    "name": "Classic Monay & Sweet Loaf – 12.5 kg All-Purpose Flour Basis | Yield: ~250 pieces",
     "category": "Heavy Loaf Breads",
     "targetFacility": "Pan de Verde & Laurice Delicacies",
     "standardBatchFlourKg": 12.5,
@@ -2642,11 +2754,15 @@ export const MASTER_RECIPES = [
         "isWater": false,
         "isAsNeeded": false
       }
-    ]
+    ],
+    "unitProductionCost": 4.5,
+    "wholesaleTransferPrice": 7.5,
+    "srp": 10,
+    "grossMarginPct": 55
   },
   {
     "sku": "SUB-GLZ-001",
-    "name": "Biscocho Buttermilk Sweet Glaze (Banya Sub-Line)",
+    "name": "Biscocho Buttermilk Sweet Glaze – 10.0 kg Sugar Sub-Assembly | Yield: Glazes ~1,500 slices",
     "category": "Glaze / Sub-Assembly",
     "targetFacility": "Indangan Biscocho Hall",
     "standardBatchFlourKg": 0,
@@ -2695,7 +2811,11 @@ export const MASTER_RECIPES = [
         "isWater": false,
         "isAsNeeded": false
       }
-    ]
+    ],
+    "unitProductionCost": 120,
+    "wholesaleTransferPrice": 180,
+    "srp": 220,
+    "grossMarginPct": 45.5
   }
 ];
 
@@ -2737,3 +2857,46 @@ export const OUTLETS = [
     "driver": "Internal Floor Transfer"
   }
 ];
+
+export const SPECIALTY_RECIPES_STORAGE_KEY = 'JJB_WMS_LIVE_V4_6_SPECIALTY_RECIPES';
+
+/**
+ * Returns all active master recipes, dynamically incorporating any approved specialty recipes
+ */
+export function getAllMasterRecipes() {
+  if (typeof window === "undefined" || !window.localStorage) {
+    return MASTER_RECIPES;
+  }
+  try {
+    const raw = window.localStorage.getItem(SPECIALTY_RECIPES_STORAGE_KEY);
+    if (!raw) return MASTER_RECIPES;
+    const proposals = JSON.parse(raw);
+    const approved = (proposals || [])
+      .filter(p => p.status === "APPROVED")
+      .map(p => ({
+        sku: p.sku,
+        name: p.name,
+        category: p.category || "Signature Pastry / Specialty",
+        targetFacility: p.targetFacility || "Plant-Wide & Outlets",
+        standardBatchFlourKg: p.standardBatchFlourKg || 3,
+        unitPieceYield: p.unitPieceYield || 100,
+        doughExitTempTarget: p.doughExitTempTarget || "26°C – 28°C",
+        ccp1LethalityTarget: p.ccp1LethalityTarget || "> 95°C",
+        waterActivityLimit: p.waterActivityLimit || "Moist Crumb",
+        unitProductionCost: p.unitProductionCost || 2.5,
+        wholesaleTransferPrice: p.wholesaleTransferPrice || 4.0,
+        srp: p.srp || 6.0,
+        grossMarginPct: p.grossMarginPct || 50.0,
+        ingredients: p.ingredients || [],
+        isCustomSpecialty: true
+      }));
+
+    // Avoid duplicates if already present
+    const existingSkus = new Set(MASTER_RECIPES.map(r => r.sku));
+    const uniqueApproved = approved.filter(a => !existingSkus.has(a.sku));
+    return [...MASTER_RECIPES, ...uniqueApproved];
+  } catch (err) {
+    console.error("Error reading approved specialty recipes:", err);
+    return MASTER_RECIPES;
+  }
+}

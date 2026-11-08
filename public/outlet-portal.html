@@ -55,7 +55,7 @@
     </div>
 
     <!-- Mode Selector Tabs -->
-    <div class="bg-white p-1.5 rounded-2xl border border-[#E2D1B8] shadow-sm flex gap-2">
+    <div class="bg-white p-1.5 rounded-2xl border border-[#E2D1B8] shadow-sm flex flex-col md:flex-row gap-2">
       <button
         id="tabBtnRecipe"
         type="button"
@@ -72,6 +72,15 @@
       >
         <span>2. Request Raw Materials &amp; Packaging (`Form-WAR-001`)</span>
         <span class="text-[10px] bg-[#1E7A3E] text-white px-1.5 py-0.2 rounded font-bold">Mess Hall &amp; Floor</span>
+      </button>
+      <button
+        id="tabBtnSpecialty"
+        type="button"
+        onclick="switchTab('specialty')"
+        class="flex-1 py-2.5 px-4 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 bg-[#FAF6EE] text-gray-700 hover:bg-gray-100"
+      >
+        <span>3. Propose Specialty Recipe (`Form-RND-001`)</span>
+        <span class="text-[10px] bg-[#B87333] text-white px-1.5 py-0.2 rounded font-bold">R&amp;D New</span>
       </button>
     </div>
 
@@ -122,14 +131,36 @@
           <div class="md:col-span-2">
             <label class="block font-bold text-gray-700 mb-1">Standardized Master Recipe Formulation *</label>
             <select id="recipeSelect" class="w-full p-2.5 border border-gray-300 rounded-xl bg-white font-medium focus:ring-2 focus:ring-[#C8963E]" required>
-              <option value="BRD-PAN-3KG|Classic Davao Pandesal (3-Kilo Scaled Kit)|85">BRD-PAN-3KG: Classic Davao Pandesal (3-Kilo Scaled Kit - 85 pcs yield)</option>
-              <option value="BRD-PAN-6KG|Classic Davao Pandesal (6-Kilo Scaled Kit)|170">BRD-PAN-6KG: Classic Davao Pandesal (6-Kilo Scaled Kit - 170 pcs yield)</option>
-              <option value="BRD-PAN-001|Classic Davao Pandesal (Half-Sack 12.5kg)|450">BRD-PAN-001: Classic Davao Pandesal (Half-Sack 12.5kg - 450 pcs yield)</option>
-              <option value="BRD-UBE-001|Special Ube Cheese Pandesal|300">BRD-UBE-001: Special Ube Cheese Pandesal (300 pcs yield)</option>
-              <option value="PST-ENS-001|Special Butter Ensaymada|200">PST-ENS-001: Special Butter Ensaymada (200 pcs yield)</option>
-              <option value="BRD-MON-001|Classic Monay & Sweet Loaf|250">BRD-MON-001: Classic Monay &amp; Sweet Loaf (250 pcs yield)</option>
-              <option value="BIS-001|Biscocho Toasted Bread Delicacy|1000">BIS-001: Biscocho Toasted Bread Delicacy (1,000 pcs yield)</option>
-              <option value="OTP-001|Otap Layered Puff Pastry|1200">OTP-001: Otap Layered Puff Pastry (1,200 pcs yield)</option>
+              <option value="BRD-PAN-6KG|Classic Pandesal – 6.0 kg 1st Class Flour Basis | Yield: ~170 pieces (35 g raw dough each)|170">BRD-PAN-6KG: Classic Pandesal – 6.0 kg 1st Class Flour Basis | Yield: ~170 pieces (35 g raw dough each)</option>
+              <option value="BRD-PAN-3KG|Classic Pandesal – 3.0 kg 1st Class Flour Basis | Yield: ~85 pieces (35 g raw dough each)|85">BRD-PAN-3KG: Classic Pandesal – 3.0 kg 1st Class Flour Basis | Yield: ~85 pieces (35 g raw dough each)</option>
+              <option value="BRD-PAN-001|Classic Pandesal – 12.5 kg Flour Blend (8.75 kg APF + 3.75 kg 3rd Class) | Yield: ~450 pieces (35 g raw dough each)|450">BRD-PAN-001: Classic Pandesal – 12.5 kg Flour Blend (8.75 kg APF + 3.75 kg 3rd Class) | Yield: ~450 pieces (35 g raw dough each)</option>
+              <option value="BRD-STR-001|Star Bread – 6.0 kg Flour Blend (4.2 kg 1st Class + 1.8 kg 3rd Class) | Yield: ~100 pieces (80 g each)|100">BRD-STR-001: Star Bread – 6.0 kg Flour Blend (4.2 kg 1st Class + 1.8 kg 3rd Class) | Yield: ~100 pieces (80 g each)</option>
+              <option value="BRD-SPN-001|Spanish Bread – 4.0 kg Flour Blend (3.0 kg 1st Class + 1.0 kg 3rd Class) | Yield: ~130 pieces|130">BRD-SPN-001: Spanish Bread – 4.0 kg Flour Blend (3.0 kg 1st Class + 1.0 kg 3rd Class) | Yield: ~130 pieces</option>
+              <option value="PST-ENS-001|Special Butter Ensaymada – 6.0 kg 1st Class Flour Basis | Yield: ~120 coiled units|120">PST-ENS-001: Special Butter Ensaymada – 6.0 kg 1st Class Flour Basis | Yield: ~120 coiled units</option>
+              <option value="BRD-BUN-001|Commercial Table Buns (Burger / Dinner) – 12.0 kg 1st Class Flour Basis | Yield: ~340 pieces (50 g each)|340">BRD-BUN-001: Commercial Table Buns (Burger / Dinner) – 12.0 kg 1st Class Flour Basis | Yield: ~340 pieces (50 g each)</option>
+              <option value="BRD-PTK-001|Putok Bread (Cracking Crown Roll) – 3.0 kg Flour Blend (2.1 kg 1st Class + 0.9 kg 3rd Class) | Yield: ~70 pieces (60 g each)|70">BRD-PTK-001: Putok Bread (Cracking Crown Roll) – 3.0 kg Flour Blend (2.1 kg 1st Class + 0.9 kg 3rd Class) | Yield: ~70 pieces (60 g each)</option>
+              <option value="FRI-SHK-001|Shakoy Bread (Twisted Fried Doughnut) – 5.0 kg Flour Blend (2.5 kg APF + 2.5 kg 3rd Class) | Yield: ~140 pieces (50 g each)|140">FRI-SHK-001: Shakoy Bread (Twisted Fried Doughnut) – 5.0 kg Flour Blend (2.5 kg APF + 2.5 kg 3rd Class) | Yield: ~140 pieces (50 g each)</option>
+              <option value="FRI-BNG-001|Binangkal – 3.0 kg Flour Blend (1.5 kg 1st Class + 1.5 kg 3rd Class) | Yield: ~260 pieces (15 g each)|260">FRI-BNG-001: Binangkal – 3.0 kg Flour Blend (1.5 kg 1st Class + 1.5 kg 3rd Class) | Yield: ~260 pieces (15 g each)</option>
+              <option value="FRI-DGH-001|Fried Yeast Doughnut – 5.0 kg All-Purpose Flour Basis | Yield: ~150 ring units|150">FRI-DGH-001: Fried Yeast Doughnut – 5.0 kg All-Purpose Flour Basis | Yield: ~150 ring units</option>
+              <option value="PST-HOP-001|Traditional Hopia / Pig-Pie – 2.0 kg Flour Blend (1.0 kg 1st Class + 1.0 kg 3rd Class) | Yield: ~120 pieces|120">PST-HOP-001: Traditional Hopia / Pig-Pie – 2.0 kg Flour Blend (1.0 kg 1st Class + 1.0 kg 3rd Class) | Yield: ~120 pieces</option>
+              <option value="PST-HPN-001|Hopia Panet (Mung Bean / Kundol) – 1.0 kg Flour Blend (0.75 kg 3rd Class + 0.25 kg 1st Class) | Yield: ~80 pieces|80">PST-HPN-001: Hopia Panet (Mung Bean / Kundol) – 1.0 kg Flour Blend (0.75 kg 3rd Class + 0.25 kg 1st Class) | Yield: ~80 pieces</option>
+              <option value="PST-HMN-001|Half Moon Pastry – 3.0 kg 3rd Class Flour Basis | Yield: ~110 crescent-shaped pieces|110">PST-HMN-001: Half Moon Pastry – 3.0 kg 3rd Class Flour Basis | Yield: ~110 crescent-shaped pieces</option>
+              <option value="PST-CSB-001|Rich Cheese Bar – 2.0 kg All-Purpose Flour Basis | Yield: ~100 rectangular bar pieces|100">PST-CSB-001: Rich Cheese Bar – 2.0 kg All-Purpose Flour Basis | Yield: ~100 rectangular bar pieces</option>
+              <option value="CKI-CRK-001|Crinkle Cookies – 2.5 kg 3rd Class Flour | Yield: ~220 cookies|220">CKI-CRK-001: Crinkle Cookies – 2.5 kg 3rd Class Flour | Yield: ~220 cookies</option>
+              <option value="BRD-PTS-001|Patatas Bread – 3.0 kg 3rd Class Flour Basis | Yield: ~90 pieces|90">BRD-PTS-001: Patatas Bread – 3.0 kg 3rd Class Flour Basis | Yield: ~90 pieces</option>
+              <option value="BRD-SWT-001|Sweetheart Bread – 3.0 kg Flour Blend (2.0 kg 1st Class + 1.0 kg 3rd Class) | Yield: ~85 heart-shaped pieces|85">BRD-SWT-001: Sweetheart Bread – 3.0 kg Flour Blend (2.0 kg 1st Class + 1.0 kg 3rd Class) | Yield: ~85 heart-shaped pieces</option>
+              <option value="DEL-BGB-001|Bagong Bayan Reconstituted Delicacy – 12.0 kg Starch Base (6.0 kg 3rd Class Flour + 6.0 kg Breadcrumbs) | Yield: ~350 pieces|350">DEL-BGB-001: Bagong Bayan Reconstituted Delicacy – 12.0 kg Starch Base (6.0 kg 3rd Class Flour + 6.0 kg Breadcrumbs) | Yield: ~350 pieces</option>
+              <option value="DEL-BGP-001|Bagong Bayan Panit (Red Shell) – 3.0 kg 1st Class Flour Basis | Yield: Wraps ~350 pieces|350">DEL-BGP-001: Bagong Bayan Panit (Red Shell) – 3.0 kg 1st Class Flour Basis | Yield: Wraps ~350 pieces</option>
+              <option value="DEL-DBC-001|Double Body Coconut Delicacy – 3.0 kg 3rd Class Flour Basis | Yield: ~100 paired twin units|100">DEL-DBC-001: Double Body Coconut Delicacy – 3.0 kg 3rd Class Flour Basis | Yield: ~100 paired twin units</option>
+              <option value="DEL-DBU-001|Double Body Ube Delicacy – 3.0 kg 3rd Class Flour Basis | Yield: ~100 paired purple twin units|100">DEL-DBU-001: Double Body Ube Delicacy – 3.0 kg 3rd Class Flour Basis | Yield: ~100 paired purple twin units</option>
+              <option value="DEL-PUD-001|Reconstituted Bakery Pudding – 15.0 kg Breadcrumb Base | Yield: ~180 square portions|180">DEL-PUD-001: Reconstituted Bakery Pudding – 15.0 kg Breadcrumb Base | Yield: ~180 square portions</option>
+              <option value="STM-SPO-001|Siopao Steamed Bun Dough – 1.5 kg Starch Base (1.0 kg APF + 0.5 kg Cornstarch) | Yield: ~35 steamed bun units|35">STM-SPO-001: Siopao Steamed Bun Dough – 1.5 kg Starch Base (1.0 kg APF + 0.5 kg Cornstarch) | Yield: ~35 steamed bun units</option>
+              <option value="DES-LCH-001|Classic Leche Flan – 10 Fresh Eggs Basis | Yield: 4 Oval Llanera Molds|4">DES-LCH-001: Classic Leche Flan – 10 Fresh Eggs Basis | Yield: 4 Oval Llanera Molds</option>
+              <option value="BIS-001|Biscocho Toasted Bread Delicacy – 25.0 kg 1st Class Hard Wheat Flour Basis | Yield: ~1,000 finished toasted pieces (83 packs)|1000">BIS-001: Biscocho Toasted Bread Delicacy – 25.0 kg 1st Class Hard Wheat Flour Basis | Yield: ~1,000 finished toasted pieces (83 packs)</option>
+              <option value="OTP-001|Otap Layered Puff Pastry – 25.0 kg Flour Blend (18.75 kg 1st Class + 6.25 kg 3rd Class) | Yield: ~1,200 finished oval pieces (100 dozen)|1200">OTP-001: Otap Layered Puff Pastry – 25.0 kg Flour Blend (18.75 kg 1st Class + 6.25 kg 3rd Class) | Yield: ~1,200 finished oval pieces (100 dozen)</option>
+              <option value="BRD-UBE-001|Special Ube Cheese Pandesal – 10.0 kg All-Purpose Flour Basis | Yield: ~300 pieces|300">BRD-UBE-001: Special Ube Cheese Pandesal – 10.0 kg All-Purpose Flour Basis | Yield: ~300 pieces</option>
+              <option value="BRD-MON-001|Classic Monay & Sweet Loaf – 12.5 kg All-Purpose Flour Basis | Yield: ~250 pieces|250">BRD-MON-001: Classic Monay & Sweet Loaf – 12.5 kg All-Purpose Flour Basis | Yield: ~250 pieces</option>
+              <option value="SUB-GLZ-001|Biscocho Buttermilk Sweet Glaze – 10.0 kg Sugar Sub-Assembly | Yield: Glazes ~1,500 slices|1500">SUB-GLZ-001: Biscocho Buttermilk Sweet Glaze – 10.0 kg Sugar Sub-Assembly | Yield: Glazes ~1,500 slices</option>
             </select>
           </div>
 
@@ -300,6 +331,145 @@
       </form>
     </div>
 
+    <!-- ============================================================= -->
+    <!-- FORM 3: PROPOSE SPECIALTY RECIPE (Form-RND-001) -->
+    <!-- ============================================================= -->
+    <div id="specialtySection" class="hidden bg-white p-6 rounded-2xl border border-[#E2D1B8] shadow-sm space-y-4">
+      <div class="border-b border-gray-100 pb-3 flex justify-between items-center flex-wrap gap-2">
+        <div>
+          <span class="text-[10px] font-mono font-bold bg-[#B87333] text-white px-2 py-0.5 rounded">
+            Form-RND-001 · Baker Specialty Formulation Proposal
+          </span>
+          <h3 class="text-lg font-bold font-serif text-[#B87333] mt-1">Propose New or Specialty Recipe</h3>
+          <p class="text-xs text-gray-500">Submit new or seasonal bakery formulations directly from the branch to Romeo Malusay and Zaphyr Zur Pomicpic for QA verification and inclusion into Master Formulations.</p>
+        </div>
+      </div>
+
+      <form id="specialtyRecipeForm" class="space-y-4 text-xs">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <!-- Commercial Name -->
+          <div class="md:col-span-2">
+            <label class="block font-bold text-gray-700 mb-1">Recipe Commercial Title / Product Name *</label>
+            <input type="text" id="specTitleInput" placeholder="e.g. Davao Durian Hopia / Cheese Bread Supreme / Spanish Pan de Coco" class="w-full p-2.5 border border-gray-300 rounded-xl font-medium focus:ring-2 focus:ring-[#B87333]" required>
+          </div>
+
+          <!-- Proposing Baker -->
+          <div>
+            <label class="block font-bold text-gray-700 mb-1">Proposing Baker Name *</label>
+            <input type="text" id="specBakerInput" placeholder="e.g. Feliciano T. Gomera" class="w-full p-2.5 border border-gray-300 rounded-xl font-medium focus:ring-2 focus:ring-[#B87333]" required>
+          </div>
+
+          <!-- Outlet -->
+          <div>
+            <label class="block font-bold text-gray-700 mb-1">Originating Branch / Facility *</label>
+            <select id="specOutletSelect" class="w-full p-2.5 border border-gray-300 rounded-xl bg-white font-medium focus:ring-2 focus:ring-[#B87333]">
+              <option value="Pan de Verde Outlet (Communal)">Pan de Verde Outlet (Communal)</option>
+              <option value="Laurice Delicacies Outlet (Bankerohan)">Laurice Delicacies Outlet (Bankerohan)</option>
+              <option value="Indangan Plant (Biscocho Hall)">Indangan Plant (Biscocho Hall)</option>
+              <option value="Indangan Plant (Otap Hall)">Indangan Plant (Otap Hall)</option>
+              <option value="Indangan Plant (Hearth Bread Line)">Indangan Plant (Hearth Bread Line)</option>
+              <option value="Indangan Plant (Pastry &amp; Cakes Line)">Indangan Plant (Pastry &amp; Cakes Line)</option>
+            </select>
+          </div>
+
+          <!-- Total Flour Weight -->
+          <div>
+            <label class="block font-bold text-gray-700 mb-1">Total Flour Weight in Batch (kg) *</label>
+            <input type="number" id="specFlourKgInput" min="0.5" step="0.5" value="3.0" class="w-full p-2.5 border border-gray-300 rounded-xl font-mono font-bold text-[#5B2E7A] focus:ring-2 focus:ring-[#B87333]" required>
+            <span class="text-[10px] text-gray-500 mt-0.5 block">All flour types combined (Base for Baker's %)</span>
+          </div>
+
+          <!-- Flour Blend Description -->
+          <div>
+            <label class="block font-bold text-gray-700 mb-1">Flour Blend Composition / Description *</label>
+            <input type="text" id="specFlourDescInput" placeholder="e.g. 1st Class Flour Basis or Blend (2kg APF + 1kg 3rd Class)" value="1st Class Hard Wheat Flour Basis" class="w-full p-2.5 border border-gray-300 rounded-xl font-medium focus:ring-2 focus:ring-[#B87333]" required>
+          </div>
+
+          <!-- Piece Yield -->
+          <div>
+            <label class="block font-bold text-gray-700 mb-1">Standard Piece Yield *</label>
+            <input type="number" id="specYieldInput" min="1" value="100" class="w-full p-2.5 border border-gray-300 rounded-xl font-mono font-bold text-[#1E7A3E] focus:ring-2 focus:ring-[#B87333]" required>
+          </div>
+
+          <!-- Piece Weight -->
+          <div>
+            <label class="block font-bold text-gray-700 mb-1">Raw Dough Weight per Piece (Grams)</label>
+            <input type="number" id="specWeightInput" min="5" value="40" placeholder="e.g. 40" class="w-full p-2.5 border border-gray-300 rounded-xl font-mono font-medium focus:ring-2 focus:ring-[#B87333]">
+          </div>
+
+          <!-- Target SRP -->
+          <div>
+            <label class="block font-bold text-gray-700 mb-1">Target Suggested Retail Price (SRP ₱) *</label>
+            <input type="number" id="specSrpInput" min="0.5" step="0.5" value="8.0" class="w-full p-2.5 border border-gray-300 rounded-xl font-mono font-bold text-emerald-700 focus:ring-2 focus:ring-[#B87333]" required>
+          </div>
+
+          <!-- Estimated Cost -->
+          <div>
+            <label class="block font-bold text-gray-700 mb-1">Estimated Unit Production Cost (₱)</label>
+            <input type="number" id="specCostInput" min="0.1" step="0.1" value="3.5" class="w-full p-2.5 border border-gray-300 rounded-xl font-mono font-bold text-gray-700 focus:ring-2 focus:ring-[#B87333]">
+          </div>
+        </div>
+
+        <!-- Ingredients Section -->
+        <div class="bg-[#FAF6EE] p-4 rounded-xl border border-[#E2D1B8] space-y-3">
+          <div class="flex justify-between items-center">
+            <div>
+              <span class="font-bold text-gray-800 text-xs uppercase tracking-wider">Formula Bill of Materials</span>
+              <p class="text-[10px] text-gray-500">Specify ingredient components and weight in grams per batch.</p>
+            </div>
+            <button type="button" onclick="addSpecIngredientRow()" class="bg-[#B87333] hover:bg-[#8F5522] text-white px-3 py-1.5 rounded-lg font-bold text-[11px] shadow-sm">
+              + Add Ingredient
+            </button>
+          </div>
+
+          <div id="specIngredientsContainer" class="space-y-2">
+            <div class="spec-ing-row bg-white p-2.5 rounded-xl border border-gray-200 flex flex-wrap items-center gap-3">
+              <div class="flex-1 min-w-[200px]">
+                <input type="text" placeholder="Ingredient Name" value="1st Class Hard Wheat Flour" class="spec-ing-name w-full p-2 border border-gray-300 rounded-lg text-xs font-medium" required>
+              </div>
+              <div class="w-28 flex items-center gap-1">
+                <input type="number" min="1" value="3000" placeholder="Grams" class="spec-ing-grams w-full p-2 border border-gray-300 rounded-lg text-xs font-mono font-bold text-[#5B2E7A]" required>
+                <span class="text-[11px] font-bold text-gray-500">g</span>
+              </div>
+              <button type="button" onclick="removeSpecIngredientRow(this)" class="text-red-500 hover:text-red-700 p-1.5 rounded">✕</button>
+            </div>
+            <div class="spec-ing-row bg-white p-2.5 rounded-xl border border-gray-200 flex flex-wrap items-center gap-3">
+              <div class="flex-1 min-w-[200px]">
+                <input type="text" placeholder="Ingredient Name" value="Crystal Brown Sugar" class="spec-ing-name w-full p-2 border border-gray-300 rounded-lg text-xs font-medium" required>
+              </div>
+              <div class="w-28 flex items-center gap-1">
+                <input type="number" min="1" value="600" placeholder="Grams" class="spec-ing-grams w-full p-2 border border-gray-300 rounded-lg text-xs font-mono font-bold text-[#5B2E7A]" required>
+                <span class="text-[11px] font-bold text-gray-500">g</span>
+              </div>
+              <button type="button" onclick="removeSpecIngredientRow(this)" class="text-red-500 hover:text-red-700 p-1.5 rounded">✕</button>
+            </div>
+            <div class="spec-ing-row bg-white p-2.5 rounded-xl border border-gray-200 flex flex-wrap items-center gap-3">
+              <div class="flex-1 min-w-[200px]">
+                <input type="text" placeholder="Ingredient Name" value="Bakery Margarine" class="spec-ing-name w-full p-2 border border-gray-300 rounded-lg text-xs font-medium" required>
+              </div>
+              <div class="w-28 flex items-center gap-1">
+                <input type="number" min="1" value="180" placeholder="Grams" class="spec-ing-grams w-full p-2 border border-gray-300 rounded-lg text-xs font-mono font-bold text-[#5B2E7A]" required>
+                <span class="text-[11px] font-bold text-gray-500">g</span>
+              </div>
+              <button type="button" onclick="removeSpecIngredientRow(this)" class="text-red-500 hover:text-red-700 p-1.5 rounded">✕</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Mixing Instructions -->
+        <div>
+          <label class="block font-bold text-gray-700 mb-1">Mixing / Proofing / Baking SOP Notes</label>
+          <textarea id="specNotesInput" rows="2" placeholder="e.g. Spiral mix speed 1 for 4 mins, speed 2 for 8 mins. Target dough exit temp: 26°C – 28°C. Proofing at 35°C / 80% RH." class="w-full p-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#B87333]"></textarea>
+        </div>
+
+        <div class="pt-2 flex justify-end">
+          <button type="submit" class="bg-[#B87333] hover:bg-[#8F5522] text-white font-bold text-xs px-6 py-3 rounded-xl shadow-md transition flex items-center gap-2">
+            <span>✓ Submit Specialty Recipe to QA &amp; Master Register (`Form-RND-001`)</span>
+          </button>
+        </div>
+      </form>
+    </div>
+
     <!-- Confirmation Modal / Toast -->
     <div id="confirmBox" class="hidden bg-emerald-50 border border-emerald-300 text-emerald-900 p-5 rounded-2xl shadow-lg space-y-2 animate-in fade-in">
       <div class="flex items-center gap-2 font-bold text-base text-emerald-800">
@@ -332,19 +502,28 @@
     function switchTab(tab) {
       const recipeSec = document.getElementById('recipeSection');
       const matSec = document.getElementById('materialSection');
+      const specSec = document.getElementById('specialtySection');
       const tabBtnRecipe = document.getElementById('tabBtnRecipe');
       const tabBtnMat = document.getElementById('tabBtnMaterial');
+      const tabBtnSpec = document.getElementById('tabBtnSpecialty');
+
+      recipeSec.classList.add('hidden');
+      matSec.classList.add('hidden');
+      specSec.classList.add('hidden');
+
+      tabBtnRecipe.className = "flex-1 py-2.5 px-4 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 bg-[#FAF6EE] text-gray-700 hover:bg-gray-100";
+      tabBtnMat.className = "flex-1 py-2.5 px-4 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 bg-[#FAF6EE] text-gray-700 hover:bg-gray-100";
+      tabBtnSpec.className = "flex-1 py-2.5 px-4 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 bg-[#FAF6EE] text-gray-700 hover:bg-gray-100";
 
       if (tab === 'recipe') {
         recipeSec.classList.remove('hidden');
-        matSec.classList.add('hidden');
         tabBtnRecipe.className = "flex-1 py-2.5 px-4 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 bg-[#3D1C52] text-white shadow";
-        tabBtnMat.className = "flex-1 py-2.5 px-4 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 bg-[#FAF6EE] text-gray-700 hover:bg-gray-100";
-      } else {
-        recipeSec.classList.add('hidden');
+      } else if (tab === 'material') {
         matSec.classList.remove('hidden');
         tabBtnMat.className = "flex-1 py-2.5 px-4 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 bg-[#1E7A3E] text-white shadow";
-        tabBtnRecipe.className = "flex-1 py-2.5 px-4 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 bg-[#FAF6EE] text-gray-700 hover:bg-gray-100";
+      } else if (tab === 'specialty') {
+        specSec.classList.remove('hidden');
+        tabBtnSpec.className = "flex-1 py-2.5 px-4 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 bg-[#B87333] text-white shadow";
       }
     }
 
@@ -525,6 +704,117 @@
       const box = document.getElementById('confirmBox');
       document.getElementById('confirmDetails').innerHTML = 
         'Requisition <strong>' + slipNo + '</strong> requested by <strong>' + person + '</strong> for <strong>' + line + '</strong> (' + items.length + ' materials, Total: ₱' + totalEstCost.toLocaleString() + ') is submitted to Jade Dela Cruz.';
+      box.classList.remove('hidden');
+      box.scrollIntoView({ behavior: 'smooth' });
+    });
+
+    // Specialty Recipe Ingredient Row Management
+    function addSpecIngredientRow() {
+      const container = document.getElementById('specIngredientsContainer');
+      const row = document.createElement('div');
+      row.className = "spec-ing-row bg-white p-2.5 rounded-xl border border-gray-200 flex flex-wrap items-center gap-3";
+      row.innerHTML = `
+        <div class="flex-1 min-w-[200px]">
+          <input type="text" placeholder="Ingredient Name" class="spec-ing-name w-full p-2 border border-gray-300 rounded-lg text-xs font-medium" required>
+        </div>
+        <div class="w-28 flex items-center gap-1">
+          <input type="number" min="1" value="100" placeholder="Grams" class="spec-ing-grams w-full p-2 border border-gray-300 rounded-lg text-xs font-mono font-bold text-[#5B2E7A]" required>
+          <span class="text-[11px] font-bold text-gray-500">g</span>
+        </div>
+        <button type="button" onclick="removeSpecIngredientRow(this)" class="text-red-500 hover:text-red-700 p-1.5 rounded">✕</button>
+      `;
+      container.appendChild(row);
+    }
+
+    function removeSpecIngredientRow(btn) {
+      const container = document.getElementById('specIngredientsContainer');
+      if (container.children.length > 1) {
+        btn.closest('.spec-ing-row').remove();
+      }
+    }
+
+    // Handle Specialty Recipe Form Submit
+    document.getElementById('specialtyRecipeForm').addEventListener('submit', function(e) {
+      e.preventDefault();
+      const title = document.getElementById('specTitleInput').value.trim();
+      const baker = document.getElementById('specBakerInput').value.trim();
+      const outlet = document.getElementById('specOutletSelect').value;
+      const flourKg = parseFloat(document.getElementById('specFlourKgInput').value) || 3.0;
+      const flourDesc = document.getElementById('specFlourDescInput').value.trim();
+      const yieldPcs = parseInt(document.getElementById('specYieldInput').value, 10) || 100;
+      const weight = parseInt(document.getElementById('specWeightInput').value, 10) || 40;
+      const srp = parseFloat(document.getElementById('specSrpInput').value) || 8.0;
+      const cost = parseFloat(document.getElementById('specCostInput').value) || 3.5;
+      const notes = document.getElementById('specNotesInput').value.trim();
+
+      const baseFlourGrams = flourKg * 1000;
+      const ingRows = document.querySelectorAll('.spec-ing-row');
+      const ingredients = [];
+
+      ingRows.forEach(function(row, idx) {
+        const name = row.querySelector('.spec-ing-name').value.trim();
+        const grams = parseFloat(row.querySelector('.spec-ing-grams').value) || 0;
+        const pct = baseFlourGrams > 0 ? parseFloat(((grams / baseFlourGrams) * 100).toFixed(1)) : 0;
+        ingredients.push({
+          code: 'RM-SPEC-' + (idx + 1),
+          name: name,
+          gramsPerBatch: grams,
+          pct: pct
+        });
+      });
+
+      const formattedName = title + ' – ' + flourKg.toFixed(1) + ' kg ' + flourDesc + ' | Yield: ~' + yieldPcs + ' pieces (' + weight + ' g each)';
+      const proposalId = 'SPEC-' + Date.now().toString().slice(-6);
+      const sku = 'SPC-' + title.slice(0, 3).toUpperCase() + '-' + Date.now().toString().slice(-3);
+      const margin = (((srp - cost) / srp) * 100).toFixed(1);
+
+      const proposal = {
+        proposalId: proposalId,
+        sku: sku,
+        title: title,
+        name: formattedName,
+        category: 'Signature Pastry / Specialty',
+        targetFacility: outlet,
+        requestingLocation: outlet.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+        bakerName: baker,
+        standardBatchFlourKg: flourKg,
+        unitPieceYield: yieldPcs,
+        pieceWeightGrams: weight,
+        doughExitTempTarget: '26°C – 28°C',
+        ccp1LethalityTarget: '> 95°C',
+        waterActivityLimit: 'Moist Crumb',
+        unitProductionCost: cost,
+        wholesaleTransferPrice: parseFloat((cost * 1.5).toFixed(2)),
+        srp: srp,
+        grossMarginPct: parseFloat(margin),
+        mixingNotes: notes,
+        ingredients: ingredients,
+        status: 'PENDING_APPROVAL',
+        submittedAt: new Date().toISOString()
+      };
+
+      try {
+        const storageKey = 'JJB_WMS_LIVE_V4_6_SPECIALTY_RECIPES';
+        const existing = JSON.parse(localStorage.getItem(storageKey) || '[]');
+        existing.unshift(proposal);
+        localStorage.setItem(storageKey, JSON.stringify(existing));
+      } catch (err) {
+        console.error(err);
+      }
+
+      fetch('/api/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          idempotencyKey: 'PORTAL_SPEC_' + proposalId,
+          eventType: 'SPECIALTY_RECIPE_SUBMITTED',
+          payload: proposal
+        })
+      }).catch(function() {});
+
+      const box = document.getElementById('confirmBox');
+      document.getElementById('confirmDetails').innerHTML = 
+        'Specialty Recipe Proposal <strong>' + proposalId + '</strong> for <strong>' + formattedName + '</strong> submitted by Baker <strong>' + baker + '</strong> (' + outlet + ') has been queued for Romeo Malusay &amp; Zaphyr Zur Pomicpic for QA &amp; Master Register approval.';
       box.classList.remove('hidden');
       box.scrollIntoView({ behavior: 'smooth' });
     });

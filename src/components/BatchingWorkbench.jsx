@@ -1,10 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Scale, Plus, CheckCircle2, Clock, Truck, Printer, 
   AlertCircle, ShieldCheck, Layers, ArrowRight, CheckCheck, 
-  RotateCcw, Sparkles, Lock, Unlock, Send
+  RotateCcw, Sparkles, Lock, Unlock, Send, Award, Check
 } from 'lucide-react';
 import { calculateRecipeIngredients } from '../utils/wmsLogic';
+import { 
+  loadStoredSpecialtyProposals, 
+  persistSpecialtyProposals 
+} from '../utils/specialtyRecipeLogic';
 
 export default function BatchingWorkbench({
   batchOrders,
@@ -12,16 +16,22 @@ export default function BatchingWorkbench({
   onUpdateOrderStatus,
   onBulkReleaseOrders,
   onRequestBulkMaterials,
+  onApproveSpecialtyRecipe,
   recipes,
   outlets,
   inventory,
   currentRole,
   isMobileMode
 }) {
-  const [activeSubTab, setActiveSubTab] = useState('workbench'); // 'workbench' | 'new_order'
+  const [activeSubTab, setActiveSubTab] = useState('workbench'); // 'workbench' | 'new_order' | 'specialty_intake'
   const [filterStatus, setFilterStatus] = useState('ALL'); // ALL, PENDING_BATCHING, BATCHED_KITTED, RELEASED
   const [selectedTagOrder, setSelectedTagOrder] = useState(null);
   const [scalingModalOrder, setScalingModalOrder] = useState(null);
+  const [specialtyProposals, setSpecialtyProposals] = useState(() => loadStoredSpecialtyProposals());
+
+  useEffect(() => {
+    setSpecialtyProposals(loadStoredSpecialtyProposals());
+  }, [activeSubTab]);
 
   // Form for New Order
   const [outletId, setOutletId] = useState(outlets[0]?.id || 'pan-de-verde');
@@ -86,6 +96,49 @@ export default function BatchingWorkbench({
   // Ready to release count
   const readyToReleaseCount = batchOrders.filter(o => o.status === 'BATCHED_KITTED').length;
 
+  const pendingSpecialtyCount = specialtyProposals.filter(p => p.status === 'PENDING_APPROVAL').length;
+
+  const handleApproveProposal = (proposalId) => {
+    if (onApproveSpecialtyRecipe) {
+      onApproveSpecialtyRecipe(proposalId);
+    }
+    const updated = specialtyProposals.map(p => {
+      if (p.proposalId === proposalId) {
+        return { 
+          ...p, 
+          status: 'APPROVED', 
+          approvedAt: new Date().toISOString(), 
+          approvedBy: `${currentRole} (Scaler Lead)` 
+        };
+      }
+      return p;
+    });
+    persistSpecialtyProposals(updated);
+    setSpecialtyProposals(updated);
+  };
+
+  const handleRejectProposal = (proposalId) => {
+    const reason = window.prompt('Enter revision comments for proposing baker:') || 'Formula requires moisture / flour balance adjustment.';
+    const updated = specialtyProposals.map(p => {
+      if (p.proposalId === proposalId) {
+        return { 
+          ...p, 
+          status: 'REJECTED', 
+          revisionNotes: reason, 
+          rejectedAt: new Date().toISOString() 
+        };
+      }
+      return p;
+    });
+    persistSpecialtyProposals(updated);
+    setSpecialtyProposals(updated);
+  };
+
+  const handleScaleSpecialty = (sku) => {
+    setRecipeSku(sku);
+    setActiveSubTab('new_order');
+  };
+
   return (
     <div className="space-y-6">
       {/* Title & Overview Banner */}
@@ -105,7 +158,7 @@ export default function BatchingWorkbench({
         </div>
 
         {/* Sub-Tabs Selector */}
-        <div className="flex bg-white p-1 rounded-lg border border-[#E2D1B8] shadow-sm">
+        <div className="flex bg-white p-1 rounded-lg border border-[#E2D1B8] shadow-sm flex-wrap gap-1">
           <button
             onClick={() => setActiveSubTab('workbench')}
             className={`px-3 py-1.5 rounded-md text-xs font-bold transition flex items-center gap-1.5 ${
@@ -125,6 +178,22 @@ export default function BatchingWorkbench({
             }`}
           >
             <Plus size={14} /> Intake Outlet Order (Jade / Mariejohn)
+          </button>
+          <button
+            onClick={() => setActiveSubTab('specialty_intake')}
+            className={`px-3 py-1.5 rounded-md text-xs font-bold transition flex items-center gap-1.5 ${
+              activeSubTab === 'specialty_intake'
+                ? 'bg-[#B87333] text-white shadow-sm'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            <Sparkles size={14} className={activeSubTab === 'specialty_intake' ? 'text-amber-200' : 'text-amber-600'} />
+            <span>Specialty Recipe Intake ({pendingSpecialtyCount})</span>
+            {pendingSpecialtyCount > 0 && (
+              <span className="bg-red-500 text-white text-[10px] px-1.5 py-0.2 rounded-full font-bold">
+                {pendingSpecialtyCount}
+              </span>
+            )}
           </button>
         </div>
       </div>
@@ -547,6 +616,197 @@ export default function BatchingWorkbench({
             </button>
           </div>
         </form>
+      )}
+
+      {/* VIEW 3: SPECIALTY & R&D RECIPE INTAKE & APPROVAL QUEUE */}
+      {activeSubTab === 'specialty_intake' && (
+        <div className="space-y-5">
+          <div className="bg-white p-5 rounded-2xl border border-[#E2D1B8] shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-xs font-bold bg-[#B87333] text-white px-2 py-0.5 rounded">
+                  Form-RND-001 Intake Queue
+                </span>
+                <h3 className="font-serif text-lg font-bold text-[#3D1C52]">
+                  Specialty &amp; Seasonal Recipe Approvals
+                </h3>
+              </div>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Formulations proposed by branch and plant bakers. Romeo Malusay and Zaphyr Zur Pomicpic can review technical parameters and approve to promote directly into active Master Recipes.
+              </p>
+            </div>
+
+            <div className="flex gap-2">
+              <span className="text-xs font-bold bg-amber-50 text-amber-900 border border-amber-300 px-3 py-1.5 rounded-lg flex items-center gap-1.5">
+                <Sparkles size={14} className="text-[#C8963E]" />
+                <span>{pendingSpecialtyCount} Pending Review</span>
+              </span>
+            </div>
+          </div>
+
+          {specialtyProposals.length === 0 ? (
+            <div className="bg-white p-12 text-center rounded-2xl border border-dashed border-gray-300 text-gray-500 space-y-2">
+              <Sparkles size={32} className="mx-auto text-gray-400" />
+              <p className="font-bold text-sm text-gray-700">No Specialty Recipe Proposals in Queue</p>
+              <p className="text-xs text-gray-400">
+                Bakers can propose new recipes using Tab 3 of the Outlet &amp; Production Line Requisition Portal (`Form-RND-001`).
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-5">
+              {specialtyProposals.map(prop => {
+                const isPending = prop.status === 'PENDING_APPROVAL';
+                const isApproved = prop.status === 'APPROVED';
+                const isRejected = prop.status === 'REJECTED';
+
+                return (
+                  <div 
+                    key={prop.proposalId}
+                    className={`bg-white rounded-2xl border p-5 shadow-sm space-y-4 transition ${
+                      isPending ? 'border-amber-300 bg-amber-50/10' :
+                      isApproved ? 'border-emerald-300 bg-emerald-50/10' :
+                      'border-gray-200 opacity-80'
+                    }`}
+                  >
+                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2 border-b border-gray-100 pb-3">
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-mono text-xs font-bold text-[#5B2E7A] bg-purple-50 px-2 py-0.5 rounded border border-purple-200">
+                            {prop.sku}
+                          </span>
+                          <span className="text-xs font-bold text-gray-700">
+                            Proposal ID: {prop.proposalId}
+                          </span>
+                          <span className="text-[11px] text-gray-400">
+                            · Proposed by: <strong>{prop.bakerName}</strong> ({prop.targetFacility})
+                          </span>
+                        </div>
+                        <h4 className="font-bold text-base text-gray-900 mt-1">{prop.name}</h4>
+                        <span className="text-xs text-[#B87333] font-semibold">{prop.category}</span>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <span className={`text-xs font-bold px-3 py-1 rounded-full ${
+                          isApproved ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' :
+                          isRejected ? 'bg-red-100 text-red-800 border border-red-300' :
+                          'bg-amber-100 text-amber-800 border border-amber-300 animate-pulse'
+                        }`}>
+                          {isApproved ? '✓ APPROVED FOR MASTER REGISTER' :
+                           isRejected ? '✕ REVISION REQUESTED' :
+                           '● PENDING SCALER APPROVAL'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Financials & Flour Specs Grid */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-[#FAF6EE] p-3 rounded-xl border border-[#E2D1B8] text-xs">
+                      <div>
+                        <span className="text-gray-500 text-[10px]">Total Flour Weight:</span>
+                        <p className="font-bold text-gray-900">{prop.standardBatchFlourKg} kg Basis</p>
+                      </div>
+                      <div>
+                        <span className="text-gray-500 text-[10px]">Piece Yield:</span>
+                        <p className="font-bold text-[#1E7A3E]">~{prop.unitPieceYield} pcs ({prop.pieceWeightGrams || 40}g)</p>
+                      </div>
+                      <div>
+                        <span className="text-gray-500 text-[10px]">SRP / Unit Cost:</span>
+                        <p className="font-bold text-purple-900">₱{prop.srp?.toFixed(2)} / ₱{prop.unitProductionCost?.toFixed(2)}</p>
+                      </div>
+                      <div>
+                        <span className="text-gray-500 text-[10px]">Gross Margin:</span>
+                        <p className="font-bold text-emerald-700 text-sm">{prop.grossMarginPct}%</p>
+                      </div>
+                    </div>
+
+                    {/* Ingredient Table */}
+                    <div>
+                      <span className="font-bold text-xs text-gray-700 block mb-1">
+                        Formulation Bill of Materials ({prop.ingredients?.length || 0} Ingredients):
+                      </span>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-xs bg-white rounded border">
+                          <thead className="bg-[#3D1C52] text-white">
+                            <tr>
+                              <th className="p-2">Material Code</th>
+                              <th className="p-2">Ingredient Name</th>
+                              <th className="p-2 text-right">Grams per Batch</th>
+                              <th className="p-2 text-right">Baker's %</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y">
+                            {(prop.ingredients || []).map((ing, i) => (
+                              <tr key={i}>
+                                <td className="p-2 font-mono text-[#5B2E7A]">{ing.code}</td>
+                                <td className="p-2 font-medium">{ing.name}</td>
+                                <td className="p-2 text-right font-mono font-bold text-gray-800">{ing.gramsPerBatch} g</td>
+                                <td className="p-2 text-right font-mono text-purple-700 font-bold">{ing.pct}%</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    {/* Mixing Notes */}
+                    {prop.mixingNotes && (
+                      <div className="text-xs bg-gray-50 p-3 rounded-lg border border-gray-200">
+                        <strong className="text-gray-700">Baker's Notes &amp; Mixing Protocol:</strong>
+                        <p className="text-gray-600 mt-0.5 whitespace-pre-line">{prop.mixingNotes}</p>
+                      </div>
+                    )}
+
+                    {/* Action Buttons */}
+                    <div className="flex flex-wrap justify-between items-center gap-3 pt-2 border-t border-gray-100">
+                      <div>
+                        {isApproved && (
+                          <span className="text-xs text-emerald-800 font-medium">
+                            Approved by: {prop.approvedBy} ({new Date(prop.approvedAt).toLocaleDateString()})
+                          </span>
+                        )}
+                        {isRejected && (
+                          <span className="text-xs text-red-700 font-medium">
+                            Revision Reason: {prop.revisionNotes}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex gap-2">
+                        {isPending && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => handleRejectProposal(prop.proposalId)}
+                              className="px-4 py-2 rounded-xl text-xs font-bold bg-gray-100 hover:bg-gray-200 text-gray-700 transition"
+                            >
+                              Request Revision
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleApproveProposal(prop.proposalId)}
+                              className="px-4 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-md transition flex items-center gap-1.5"
+                            >
+                              <Check size={14} /> Approve &amp; Incorporate into Master Recipes
+                            </button>
+                          </>
+                        )}
+
+                        {isApproved && (
+                          <button
+                            type="button"
+                            onClick={() => handleScaleSpecialty(prop.sku)}
+                            className="px-4 py-2 rounded-xl text-xs font-bold bg-[#C8963E] hover:bg-[#b08030] text-[#240e32] shadow-md transition flex items-center gap-1.5"
+                          >
+                            <Scale size={14} /> Batch Scale This Specialty Recipe Now
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       )}
 
       {/* MODAL 1: ROMEO'S SCALING & KITTING MODAL */}
