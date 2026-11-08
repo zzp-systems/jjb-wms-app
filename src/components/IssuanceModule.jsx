@@ -16,35 +16,44 @@ export default function IssuanceModule({
   isMobileMode,
   prefilledItem 
 }) {
-  const [slipNo, setSlipNo] = useState(`WS-2026-1103-0${withdrawals.length + 1}`);
-  const [requestingEntity, setRequestingEntity] = useState('Indangan - Biscocho Commercial Line');
-  const [department, setDepartment] = useState('Production - Biscocho Hall');
-  const [purpose, setPurpose] = useState('Commercial Afternoon Bake Run');
-  const [requestedBy, setRequestedBy] = useState('Alwen Hermogeno (Master Head Baker)');
-  const [receivedBy, setReceivedBy] = useState('Vicky Albino (Authorized Baker)');
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const [slipNo, setSlipNo] = useState(`WS-${todayStr.replace(/-/g, '')}-${String(withdrawals.length + 1).padStart(3, '0')}`);
+  const [requestingEntity, setRequestingEntity] = useState('');
+  const [department, setDepartment] = useState('');
+  const [purpose, setPurpose] = useState('');
+  const [requestedBy, setRequestedBy] = useState('');
+  const [receivedBy, setReceivedBy] = useState('');
   const [selectedSlipView, setSelectedSlipView] = useState(null);
   const [validationError, setValidationError] = useState(null);
 
-  // Line items
+  // Default item from inventory
+  const defaultMat = inventory[0] || {
+    code: 'RM-FLR-001',
+    name: 'All Purpose Flour',
+    secondaryUom: 'kg',
+    room: 'Dry Room 1'
+  };
+
+  // Line items (Clean Initial State)
   const [items, setItems] = useState([
     prefilledItem ? {
       materialCode: prefilledItem.code,
       name: prefilledItem.name,
-      qtyRequestedSec: 25.0,
-      qtyIssuedSec: 25.0,
+      qtyRequestedSec: 0,
+      qtyIssuedSec: 0,
       secondaryUom: prefilledItem.secondaryUom,
-      lotNumber: prefilledItem.lots?.[0]?.lotNumber || 'DEFAULT-LOT',
-      storageRoom: prefilledItem.room,
-      remarks: 'FEFO prioritized issuance'
+      lotNumber: prefilledItem.lots?.[0]?.lotNumber || 'FEFO-QUEUED',
+      storageRoom: prefilledItem.room || 'Dry Room 1',
+      remarks: ''
     } : {
-      materialCode: 'RM-FLR-003',
-      name: '1st Class Hard Flour (Rossa)',
-      qtyRequestedSec: 50.0,
-      qtyIssuedSec: 50.0,
-      secondaryUom: 'kg',
-      lotNumber: 'LOT-ROS-261005',
-      storageRoom: 'Dry Room 1',
-      remarks: 'Strict FEFO lot rotation'
+      materialCode: defaultMat.code,
+      name: defaultMat.name,
+      qtyRequestedSec: 0,
+      qtyIssuedSec: 0,
+      secondaryUom: defaultMat.secondaryUom,
+      lotNumber: defaultMat.lots?.[0]?.lotNumber || 'FEFO-QUEUED',
+      storageRoom: defaultMat.room || 'Dry Room 1',
+      remarks: ''
     }
   ]);
 

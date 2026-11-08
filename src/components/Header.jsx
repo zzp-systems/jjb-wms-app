@@ -174,7 +174,6 @@ export default function Header({
         {[
           { id: 'dashboard', label: '1. Live FEFO Inventory', icon: Warehouse, badge: lowStockCount > 0 ? `${lowStockCount} Low` : null, badgeColor: 'bg-[#D68910]' },
           { id: 'portal', label: 'Outlet & Line Portal', icon: Store, badge: 'Requisitions', badgeColor: 'bg-[#1E7A3E]' },
-          { id: 'signature', label: 'Signature Delicacies (Recharts)', icon: BarChart3, badge: 'Biscocho & Otap', badgeColor: 'bg-[#C8963E]' },
           { id: 'receiving', label: '2. Inbound Receiving', icon: Truck, roleHighlight: 'Jade Q. Dela Cruz' },
           { 
             id: 'issuance', 

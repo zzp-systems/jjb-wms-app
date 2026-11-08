@@ -12,49 +12,61 @@ export default function ReceivingModule({
   isMobileMode,
   prefilledItem 
 }) {
-  const [reportNo, setReportNo] = useState(`RR-2026-1103-0${receivingReports.length + 1}`);
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const [reportNo, setReportNo] = useState(`RR-${todayStr.replace(/-/g, '')}-${String(receivingReports.length + 1).padStart(3, '0')}`);
   const [poNo, setPoNo] = useState('');
   const [drNo, setDrNo] = useState('');
-  const [supplier, setSupplier] = useState('P.L. Sebastian Corporation');
+  const [supplier, setSupplier] = useState('');
   const [invoiceNo, setInvoiceNo] = useState('');
-  const [deliveryVehicle, setDeliveryVehicle] = useState('Isuzu Elf Dropside (Clean Deck, Sanitized)');
+  const [deliveryVehicle, setDeliveryVehicle] = useState('');
   const [selectedReportView, setSelectedReportView] = useState(null);
 
-  // Receiving Items
+  // Default initial material
+  const defaultMat = inventory[0] || {
+    code: 'RM-FLR-001',
+    name: 'All Purpose Flour',
+    primaryUom: 'Sack',
+    conversionFactor: 25,
+    secondaryUom: 'kg',
+    unitCost: 1050,
+    room: 'Dry Room 1'
+  };
+
+  // Receiving Items (Clean Initial State)
   const [receivingItems, setReceivingItems] = useState([
     prefilledItem ? {
       materialCode: prefilledItem.code,
       name: prefilledItem.name,
-      primaryQty: 10,
+      primaryQty: 0,
       primaryUom: prefilledItem.primaryUom,
-      conversionFactor: prefilledItem.conversionFactor,
-      secondaryQty: 10 * prefilledItem.conversionFactor,
+      conversionFactor: prefilledItem.conversionFactor || 1,
+      secondaryQty: 0,
       secondaryUom: prefilledItem.secondaryUom,
-      unitPrice: prefilledItem.unitCost || 1000,
-      totalAmount: 10 * (prefilledItem.unitCost || 1000),
-      lotNumber: `LOT-${prefilledItem.code.split('-')[1] || 'MAT'}-${new Date().toISOString().slice(2,10).replace(/-/g,'')}`,
-      expiryDate: '2027-05-15',
-      storageRoom: prefilledItem.room,
-      binLocation: 'Pallet 1A',
+      unitPrice: prefilledItem.unitCost || 0,
+      totalAmount: 0,
+      lotNumber: `LOT-${prefilledItem.code.replace(/[^A-Z0-9]/gi, '')}-${todayStr.slice(2).replace(/-/g, '')}`,
+      expiryDate: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+      storageRoom: prefilledItem.room || 'Dry Room 1',
+      binLocation: '',
       qtyDamaged: 0,
-      chilledTemp: '-1.0',
+      chilledTemp: '',
       butterCellophaneSticker: true,
       eggRinsePassed: true,
       coaPassed: true
     } : {
-      materialCode: 'RM-FLR-001',
-      name: 'Continental All Purpose Flour',
-      primaryQty: 20,
-      primaryUom: 'Sack',
-      conversionFactor: 25.0,
-      secondaryQty: 500,
-      secondaryUom: 'kg',
-      unitPrice: 1050,
-      totalAmount: 21000,
-      lotNumber: 'LOT-CNT-261103',
-      expiryDate: '2027-05-03',
-      storageRoom: 'Dry Room 1',
-      binLocation: 'Pallet A3',
+      materialCode: defaultMat.code,
+      name: defaultMat.name,
+      primaryQty: 0,
+      primaryUom: defaultMat.primaryUom,
+      conversionFactor: defaultMat.conversionFactor || 1,
+      secondaryQty: 0,
+      secondaryUom: defaultMat.secondaryUom,
+      unitPrice: defaultMat.unitCost || 0,
+      totalAmount: 0,
+      lotNumber: `LOT-${defaultMat.code.replace(/[^A-Z0-9]/gi, '')}-${todayStr.slice(2).replace(/-/g, '')}`,
+      expiryDate: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+      storageRoom: defaultMat.room || 'Dry Room 1',
+      binLocation: '',
       qtyDamaged: 0,
       chilledTemp: '',
       butterCellophaneSticker: true,

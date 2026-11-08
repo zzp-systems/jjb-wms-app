@@ -1,24 +1,24 @@
 import React, { useState, useMemo } from 'react';
 import { 
   Search, Filter, AlertTriangle, Package, Clock, Warehouse, 
-  ArrowUpRight, ArrowDownRight, Layers, Eye, RefreshCw, BarChart3, Sparkles,
-  FileSpreadsheet, Upload, Download
+  ArrowUpRight, ArrowDownRight, Layers, Eye, RefreshCw, Sparkles,
+  FileSpreadsheet, Upload, Download, Store, Scale, FileText, CheckCircle2
 } from 'lucide-react';
-import SignatureProductsDashboard from './SignatureProductsDashboard';
 
 export default function ExecutiveDashboard({ 
   inventory, 
   isMobileMode, 
   onQuickAction,
   storageRooms,
-  onOpenImportModal
+  onOpenImportModal,
+  batchOrders = [],
+  withdrawals = []
 }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedRoom, setSelectedRoom] = useState('ALL');
   const [selectedCategory, setSelectedCategory] = useState('ALL');
   const [statusFilter, setStatusFilter] = useState('ALL'); // ALL, LOW_STOCK, EXPIRING_SOON, HEALTHY
   const [selectedItemLots, setSelectedItemLots] = useState(null);
-  const [activeView, setActiveView] = useState('FEFO'); // 'FEFO' | 'SIGNATURE_RECHARTS'
 
   // Categories list
   const categories = useMemo(() => {
@@ -80,49 +80,59 @@ export default function ExecutiveDashboard({
 
   return (
     <div className="space-y-6">
-      {/* Top View Mode Switcher: Raw Materials FEFO vs Recharts Signature Delicacies */}
-      <div className="bg-white p-2 rounded-2xl border border-[#E2D1B8] shadow-sm flex flex-col sm:flex-row justify-between items-center gap-3">
-        <div className="flex items-center gap-2 w-full sm:w-auto">
-          <button
-            onClick={() => setActiveView('FEFO')}
-            className={`flex-1 sm:flex-none px-4 py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 ${
-              activeView === 'FEFO'
-                ? 'bg-[#3D1C52] text-white shadow-sm'
-                : 'bg-[#FAF6EE] text-gray-700 hover:bg-gray-200 border border-[#E2D1B8]'
-            }`}
-          >
-            <Warehouse size={15} className={activeView === 'FEFO' ? 'text-[#C8963E]' : 'text-gray-500'} />
-            <span>1. Raw Materials Perpetual Array &amp; FEFO</span>
-          </button>
-          <button
-            onClick={() => setActiveView('SIGNATURE_RECHARTS')}
-            className={`flex-1 sm:flex-none px-4 py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 ${
-              activeView === 'SIGNATURE_RECHARTS'
-                ? 'bg-[#C8963E] text-[#240e32] shadow-sm font-extrabold'
-                : 'bg-[#FAF6EE] text-gray-700 hover:bg-gray-200 border border-[#E2D1B8]'
-            }`}
-          >
-            <BarChart3 size={15} className={activeView === 'SIGNATURE_RECHARTS' ? 'text-[#240e32]' : 'text-[#C8963E]'} />
-            <span>2. Signature Products Analytics (Recharts: Biscocho &amp; Otap)</span>
-            <span className="text-[10px] bg-[#5B2E7A] text-white px-1.5 py-0.2 rounded-full font-bold ml-1">
-              New
+      {/* Floor Requisition & Outlet Activity Summary Strip */}
+      <div className="bg-gradient-to-r from-[#240e32] to-[#3D1C52] text-white p-4 rounded-2xl border border-[#C8963E]/40 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="bg-[#C8963E] text-[#240e32] text-[10px] font-bold px-2 py-0.5 rounded uppercase">
+              Production Floor &amp; Outlets
             </span>
-          </button>
+            <span className="text-xs text-[#E5C585]">Real-time Requisition &amp; Scaling Intake</span>
+          </div>
+          <h3 className="font-serif font-bold text-lg text-white mt-1">
+            Indangan Central Plant Bodega Operations
+          </h3>
+          <p className="text-xs text-gray-300">
+            Monitoring {inventory.length} warehouse materials across 4 chambers · Live FEFO stock balances.
+          </p>
         </div>
 
-        <div className="text-xs text-gray-500 font-medium px-2 hidden lg:block">
-          {activeView === 'FEFO' 
-            ? 'Monitoring 69 bulk raw material lots across 4 bodega chambers' 
-            : 'Visualizing finished goods burn rates, WIP, and Biscocho & Otap reserve buffers'}
+        {/* Live Counters */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={() => onQuickAction('batching')}
+            className="bg-white/10 hover:bg-white/20 border border-white/20 px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition"
+          >
+            <Scale size={14} className="text-[#E5C585]" />
+            <span>Kitting Queue:</span>
+            <span className="font-mono font-bold text-[#E5C585] bg-[#C8963E]/30 px-2 py-0.5 rounded">
+              {batchOrders.filter(b => b.status === 'PENDING_BATCHING').length} Pending
+            </span>
+          </button>
+
+          <button
+            onClick={() => onQuickAction('issuance')}
+            className="bg-white/10 hover:bg-white/20 border border-white/20 px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition"
+          >
+            <FileText size={14} className="text-emerald-400" />
+            <span>Material Slips:</span>
+            <span className="font-mono font-bold text-emerald-400 bg-emerald-500/20 px-2 py-0.5 rounded">
+              {withdrawals.length} Slips
+            </span>
+          </button>
+
+          <button
+            onClick={() => onQuickAction('orderHistory')}
+            className="bg-[#C8963E] hover:bg-[#b58330] text-[#240e32] font-bold px-3 py-2 rounded-xl text-xs transition flex items-center gap-1.5 shadow"
+          >
+            <Store size={14} />
+            <span>Order Ledger</span>
+          </button>
         </div>
       </div>
 
-      {activeView === 'SIGNATURE_RECHARTS' ? (
-        <SignatureProductsDashboard onNavigateToBatching={() => onQuickAction('batching')} />
-      ) : (
-        <div className="space-y-6">
-          {/* Fresh Start / Physical Count Import Banner */}
-          <div className="bg-gradient-to-r from-[#FAF6EE] to-[#FFF9EE] p-4 rounded-xl border border-[#C8963E]/40 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-3">
+      {/* Fresh Start / Physical Count Import Banner */}
+      <div className="bg-gradient-to-r from-[#FAF6EE] to-[#FFF9EE] p-4 rounded-xl border border-[#C8963E]/40 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-xl bg-[#C8963E]/20 text-[#3D1C52] flex items-center justify-center font-bold flex-shrink-0">
                 <FileSpreadsheet size={20} className="text-[#C8963E]" />
@@ -526,8 +536,6 @@ export default function ExecutiveDashboard({
           </div>
         )}
       </div>
-        </div>
-      )}
 
       {/* MODAL: FEFO Lot Details Viewer */}
       {selectedItemLots && (

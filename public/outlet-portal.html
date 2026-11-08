@@ -84,6 +84,15 @@
       </button>
     </div>
 
+    <!-- Confirmation Toast Banner -->
+    <div id="confirmBox" class="hidden bg-emerald-50 border-2 border-emerald-500 text-emerald-900 p-4 rounded-2xl shadow-md transition space-y-1">
+      <div class="flex items-center gap-2">
+        <span class="text-lg">✓</span>
+        <h4 class="font-bold text-sm">Requisition Successfully Dispatched!</h4>
+      </div>
+      <p id="confirmDetails" class="text-xs"></p>
+    </div>
+
     <!-- ============================================================= -->
     <!-- FORM 1: RECIPE BATCHED INGREDIENTS (Form-ORD-001) -->
     <!-- ============================================================= -->
@@ -109,8 +118,8 @@
               <option value="Indangan - Biscocho Commercial Hall">Indangan - Biscocho Commercial Hall</option>
               <option value="Indangan - Otap Laminated Hall">Indangan - Otap Laminated Hall</option>
               <option value="Indangan - Hearth Bread Production Line">Indangan - Hearth Bread Production Line</option>
-              <option value="Indangan - Pastry, Cake & Sweets Line">Indangan - Pastry, Cake &amp; Sweets Line</option>
-              <option value="Indangan Facility Mess Hall (Staff Meals & Snacks)">Indangan Facility Mess Hall (Staff Meals &amp; Snacks)</option>
+              <option value="Indangan - Pastry, Cake &amp; Sweets Line">Indangan - Pastry, Cake &amp; Sweets Line</option>
+              <option value="Indangan Facility Mess Hall (Staff Meals &amp; Snacks)">Indangan Facility Mess Hall (Staff Meals &amp; Snacks)</option>
               <option value="Other Department (Write-in below)">Other Production Line / Branch (Write-in)</option>
             </select>
           </div>
@@ -130,38 +139,33 @@
           <!-- Recipe Formulation -->
           <div class="md:col-span-2">
             <label class="block font-bold text-gray-700 mb-1">Standardized Master Recipe Formulation *</label>
-            <select id="recipeSelect" class="w-full p-2.5 border border-gray-300 rounded-xl bg-white font-medium focus:ring-2 focus:ring-[#C8963E]" required>
-              <option value="BRD-PAN-6KG|Classic Pandesal – 6.0 kg 1st Class Flour Basis | Yield: ~170 pieces (35 g raw dough each)|170">BRD-PAN-6KG: Classic Pandesal – 6.0 kg 1st Class Flour Basis | Yield: ~170 pieces (35 g raw dough each)</option>
-              <option value="BRD-PAN-3KG|Classic Pandesal – 3.0 kg 1st Class Flour Basis | Yield: ~85 pieces (35 g raw dough each)|85">BRD-PAN-3KG: Classic Pandesal – 3.0 kg 1st Class Flour Basis | Yield: ~85 pieces (35 g raw dough each)</option>
-              <option value="BRD-PAN-001|Classic Pandesal – 12.5 kg Flour Blend (8.75 kg APF + 3.75 kg 3rd Class) | Yield: ~450 pieces (35 g raw dough each)|450">BRD-PAN-001: Classic Pandesal – 12.5 kg Flour Blend (8.75 kg APF + 3.75 kg 3rd Class) | Yield: ~450 pieces (35 g raw dough each)</option>
-              <option value="BRD-STR-001|Star Bread – 6.0 kg Flour Blend (4.2 kg 1st Class + 1.8 kg 3rd Class) | Yield: ~100 pieces (80 g each)|100">BRD-STR-001: Star Bread – 6.0 kg Flour Blend (4.2 kg 1st Class + 1.8 kg 3rd Class) | Yield: ~100 pieces (80 g each)</option>
-              <option value="BRD-SPN-001|Spanish Bread – 4.0 kg Flour Blend (3.0 kg 1st Class + 1.0 kg 3rd Class) | Yield: ~130 pieces|130">BRD-SPN-001: Spanish Bread – 4.0 kg Flour Blend (3.0 kg 1st Class + 1.0 kg 3rd Class) | Yield: ~130 pieces</option>
-              <option value="PST-ENS-001|Special Butter Ensaymada – 6.0 kg 1st Class Flour Basis | Yield: ~120 coiled units|120">PST-ENS-001: Special Butter Ensaymada – 6.0 kg 1st Class Flour Basis | Yield: ~120 coiled units</option>
-              <option value="BRD-BUN-001|Commercial Table Buns (Burger / Dinner) – 12.0 kg 1st Class Flour Basis | Yield: ~340 pieces (50 g each)|340">BRD-BUN-001: Commercial Table Buns (Burger / Dinner) – 12.0 kg 1st Class Flour Basis | Yield: ~340 pieces (50 g each)</option>
-              <option value="BRD-PTK-001|Putok Bread (Cracking Crown Roll) – 3.0 kg Flour Blend (2.1 kg 1st Class + 0.9 kg 3rd Class) | Yield: ~70 pieces (60 g each)|70">BRD-PTK-001: Putok Bread (Cracking Crown Roll) – 3.0 kg Flour Blend (2.1 kg 1st Class + 0.9 kg 3rd Class) | Yield: ~70 pieces (60 g each)</option>
-              <option value="FRI-SHK-001|Shakoy Bread (Twisted Fried Doughnut) – 5.0 kg Flour Blend (2.5 kg APF + 2.5 kg 3rd Class) | Yield: ~140 pieces (50 g each)|140">FRI-SHK-001: Shakoy Bread (Twisted Fried Doughnut) – 5.0 kg Flour Blend (2.5 kg APF + 2.5 kg 3rd Class) | Yield: ~140 pieces (50 g each)</option>
-              <option value="FRI-BNG-001|Binangkal – 3.0 kg Flour Blend (1.5 kg 1st Class + 1.5 kg 3rd Class) | Yield: ~260 pieces (15 g each)|260">FRI-BNG-001: Binangkal – 3.0 kg Flour Blend (1.5 kg 1st Class + 1.5 kg 3rd Class) | Yield: ~260 pieces (15 g each)</option>
-              <option value="FRI-DGH-001|Fried Yeast Doughnut – 5.0 kg All-Purpose Flour Basis | Yield: ~150 ring units|150">FRI-DGH-001: Fried Yeast Doughnut – 5.0 kg All-Purpose Flour Basis | Yield: ~150 ring units</option>
-              <option value="PST-HOP-001|Traditional Hopia / Pig-Pie – 2.0 kg Flour Blend (1.0 kg 1st Class + 1.0 kg 3rd Class) | Yield: ~120 pieces|120">PST-HOP-001: Traditional Hopia / Pig-Pie – 2.0 kg Flour Blend (1.0 kg 1st Class + 1.0 kg 3rd Class) | Yield: ~120 pieces</option>
-              <option value="PST-HPN-001|Hopia Panet (Mung Bean / Kundol) – 1.0 kg Flour Blend (0.75 kg 3rd Class + 0.25 kg 1st Class) | Yield: ~80 pieces|80">PST-HPN-001: Hopia Panet (Mung Bean / Kundol) – 1.0 kg Flour Blend (0.75 kg 3rd Class + 0.25 kg 1st Class) | Yield: ~80 pieces</option>
-              <option value="PST-HMN-001|Half Moon Pastry – 3.0 kg 3rd Class Flour Basis | Yield: ~110 crescent-shaped pieces|110">PST-HMN-001: Half Moon Pastry – 3.0 kg 3rd Class Flour Basis | Yield: ~110 crescent-shaped pieces</option>
-              <option value="PST-CSB-001|Rich Cheese Bar – 2.0 kg All-Purpose Flour Basis | Yield: ~100 rectangular bar pieces|100">PST-CSB-001: Rich Cheese Bar – 2.0 kg All-Purpose Flour Basis | Yield: ~100 rectangular bar pieces</option>
-              <option value="CKI-CRK-001|Crinkle Cookies – 2.5 kg 3rd Class Flour | Yield: ~220 cookies|220">CKI-CRK-001: Crinkle Cookies – 2.5 kg 3rd Class Flour | Yield: ~220 cookies</option>
-              <option value="BRD-PTS-001|Patatas Bread – 3.0 kg 3rd Class Flour Basis | Yield: ~90 pieces|90">BRD-PTS-001: Patatas Bread – 3.0 kg 3rd Class Flour Basis | Yield: ~90 pieces</option>
-              <option value="BRD-SWT-001|Sweetheart Bread – 3.0 kg Flour Blend (2.0 kg 1st Class + 1.0 kg 3rd Class) | Yield: ~85 heart-shaped pieces|85">BRD-SWT-001: Sweetheart Bread – 3.0 kg Flour Blend (2.0 kg 1st Class + 1.0 kg 3rd Class) | Yield: ~85 heart-shaped pieces</option>
-              <option value="DEL-BGB-001|Bagong Bayan Reconstituted Delicacy – 12.0 kg Starch Base (6.0 kg 3rd Class Flour + 6.0 kg Breadcrumbs) | Yield: ~350 pieces|350">DEL-BGB-001: Bagong Bayan Reconstituted Delicacy – 12.0 kg Starch Base (6.0 kg 3rd Class Flour + 6.0 kg Breadcrumbs) | Yield: ~350 pieces</option>
-              <option value="DEL-BGP-001|Bagong Bayan Panit (Red Shell) – 3.0 kg 1st Class Flour Basis | Yield: Wraps ~350 pieces|350">DEL-BGP-001: Bagong Bayan Panit (Red Shell) – 3.0 kg 1st Class Flour Basis | Yield: Wraps ~350 pieces</option>
-              <option value="DEL-DBC-001|Double Body Coconut Delicacy – 3.0 kg 3rd Class Flour Basis | Yield: ~100 paired twin units|100">DEL-DBC-001: Double Body Coconut Delicacy – 3.0 kg 3rd Class Flour Basis | Yield: ~100 paired twin units</option>
-              <option value="DEL-DBU-001|Double Body Ube Delicacy – 3.0 kg 3rd Class Flour Basis | Yield: ~100 paired purple twin units|100">DEL-DBU-001: Double Body Ube Delicacy – 3.0 kg 3rd Class Flour Basis | Yield: ~100 paired purple twin units</option>
-              <option value="DEL-PUD-001|Reconstituted Bakery Pudding – 15.0 kg Breadcrumb Base | Yield: ~180 square portions|180">DEL-PUD-001: Reconstituted Bakery Pudding – 15.0 kg Breadcrumb Base | Yield: ~180 square portions</option>
-              <option value="STM-SPO-001|Siopao Steamed Bun Dough – 1.5 kg Starch Base (1.0 kg APF + 0.5 kg Cornstarch) | Yield: ~35 steamed bun units|35">STM-SPO-001: Siopao Steamed Bun Dough – 1.5 kg Starch Base (1.0 kg APF + 0.5 kg Cornstarch) | Yield: ~35 steamed bun units</option>
-              <option value="DES-LCH-001|Classic Leche Flan – 10 Fresh Eggs Basis | Yield: 4 Oval Llanera Molds|4">DES-LCH-001: Classic Leche Flan – 10 Fresh Eggs Basis | Yield: 4 Oval Llanera Molds</option>
-              <option value="BIS-001|Biscocho Toasted Bread Delicacy – 25.0 kg 1st Class Hard Wheat Flour Basis | Yield: ~1,000 finished toasted pieces (83 packs)|1000">BIS-001: Biscocho Toasted Bread Delicacy – 25.0 kg 1st Class Hard Wheat Flour Basis | Yield: ~1,000 finished toasted pieces (83 packs)</option>
-              <option value="OTP-001|Otap Layered Puff Pastry – 25.0 kg Flour Blend (18.75 kg 1st Class + 6.25 kg 3rd Class) | Yield: ~1,200 finished oval pieces (100 dozen)|1200">OTP-001: Otap Layered Puff Pastry – 25.0 kg Flour Blend (18.75 kg 1st Class + 6.25 kg 3rd Class) | Yield: ~1,200 finished oval pieces (100 dozen)</option>
-              <option value="BRD-UBE-001|Special Ube Cheese Pandesal – 10.0 kg All-Purpose Flour Basis | Yield: ~300 pieces|300">BRD-UBE-001: Special Ube Cheese Pandesal – 10.0 kg All-Purpose Flour Basis | Yield: ~300 pieces</option>
-              <option value="BRD-MON-001|Classic Monay & Sweet Loaf – 12.5 kg All-Purpose Flour Basis | Yield: ~250 pieces|250">BRD-MON-001: Classic Monay & Sweet Loaf – 12.5 kg All-Purpose Flour Basis | Yield: ~250 pieces</option>
-              <option value="SUB-GLZ-001|Biscocho Buttermilk Sweet Glaze – 10.0 kg Sugar Sub-Assembly | Yield: Glazes ~1,500 slices|1500">SUB-GLZ-001: Biscocho Buttermilk Sweet Glaze – 10.0 kg Sugar Sub-Assembly | Yield: Glazes ~1,500 slices</option>
+            <select id="recipeSelect" class="w-full p-2.5 border border-gray-300 rounded-xl bg-white font-medium focus:ring-2 focus:ring-[#C8963E]" required onchange="updateRecipePreview()">
+              <!-- Dynamically populated from ALL_MASTER_RECIPES -->
             </select>
+          </div>
+
+          <!-- Dynamic Formulation Yield & Economics Card -->
+          <div class="md:col-span-2 bg-[#FAF6EE] p-3.5 rounded-xl border border-[#E2D1B8] flex flex-wrap items-center justify-between gap-3 text-xs">
+            <div>
+              <span class="text-gray-500 text-[10px] uppercase font-bold">Standard Piece Yield @ 1.0x:</span>
+              <p id="previewBaseYield" class="font-bold text-[#3D1C52]">~85 pieces</p>
+            </div>
+            <div>
+              <span class="text-gray-500 text-[10px] uppercase font-bold">Total Batch Yield:</span>
+              <p id="previewTotalYield" class="font-extrabold text-[#1E7A3E] text-sm">85 pieces</p>
+            </div>
+            <div>
+              <span class="text-gray-500 text-[10px] uppercase font-bold">Unit Production Cost:</span>
+              <p id="previewUnitCost" class="font-mono text-gray-700">₱1.45</p>
+            </div>
+            <div>
+              <span class="text-gray-500 text-[10px] uppercase font-bold">Suggested Retail Price (SRP):</span>
+              <p id="previewSrp" class="font-mono font-bold text-[#5B2E7A]">₱3.00</p>
+            </div>
+            <div>
+              <span class="text-gray-500 text-[10px] uppercase font-bold">Gross Margin:</span>
+              <p id="previewMargin" class="font-bold text-emerald-700">51.7%</p>
+            </div>
           </div>
 
           <!-- Multiplier -->
@@ -176,6 +180,7 @@
               step="0.25" 
               class="w-full p-2.5 border border-gray-300 rounded-xl font-mono font-bold text-[#5B2E7A] focus:ring-2 focus:ring-[#C8963E]"
               required
+              oninput="updateRecipePreview()"
             >
           </div>
 
@@ -222,7 +227,7 @@
             Form-WAR-001 · Raw Material Requisition
           </span>
           <h3 class="text-lg font-bold font-serif text-[#1E7A3E] mt-1">Raw Material &amp; Packaging Withdrawal Request</h3>
-          <p class="text-xs text-gray-500">Request bulk ingredients, fresh eggs, sugar, butter, or packaging for Indangan Mess Hall meals/snacks and plant operations.</p>
+          <p class="text-xs text-gray-500">Request bulk flours, fresh eggs, sugars, margarines, dairy, or packaging for Indangan Mess Hall meals/snacks and plant operations.</p>
         </div>
       </div>
 
@@ -232,14 +237,15 @@
           <div>
             <label class="block font-bold text-gray-700 mb-1">Requesting Production Line / Facility *</label>
             <select id="matLineSelect" class="w-full p-2.5 border border-gray-300 rounded-xl bg-white font-medium focus:ring-2 focus:ring-[#1E7A3E]" required>
-              <option value="Indangan Facility Mess Hall (Staff Meals & Snacks)">Indangan Facility Mess Hall (Staff Meals &amp; Snacks)</option>
+              <option value="Indangan Facility Mess Hall (Staff Meals &amp; Snacks)">Indangan Facility Mess Hall (Staff Meals &amp; Snacks)</option>
               <option value="Pan de Verde Outlet (Communal, Davao City)">Pan de Verde Outlet (Communal)</option>
               <option value="Laurice Delicacies Outlet (Bankerohan, Davao City)">Laurice Delicacies Outlet (Bankerohan)</option>
               <option value="Indangan - Biscocho Commercial Hall">Indangan - Biscocho Commercial Hall</option>
               <option value="Indangan - Otap Laminated Hall">Indangan - Otap Laminated Hall</option>
               <option value="Indangan - Hearth Bread Production Line">Indangan - Hearth Bread Production Line</option>
-              <option value="Indangan - Pastry, Cake & Sweets Line">Indangan - Pastry, Cake &amp; Sweets Line</option>
-              <option value="Facility Maintenance & Plant Sanitation">Facility Maintenance &amp; Plant Sanitation</option>
+              <option value="Indangan - Pastry, Cake &amp; Sweets Line">Indangan - Pastry, Cake &amp; Sweets Line</option>
+              <option value="Facility Maintenance &amp; Plant Sanitation">Facility Maintenance &amp; Plant Sanitation</option>
+              <option value="Other Production Line / Branch (Write-in)">Other Production Line / Branch (Write-in)</option>
             </select>
           </div>
 
@@ -249,7 +255,7 @@
             <input 
               type="text" 
               id="matPersonInput" 
-              placeholder="e.g. Chef Mario (Mess Hall Cook) / Ate Nelia" 
+              placeholder="e.g. Maria Elena / Indangan Cook" 
               class="w-full p-2.5 border border-gray-300 rounded-xl font-medium focus:ring-2 focus:ring-[#1E7A3E]"
               required
             >
@@ -257,12 +263,14 @@
 
           <!-- Purpose -->
           <div>
-            <label class="block font-bold text-gray-700 mb-1">Consumption Purpose / Category *</label>
+            <label class="block font-bold text-gray-700 mb-1">Consumption Purpose *</label>
             <select id="matPurposeSelect" class="w-full p-2.5 border border-gray-300 rounded-xl bg-white font-medium focus:ring-2 focus:ring-[#1E7A3E]">
-              <option value="Facility Mess Hall - Staff Meals & Snacks Consumption">Facility Mess Hall - Staff Meals &amp; Snacks Consumption</option>
+              <option value="Facility Mess Hall - Staff Meals &amp; Snacks Consumption">Facility Mess Hall - Staff Meals &amp; Snacks Consumption</option>
               <option value="Commercial Production Run / Daily Baking">Commercial Production Run / Daily Baking</option>
+              <option value="Branch / Outlet Retail Replenishment">Branch / Outlet Retail Replenishment</option>
               <option value="Emergency Production Line Shortage">Emergency Production Line Shortage</option>
-              <option value="Packaging & Dispatch Bay Supply">Packaging &amp; Dispatch Bay Supply</option>
+              <option value="Packaging &amp; Dispatch Bay Floor Supply">Packaging &amp; Dispatch Bay Floor Supply</option>
+              <option value="Plant Sanitation &amp; Facility Maintenance">Plant Sanitation &amp; Facility Maintenance</option>
               <option value="Miscellaneous Approved Internal Release">Miscellaneous Approved Internal Release</option>
             </select>
           </div>
@@ -272,7 +280,7 @@
         <div class="border border-gray-200 rounded-xl p-4 bg-[#FAF6EE] space-y-3">
           <div class="flex justify-between items-center">
             <span class="font-bold text-xs text-[#3D1C52] uppercase tracking-wider">
-              Requested Material Items:
+              Requested Material Items (All 75 Warehouse Materials &amp; Packaging):
             </span>
             <button 
               type="button" 
@@ -284,28 +292,7 @@
           </div>
 
           <div id="materialRowsContainer" class="space-y-2">
-            <!-- Default Rows -->
-            <div class="material-row bg-white p-2.5 rounded-xl border border-gray-200 flex flex-wrap items-center gap-3">
-              <div class="flex-1 min-w-[200px]">
-                <select class="mat-code-select w-full p-2 border border-gray-300 rounded-lg text-xs font-medium">
-                  <option value="RM-DRY-001|Fresh Farm Eggs (Coop)|pcs|7">RM-DRY-001: Fresh Farm Eggs (Coop) · pcs</option>
-                  <option value="RM-SWT-001|Premium Refined White Sugar (Victorias)|kg|78">RM-SWT-001: Refined White Sugar (Victorias) · kg</option>
-                  <option value="RM-SWT-002|Washed Raw Sugar (Brown Sugar)|kg|65">RM-SWT-002: Brown Sugar · kg</option>
-                  <option value="RM-FAT-001|Buttercup Margarine (500g)|block|95">RM-FAT-001: Buttercup Margarine · block</option>
-                  <option value="RM-FAT-001-BUTTER|Magnolia Gold Unsalted Butter|block|135">RM-FAT-001-BUTTER: Magnolia Gold Unsalted Butter · block</option>
-                  <option value="RM-DRY-002|Condensada (Master Chef 1kg)|kg|65">RM-DRY-002: Condensada (Master Chef 1kg) · kg</option>
-                  <option value="RM-DRY-003|Evaporada (Jersey 370ml)|L|28">RM-DRY-003: Evaporada (Jersey 370ml) · L</option>
-                  <option value="RM-DRY-004|Skimmed Milk Powder (Farmland)|kg|154">RM-DRY-004: Skimmed Milk Powder · kg</option>
-                  <option value="RM-FLR-001|Montana Hard Wheat Bread Flour|kg|44">RM-FLR-001: Montana Hard Wheat Bread Flour · kg</option>
-                  <option value="PM-BAG-001|Calypso Poly Bag 7x14|pcs|0.56">PM-BAG-001: Calypso Poly Bag 7x14 · pcs</option>
-                  <option value="PM-CUP-001|Baking Cups 5 1/2 oz|pcs|0.28">PM-CUP-001: Baking Cups 5 1/2 oz · pcs</option>
-                </select>
-              </div>
-              <div class="w-28">
-                <input type="number" min="1" step="any" value="30" placeholder="Quantity" class="mat-qty-input w-full p-2 border border-gray-300 rounded-lg text-xs font-mono font-bold text-[#1E7A3E]">
-              </div>
-              <button type="button" onclick="removeMaterialRow(this)" class="text-red-500 hover:text-red-700 p-1.5 rounded">✕</button>
-            </div>
+            <!-- Dynamically populated rows -->
           </div>
         </div>
 
@@ -379,124 +366,335 @@
             <span class="text-[10px] text-gray-500 mt-0.5 block">All flour types combined (Base for Baker's %)</span>
           </div>
 
-          <!-- Flour Blend Description -->
+          <!-- Flour Description -->
           <div>
-            <label class="block font-bold text-gray-700 mb-1">Flour Blend Composition / Description *</label>
-            <input type="text" id="specFlourDescInput" placeholder="e.g. 1st Class Flour Basis or Blend (2kg APF + 1kg 3rd Class)" value="1st Class Hard Wheat Flour Basis" class="w-full p-2.5 border border-gray-300 rounded-xl font-medium focus:ring-2 focus:ring-[#B87333]" required>
+            <label class="block font-bold text-gray-700 mb-1">Flour Types Specification *</label>
+            <input type="text" id="specFlourDescInput" value="1st Class Hard Wheat Flour Basis" class="w-full p-2.5 border border-gray-300 rounded-xl font-medium focus:ring-2 focus:ring-[#B87333]" required>
           </div>
 
-          <!-- Piece Yield -->
+          <!-- Target Yield -->
           <div>
-            <label class="block font-bold text-gray-700 mb-1">Standard Piece Yield *</label>
-            <input type="number" id="specYieldInput" min="1" value="100" class="w-full p-2.5 border border-gray-300 rounded-xl font-mono font-bold text-[#1E7A3E] focus:ring-2 focus:ring-[#B87333]" required>
+            <label class="block font-bold text-gray-700 mb-1">Standard Piece Yield (units) *</label>
+            <input type="number" id="specYieldInput" min="1" value="100" class="w-full p-2.5 border border-gray-300 rounded-xl font-mono font-bold text-gray-800 focus:ring-2 focus:ring-[#B87333]" required>
           </div>
 
-          <!-- Piece Weight -->
+          <!-- Unit Piece Weight -->
           <div>
-            <label class="block font-bold text-gray-700 mb-1">Raw Dough Weight per Piece (Grams)</label>
-            <input type="number" id="specWeightInput" min="5" value="40" placeholder="e.g. 40" class="w-full p-2.5 border border-gray-300 rounded-xl font-mono font-medium focus:ring-2 focus:ring-[#B87333]">
+            <label class="block font-bold text-gray-700 mb-1">Piece Scaling Weight (grams) *</label>
+            <input type="number" id="specWeightInput" min="5" value="40" class="w-full p-2.5 border border-gray-300 rounded-xl font-mono font-bold text-gray-800 focus:ring-2 focus:ring-[#B87333]" required>
           </div>
 
-          <!-- Target SRP -->
+          <!-- Suggested Retail Price (SRP) -->
           <div>
-            <label class="block font-bold text-gray-700 mb-1">Target Suggested Retail Price (SRP ₱) *</label>
-            <input type="number" id="specSrpInput" min="0.5" step="0.5" value="8.0" class="w-full p-2.5 border border-gray-300 rounded-xl font-mono font-bold text-emerald-700 focus:ring-2 focus:ring-[#B87333]" required>
+            <label class="block font-bold text-gray-700 mb-1">Suggested Retail Price (SRP ₱) *</label>
+            <input type="number" id="specSrpInput" min="1" step="0.25" value="8.00" class="w-full p-2.5 border border-gray-300 rounded-xl font-mono font-bold text-[#1E7A3E] focus:ring-2 focus:ring-[#B87333]" required>
           </div>
 
-          <!-- Estimated Cost -->
+          <!-- Estimated Unit Cost -->
           <div>
-            <label class="block font-bold text-gray-700 mb-1">Estimated Unit Production Cost (₱)</label>
-            <input type="number" id="specCostInput" min="0.1" step="0.1" value="3.5" class="w-full p-2.5 border border-gray-300 rounded-xl font-mono font-bold text-gray-700 focus:ring-2 focus:ring-[#B87333]">
+            <label class="block font-bold text-gray-700 mb-1">Estimated Unit Production Cost (₱) *</label>
+            <input type="number" id="specCostInput" min="0.5" step="0.05" value="3.50" class="w-full p-2.5 border border-gray-300 rounded-xl font-mono font-bold text-gray-700 focus:ring-2 focus:ring-[#B87333]" required>
           </div>
         </div>
 
-        <!-- Ingredients Section -->
-        <div class="bg-[#FAF6EE] p-4 rounded-xl border border-[#E2D1B8] space-y-3">
+        <!-- Specialty Ingredients Table -->
+        <div class="border border-gray-200 rounded-xl p-4 bg-[#FAF6EE] space-y-3">
           <div class="flex justify-between items-center">
             <div>
-              <span class="font-bold text-gray-800 text-xs uppercase tracking-wider">Formula Bill of Materials</span>
-              <p class="text-[10px] text-gray-500">Specify ingredient components and weight in grams per batch.</p>
+              <span class="font-bold text-xs text-[#3D1C52] uppercase tracking-wider block">
+                Batch Ingredient Formula (Bill of Materials):
+              </span>
+              <span class="text-[10px] text-gray-500">Specify exact ingredient quantities in grams per batch</span>
             </div>
-            <button type="button" onclick="addSpecIngredientRow()" class="bg-[#B87333] hover:bg-[#8F5522] text-white px-3 py-1.5 rounded-lg font-bold text-[11px] shadow-sm">
-              + Add Ingredient
+            <button 
+              type="button" 
+              onclick="addSpecIngredientRow()"
+              class="bg-[#B87333] hover:bg-[#9c6028] text-white font-bold text-[11px] px-3 py-1.5 rounded-lg shadow transition"
+            >
+              + Add Ingredient Line
             </button>
           </div>
 
           <div id="specIngredientsContainer" class="space-y-2">
-            <div class="spec-ing-row bg-white p-2.5 rounded-xl border border-gray-200 flex flex-wrap items-center gap-3">
-              <div class="flex-1 min-w-[200px]">
-                <input type="text" placeholder="Ingredient Name" value="1st Class Hard Wheat Flour" class="spec-ing-name w-full p-2 border border-gray-300 rounded-lg text-xs font-medium" required>
-              </div>
-              <div class="w-28 flex items-center gap-1">
-                <input type="number" min="1" value="3000" placeholder="Grams" class="spec-ing-grams w-full p-2 border border-gray-300 rounded-lg text-xs font-mono font-bold text-[#5B2E7A]" required>
-                <span class="text-[11px] font-bold text-gray-500">g</span>
-              </div>
-              <button type="button" onclick="removeSpecIngredientRow(this)" class="text-red-500 hover:text-red-700 p-1.5 rounded">✕</button>
-            </div>
-            <div class="spec-ing-row bg-white p-2.5 rounded-xl border border-gray-200 flex flex-wrap items-center gap-3">
-              <div class="flex-1 min-w-[200px]">
-                <input type="text" placeholder="Ingredient Name" value="Crystal Brown Sugar" class="spec-ing-name w-full p-2 border border-gray-300 rounded-lg text-xs font-medium" required>
-              </div>
-              <div class="w-28 flex items-center gap-1">
-                <input type="number" min="1" value="600" placeholder="Grams" class="spec-ing-grams w-full p-2 border border-gray-300 rounded-lg text-xs font-mono font-bold text-[#5B2E7A]" required>
-                <span class="text-[11px] font-bold text-gray-500">g</span>
-              </div>
-              <button type="button" onclick="removeSpecIngredientRow(this)" class="text-red-500 hover:text-red-700 p-1.5 rounded">✕</button>
-            </div>
-            <div class="spec-ing-row bg-white p-2.5 rounded-xl border border-gray-200 flex flex-wrap items-center gap-3">
-              <div class="flex-1 min-w-[200px]">
-                <input type="text" placeholder="Ingredient Name" value="Bakery Margarine" class="spec-ing-name w-full p-2 border border-gray-300 rounded-lg text-xs font-medium" required>
-              </div>
-              <div class="w-28 flex items-center gap-1">
-                <input type="number" min="1" value="180" placeholder="Grams" class="spec-ing-grams w-full p-2 border border-gray-300 rounded-lg text-xs font-mono font-bold text-[#5B2E7A]" required>
-                <span class="text-[11px] font-bold text-gray-500">g</span>
-              </div>
-              <button type="button" onclick="removeSpecIngredientRow(this)" class="text-red-500 hover:text-red-700 p-1.5 rounded">✕</button>
-            </div>
+            <!-- Dynamically populated ingredient lines -->
           </div>
         </div>
 
-        <!-- Mixing Instructions -->
         <div>
-          <label class="block font-bold text-gray-700 mb-1">Mixing / Proofing / Baking SOP Notes</label>
-          <textarea id="specNotesInput" rows="2" placeholder="e.g. Spiral mix speed 1 for 4 mins, speed 2 for 8 mins. Target dough exit temp: 26°C – 28°C. Proofing at 35°C / 80% RH." class="w-full p-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#B87333]"></textarea>
+          <label class="block font-bold text-gray-700 mb-1">Mixing &amp; Proofing Instructions / CCPs</label>
+          <textarea 
+            id="specNotesInput" 
+            rows="2" 
+            placeholder="e.g. Mix spiral for 2 mins low, 6 mins high until gluten windowpane. Proof 60 mins @ 34°C. Exit dough temp 26°C." 
+            class="w-full p-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#B87333]"
+          ></textarea>
         </div>
 
         <div class="pt-2 flex justify-end">
-          <button type="submit" class="bg-[#B87333] hover:bg-[#8F5522] text-white font-bold text-xs px-6 py-3 rounded-xl shadow-md transition flex items-center gap-2">
-            <span>✓ Submit Specialty Recipe to QA &amp; Master Register (`Form-RND-001`)</span>
+          <button 
+            type="submit" 
+            class="bg-[#B87333] hover:bg-[#9c6028] text-white font-bold text-xs px-6 py-3 rounded-xl shadow-md transition flex items-center gap-2"
+          >
+            <span>✓ Submit Specialty Recipe to Romeo Malusay &amp; Zaphyr Pomicpic (`Form-RND-001`)</span>
           </button>
         </div>
       </form>
     </div>
 
-    <!-- Confirmation Modal / Toast -->
-    <div id="confirmBox" class="hidden bg-emerald-50 border border-emerald-300 text-emerald-900 p-5 rounded-2xl shadow-lg space-y-2 animate-in fade-in">
-      <div class="flex items-center gap-2 font-bold text-base text-emerald-800">
-        <span>✓ Requisition Successfully Dispatched!</span>
-      </div>
-      <p id="confirmDetails" class="text-xs"></p>
-      <div class="pt-2 flex gap-3 text-xs">
-        <a href="/" class="bg-[#3D1C52] text-white px-4 py-2 rounded-xl font-bold shadow hover:bg-[#240e32]">
-          Open Bodega WMS Dashboard
-        </a>
-        <button onclick="document.getElementById('confirmBox').classList.add('hidden')" class="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-xl font-bold hover:bg-gray-50">
-          Submit Another Requisition
-        </button>
-      </div>
-    </div>
   </main>
 
-  <footer class="bg-[#240e32] text-gray-400 text-center py-4 text-xs border-t border-[#C8963E]/30 mt-auto">
-    <p>Jang-Jang Bakeshop &amp; Kingdom Confectionary · Manual of Operations v4.6</p>
-    <p class="text-[11px] text-[#E5C585]">Indangan Plant FDA LTO #3000013388488 · Davao City, Philippines</p>
+  <footer class="bg-[#240e32] text-[#E5C585] text-center p-3 text-[11px] border-t border-[#C8963E]/30">
+    JJB Warehouse &amp; Kitting OS · Indangan Central Manufacturing Plant (FDA LTO #3000013388488) · Dual-Access Architecture
   </footer>
 
   <script>
-    // Set default dates
+    // -------------------------------------------------------------
+    // MASTER RECIPES REGISTER (30 STANDARDIZED COMMERCIAL RECIPES)
+    // -------------------------------------------------------------
+    const ALL_MASTER_RECIPES = [
+      { sku: "BRD-PAN-6KG", name: "Classic Pandesal – 6.0 kg 1st Class Flour Basis | Yield: ~170 pieces (35 g raw dough each)", yield: 170, flourKg: 6, unitCost: 1.45, srp: 3.00, margin: 51.7 },
+      { sku: "BRD-PAN-3KG", name: "Classic Pandesal – 3.0 kg 1st Class Flour Basis | Yield: ~85 pieces (35 g raw dough each)", yield: 85, flourKg: 3, unitCost: 1.45, srp: 3.00, margin: 51.7 },
+      { sku: "BRD-PAN-001", name: "Classic Pandesal – 12.5 kg Flour Blend (8.75 kg APF + 3.75 kg 3rd Class) | Yield: ~450 pieces (35 g raw dough each)", yield: 450, flourKg: 12.5, unitCost: 1.45, srp: 3.00, margin: 51.7 },
+      { sku: "BRD-STR-001", name: "Star Bread – 6.0 kg Flour Blend (4.2 kg 1st Class + 1.8 kg 3rd Class) | Yield: ~100 pieces (80 g each)", yield: 100, flourKg: 6, unitCost: 3.85, srp: 8.00, margin: 51.9 },
+      { sku: "BRD-SPN-001", name: "Spanish Bread – 4.0 kg Flour Blend (3.0 kg 1st Class + 1.0 kg 3rd Class) | Yield: ~130 pieces", yield: 130, flourKg: 4, unitCost: 3.15, srp: 7.00, margin: 55.0 },
+      { sku: "PST-ENS-001", name: "Special Butter Ensaymada – 6.0 kg 1st Class Flour Basis | Yield: ~120 coiled units", yield: 120, flourKg: 6, unitCost: 6.50, srp: 15.00, margin: 56.7 },
+      { sku: "BRD-BUN-001", name: "Commercial Table Buns (Burger / Dinner) – 12.0 kg 1st Class Flour Basis | Yield: ~340 pieces (50 g each)", yield: 340, flourKg: 12, unitCost: 2.10, srp: 5.00, margin: 58.0 },
+      { sku: "BRD-PTK-001", name: "Putok Bread (Cracking Crown Roll) – 3.0 kg Flour Blend (2.1 kg 1st Class + 0.9 kg 3rd Class) | Yield: ~70 pieces (60 g each)", yield: 70, flourKg: 3, unitCost: 2.60, srp: 6.00, margin: 56.7 },
+      { sku: "FRI-SHK-001", name: "Shakoy Bread (Twisted Fried Doughnut) – 5.0 kg Flour Blend (2.5 kg APF + 2.5 kg 3rd Class) | Yield: ~140 pieces (50 g each)", yield: 140, flourKg: 5, unitCost: 2.40, srp: 6.00, margin: 60.0 },
+      { sku: "FRI-BNG-001", name: "Binangkal – 3.0 kg Flour Blend (1.5 kg 1st Class + 1.5 kg 3rd Class) | Yield: ~260 pieces (15 g each)", yield: 260, flourKg: 3, unitCost: 1.15, srp: 3.00, margin: 61.7 },
+      { sku: "FRI-DGH-001", name: "Fried Yeast Doughnut – 5.0 kg All-Purpose Flour Basis | Yield: ~150 ring units", yield: 150, flourKg: 5, unitCost: 2.35, srp: 6.00, margin: 60.8 },
+      { sku: "PST-HOP-001", name: "Traditional Hopia / Pig-Pie – 2.0 kg Flour Blend (1.0 kg 1st Class + 1.0 kg 3rd Class) | Yield: ~120 pieces", yield: 120, flourKg: 2, unitCost: 4.20, srp: 10.00, margin: 58.0 },
+      { sku: "PST-HPN-001", name: "Hopia Panet (Mung Bean / Kundol) – 1.0 kg Flour Blend (0.75 kg 3rd Class + 0.25 kg 1st Class) | Yield: ~80 pieces", yield: 80, flourKg: 1, unitCost: 3.90, srp: 10.00, margin: 61.0 },
+      { sku: "PST-HMN-001", name: "Half Moon Pastry – 3.0 kg 3rd Class Flour Basis | Yield: ~110 crescent-shaped pieces", yield: 110, flourKg: 3, unitCost: 4.10, srp: 10.00, margin: 59.0 },
+      { sku: "PST-CSB-001", name: "Rich Cheese Bar – 2.0 kg All-Purpose Flour Basis | Yield: ~100 rectangular bar pieces", yield: 100, flourKg: 2, unitCost: 4.50, srp: 10.00, margin: 55.0 },
+      { sku: "CKI-CRK-001", name: "Crinkle Cookies – 2.5 kg 3rd Class Flour | Yield: ~220 cookies", yield: 220, flourKg: 2.5, unitCost: 1.95, srp: 5.00, margin: 61.0 },
+      { sku: "BRD-PTS-001", name: "Patatas Bread – 3.0 kg 3rd Class Flour Basis | Yield: ~90 pieces", yield: 90, flourKg: 3, unitCost: 2.95, srp: 7.00, margin: 57.9 },
+      { sku: "BRD-SWT-001", name: "Sweetheart Bread – 3.0 kg Flour Blend (2.0 kg 1st Class + 1.0 kg 3rd Class) | Yield: ~85 heart-shaped pieces", yield: 85, flourKg: 3, unitCost: 3.40, srp: 8.00, margin: 57.5 },
+      { sku: "DEL-BGB-001", name: "Bagong Bayan Reconstituted Delicacy – 12.0 kg Starch Base (6.0 kg 3rd Class Flour + 6.0 kg Breadcrumbs) | Yield: ~350 pieces", yield: 350, flourKg: 12, unitCost: 2.80, srp: 8.00, margin: 65.0 },
+      { sku: "DEL-BGP-001", name: "Bagong Bayan Panit (Red Shell) – 3.0 kg 1st Class Flour Basis | Yield: Wraps ~350 pieces", yield: 350, flourKg: 3, unitCost: 0.65, srp: 1.50, margin: 56.7 },
+      { sku: "DEL-DBC-001", name: "Double Body Coconut Delicacy – 3.0 kg 3rd Class Flour Basis | Yield: ~100 paired twin units", yield: 100, flourKg: 3, unitCost: 3.10, srp: 8.00, margin: 61.3 },
+      { sku: "DEL-DBU-001", name: "Double Body Ube Delicacy – 3.0 kg 3rd Class Flour Basis | Yield: ~100 paired purple twin units", yield: 100, flourKg: 3, unitCost: 3.40, srp: 9.00, margin: 62.2 },
+      { sku: "DEL-PUD-001", name: "Reconstituted Bakery Pudding – 15.0 kg Breadcrumb Base | Yield: ~180 square portions", yield: 180, flourKg: 15, unitCost: 4.80, srp: 15.00, margin: 68.0 },
+      { sku: "STM-SPO-001", name: "Siopao Steamed Bun Dough – 1.5 kg Starch Base (1.0 kg APF + 0.5 kg Cornstarch) | Yield: ~35 steamed bun units", yield: 35, flourKg: 1.5, unitCost: 8.50, srp: 20.00, margin: 57.5 },
+      { sku: "DES-LCH-001", name: "Classic Leche Flan – 10 Fresh Eggs Basis | Yield: 4 Oval Llanera Molds", yield: 4, flourKg: 3, unitCost: 38.00, srp: 90.00, margin: 57.8 },
+      { sku: "BIS-001", name: "Biscocho Toasted Bread Delicacy – 25.0 kg 1st Class Hard Wheat Flour Basis | Yield: ~1,000 finished toasted pieces (83 packs)", yield: 1000, flourKg: 25, unitCost: 22.50, srp: 45.00, margin: 50.0 },
+      { sku: "OTP-001", name: "Otap Layered Puff Pastry – 25.0 kg Flour Blend (18.75 kg 1st Class + 6.25 kg 3rd Class) | Yield: ~1,200 finished oval pieces (100 dozen)", yield: 1200, flourKg: 25, unitCost: 21.60, srp: 48.00, margin: 55.0 },
+      { sku: "BRD-UBE-001", name: "Special Ube Cheese Pandesal – 10.0 kg All-Purpose Flour Basis | Yield: ~300 pieces", yield: 300, flourKg: 10, unitCost: 4.20, srp: 10.00, margin: 58.0 },
+      { sku: "BRD-MON-001", name: "Classic Monay & Sweet Loaf – 12.5 kg All-Purpose Flour Basis | Yield: ~250 pieces", yield: 250, flourKg: 12.5, unitCost: 4.50, srp: 10.00, margin: 55.0 },
+      { sku: "SUB-GLZ-001", name: "Biscocho Buttermilk Sweet Glaze – 10.0 kg Sugar Sub-Assembly | Yield: Glazes ~1,500 slices", yield: 1500, flourKg: 3, unitCost: 120.00, srp: 220.00, margin: 45.5 }
+    ];
+
+    // -------------------------------------------------------------
+    // MASTER MATERIALS REGISTER (ALL 75 WAREHOUSE ITEMS & PACKAGING)
+    // -------------------------------------------------------------
+    const ALL_MASTER_MATERIALS = [
+      // Flour & Grains (8 items)
+      { code: "RM-FLR-001", category: "Flour & Grains", name: "All Purpose Flour", uom: "kg", cost: 42.0 },
+      { code: "RM-FLR-002", category: "Flour & Grains", name: "3rd Class Soft Wheat Flour (Isla - General Milling)", uom: "kg", cost: 36.8 },
+      { code: "RM-FLR-003", category: "Flour & Grains", name: "1st Class Hard Wheat Flour (Naga Rossa)", uom: "kg", cost: 44.8 },
+      { code: "RM-FLR-005", category: "Flour & Grains", name: "Refined Cornstarch (White Tower)", uom: "kg", cost: 34.0 },
+      { code: "RM-FLR-006", category: "Flour & Grains", name: "Soft Cake Flour (Low-Protein)", uom: "kg", cost: 39.2 },
+      { code: "RM-DRY-005", category: "Flour & Grains", name: "Desiccated Coconut (Good Seed Food Co. - 500g)", uom: "kg", cost: 95.0 },
+      { code: "RM-DRY-006", category: "Flour & Grains", name: "Sesame Seed — 1 kg", uom: "kg", cost: 195.0 },
+      { code: "RM-FLR-007", category: "Flour & Grains", name: "White Tower Cornstarch — 25 kg Sack", uom: "kg", cost: 34.0 },
+
+      // Sugars & Sweeteners (4 items)
+      { code: "RM-SWT-001", category: "Sugars & Sweeteners", name: "Crystal Brown Sugar", uom: "kg", cost: 44.0 },
+      { code: "RM-SWT-002", category: "Sugars & Sweeteners", name: "Refined White Sugar (Victorias)", uom: "kg", cost: 53.0 },
+      { code: "RM-SWT-003", category: "Sugars & Sweeteners", name: "Refined Iodized Fine Salt", uom: "kg", cost: 15.2 },
+      { code: "RM-SWT-004", category: "Sugars & Sweeteners", name: "Washed Raw Sugar", uom: "kg", cost: 48.0 },
+
+      // Fats & Oils (7 items)
+      { code: "RM-FAT-001", category: "Fats, Margarine & Oils", name: "Refrigerated Margarine (Buttercup)", uom: "kg", cost: 95.0 },
+      { code: "RM-FAT-001-BUTTER", category: "Fats, Margarine & Oils", name: "Unsalted Butter (Magnolia Gold)", uom: "kg", cost: 135.0 },
+      { code: "RM-FAT-002", category: "Fats, Margarine & Oils", name: "Coconut Oil (Marca Leon)", uom: "kg", cost: 85.3 },
+      { code: "RM-FAT-003", category: "Fats, Margarine & Oils", name: "Vegetable Shortening (Sunny Suy)", uom: "kg", cost: 52.5 },
+      { code: "RM-FAT-004", category: "Fats, Margarine & Oils", name: "Premium Margarine (Sunny Suy)", uom: "kg", cost: 59.0 },
+      { code: "RM-FAT-005", category: "Fats, Margarine & Oils", name: "Palm Oil (Unlabeled Bulk)", uom: "kg", cost: 81.2 },
+      { code: "RM-FAT-006", category: "Fats, Margarine & Oils", name: "Refined Vegetable Cooking Oil", uom: "kg", cost: 79.4 },
+
+      // Dairy & Eggs (5 items)
+      { code: "RM-DRY-001", category: "Dairy, Eggs & Milks", name: "Fresh Farm Eggs (Grade A - Coop)", uom: "pcs", cost: 7.0 },
+      { code: "RM-DRY-002", category: "Dairy, Eggs & Milks", name: "Sweetened Condensed Milk (Master Chef 1kg)", uom: "kg", cost: 65.0 },
+      { code: "RM-DRY-003", category: "Dairy, Eggs & Milks", name: "Evaporated Milk (Jersey 370ml)", uom: "L", cost: 28.0 },
+      { code: "RM-DRY-004", category: "Dairy, Eggs & Milks", name: "Skimmed Milk Powder (Farmland)", uom: "kg", cost: 154.0 },
+      { code: "RM-DRY-007", category: "Dairy, Eggs & Milks", name: "Condensed Creamer (Jersey 390g)", uom: "kg", cost: 52.0 },
+
+      // Leavening & Additives (9 items)
+      { code: "RM-LEV-001", category: "Leaveners & Additives", name: "Instant Dry Active Yeast (Mauripan / Saf-Instant)", uom: "kg", cost: 240.0 },
+      { code: "RM-LEV-002", category: "Leaveners & Additives", name: "Double Acting Baking Powder (White Angel)", uom: "kg", cost: 110.0 },
+      { code: "RM-LEV-003", category: "Leaveners & Additives", name: "Calcium Propionate (CSP Bread Mold Inhibitor)", uom: "kg", cost: 220.0 },
+      { code: "RM-LEV-004", category: "Leaveners & Additives", name: "Potassium Sorbate (Granular Antimicrobial)", uom: "kg", cost: 340.0 },
+      { code: "RM-LEV-005", category: "Leaveners & Additives", name: "Non-Bromated Bread Improver (Baker's Choice 1kg)", uom: "kg", cost: 280.0 },
+      { code: "RM-LEV-006", category: "Leaveners & Additives", name: "Carbonato — 1 kg", uom: "kg", cost: 120.0 },
+      { code: "RM-LEV-007", category: "Leaveners & Additives", name: "Carbonato — 500 g", uom: "kg", cost: 65.0 },
+      { code: "RM-LEV-008", category: "Leaveners & Additives", name: "Bakers Field Whip It", uom: "kg", cost: 260.0 },
+      { code: "RM-LEV-009", category: "Leaveners & Additives", name: "Baking Soda — 500 g", uom: "kg", cost: 55.0 },
+
+      // Flavors & Colors (6 items)
+      { code: "RM-FLV-001", category: "Flavors & Colors", name: "Ube Flavor & Color Blend (Unibake 5L)", uom: "L", cost: 370.0 },
+      { code: "RM-FLV-002", category: "Flavors & Colors", name: "Vanilla Flavor FF (Kanegie 3.79L)", uom: "L", cost: 224.0 },
+      { code: "RM-FLV-003", category: "Flavors & Colors", name: "Neco Egg Yellow Food Coloring Powder (500g)", uom: "kg", cost: 180.0 },
+      { code: "RM-FLV-005", category: "Flavors & Colors", name: "Dutché Special Alkalized Dark Cocoa Powder", uom: "kg", cost: 380.0 },
+      { code: "RM-FLV-006", category: "Flavors & Colors", name: "Neco Choco Brown 500g", uom: "kg", cost: 180.0 },
+      { code: "RM-FLV-007", category: "Flavors & Colors", name: "Neco Choco Brown 125g", uom: "kg", cost: 55.0 },
+
+      // Packaging Materials (35 items)
+      { code: "PM-PAP-001", category: "Packaging & Wrapping", name: "Glassine Wax Paper Sheets (Otap Wrapping)", uom: "pcs", cost: 0.84 },
+      { code: "PM-PAP-002", category: "Packaging & Wrapping", name: "Baking Pan Pattern Paper (Laminated Sheets)", uom: "pcs", cost: 0.90 },
+      { code: "PM-BOX-001", category: "Packaging & Wrapping", name: "Jang-Jang Master Shipping Carton Box (50 pk/box)", uom: "pcs", cost: 29.0 },
+      { code: "PM-ROL-001", category: "Packaging & Wrapping", name: "Plastic Cellophane Roll 25x50", uom: "pcs", cost: 280.0 },
+      { code: "PM-ROL-002", category: "Packaging & Wrapping", name: "Plastic Cellophane Roll 9x18", uom: "pcs", cost: 0.56 },
+      { code: "PM-BAG-001", category: "Packaging & Wrapping", name: "Calypso Poly Bag 7x14-01", uom: "pcs", cost: 0.56 },
+      { code: "PM-BAG-002", category: "Packaging & Wrapping", name: "Poly Bag 7x11-02", uom: "pcs", cost: 0.56 },
+      { code: "PM-BAG-003", category: "Packaging & Wrapping", name: "Poly Bag 5x6-01", uom: "pcs", cost: 0.56 },
+      { code: "PM-BAG-004", category: "Packaging & Wrapping", name: "Poly Bag 4x6-01", uom: "pcs", cost: 0.56 },
+      { code: "PM-BAG-005", category: "Packaging & Wrapping", name: "Poly Bag 6x10-01", uom: "pcs", cost: 0.56 },
+      { code: "PM-BAG-006", category: "Packaging & Wrapping", name: "Poly Bag 6x10-02", uom: "pcs", cost: 0.56 },
+      { code: "PM-BAG-007", category: "Packaging & Wrapping", name: "Poly Bag 10-18-01", uom: "pcs", cost: 0.56 },
+      { code: "PM-BAG-008", category: "Packaging & Wrapping", name: "Tasty Bread Bag 10x18", uom: "pcs", cost: 0.56 },
+      { code: "PM-BAG-009", category: "Packaging & Wrapping", name: "Special Bread Bag 5x12 SP", uom: "pcs", cost: 0.56 },
+      { code: "PM-BAG-010", category: "Packaging & Wrapping", name: "Long Bread Bag 7x14 SP", uom: "pcs", cost: 0.56 },
+      { code: "PM-CUP-001", category: "Packaging & Wrapping", name: "Baking Cups 5 1/2 oz", uom: "pcs", cost: 0.28 },
+      { code: "PM-CUP-002", category: "Packaging & Wrapping", name: "Baking Cups 2 oz (Circle)", uom: "pcs", cost: 0.28 },
+      { code: "PM-CUP-003", category: "Packaging & Wrapping", name: "Mamon Paper Cups", uom: "pcs", cost: 0.28 },
+      { code: "PM-CUP-004", category: "Packaging & Wrapping", name: "Torta Paper Cups", uom: "pcs", cost: 0.28 },
+      { code: "PM-BAG-011", category: "Packaging & Wrapping", name: "Sando Bag Carrier (Medium / Large)", uom: "pcs", cost: 0.56 },
+      { code: "PM-TPE-001", category: "Packaging & Wrapping", name: "Sealer Tape", uom: "pcs", cost: 28.0 },
+      { code: "PM-TPE-002", category: "Packaging & Wrapping", name: "Packing Tape 1.5 cm (1 inch)", uom: "pcs", cost: 35.0 },
+      { code: "PM-TPE-003", category: "Packaging & Wrapping", name: "Packing Tape 5 cm (1/2 inch)", uom: "pcs", cost: 55.0 },
+      { code: "PM-BAG-012", category: "Packaging & Wrapping", name: "Donewell 16x24 (500 pcs pack)", uom: "pcs", cost: 0.56 },
+      { code: "PM-BAG-013", category: "Packaging & Wrapping", name: "Smoke Plastic 14x20 (500 pcs pack)", uom: "pcs", cost: 0.56 },
+      { code: "PM-BAG-014", category: "Packaging & Wrapping", name: "COPP 7x11 Expandable", uom: "pcs", cost: 0.56 },
+      { code: "PM-BAG-015", category: "Packaging & Wrapping", name: "Tasty Bread SM Bag", uom: "pcs", cost: 0.56 },
+      { code: "PM-BAG-016", category: "Packaging & Wrapping", name: "Sabako 7x14 Bread Bag", uom: "pcs", cost: 0.56 },
+      { code: "PM-CUP-005", category: "Packaging & Wrapping", name: "Torta Cups 3 1/2", uom: "pcs", cost: 0.28 },
+      { code: "PM-CUP-006", category: "Packaging & Wrapping", name: "Bakerite Baking Cups 3 oz", uom: "pcs", cost: 0.28 },
+      { code: "PM-BAG-017", category: "Packaging & Wrapping", name: "Joker Excel 8x14 Bag", uom: "pcs", cost: 0.56 },
+      { code: "PM-BAG-018", category: "Packaging & Wrapping", name: "Sabako 4x6 002 (1,000/ream)", uom: "pcs", cost: 0.28 },
+      { code: "PM-BAG-019", category: "Packaging & Wrapping", name: "Sabako 5x6 002 (1,000/ream)", uom: "pcs", cost: 0.28 },
+      { code: "PM-BAG-020", category: "Packaging & Wrapping", name: "Sabako 10x18 (500/ream)", uom: "pcs", cost: 0.56 },
+      { code: "PM-BAG-021", category: "Packaging & Wrapping", name: "Cutty Shark Ice Bag 10x18 (1,000/ream)", uom: "pcs", cost: 0.28 },
+
+      // Utilities & Fuel (1 item)
+      { code: "UT-GAS-001", category: "Utilities & Fuel", name: "Solane LPG 50kg Industrial Tank", uom: "tank", cost: 2850.0 }
+    ];
+
+    // Helper: Read live inventory from localStorage if available
+    function getLiveInventoryMap() {
+      try {
+        const raw = localStorage.getItem('JJB_WMS_LIVE_V4_6_STATE_inventory');
+        if (raw) {
+          const arr = JSON.parse(raw);
+          const map = {};
+          arr.forEach(it => { map[it.code] = it; });
+          return map;
+        }
+      } catch(e) {}
+      return {};
+    }
+
+    // Initialize Dates
     const today = new Date().toISOString().slice(0, 10);
     document.getElementById('recipeDateInput').value = today;
     document.getElementById('matDateInput').value = today;
+
+    // Populate Recipe Dropdown
+    function initRecipeDropdown() {
+      const select = document.getElementById('recipeSelect');
+      select.innerHTML = '';
+      ALL_MASTER_RECIPES.forEach(r => {
+        const opt = document.createElement('option');
+        opt.value = r.sku;
+        opt.textContent = `${r.sku}: ${r.name}`;
+        select.appendChild(opt);
+      });
+      // Default to Classic Pandesal 6kg
+      select.value = 'BRD-PAN-6KG';
+      updateRecipePreview();
+    }
+
+    // Dynamic Recipe Preview Calculator
+    function updateRecipePreview() {
+      const sku = document.getElementById('recipeSelect').value;
+      const mult = parseFloat(document.getElementById('recipeMultiplierInput').value) || 1.0;
+      const rec = ALL_MASTER_RECIPES.find(r => r.sku === sku) || ALL_MASTER_RECIPES[0];
+
+      const totalPcs = Math.round(rec.yield * mult);
+      document.getElementById('previewBaseYield').textContent = `~${rec.yield} pcs (${rec.flourKg} kg flour)`;
+      document.getElementById('previewTotalYield').textContent = `${totalPcs.toLocaleString()} pieces (${(rec.flourKg * mult).toFixed(1)} kg flour)`;
+      document.getElementById('previewUnitCost').textContent = `₱${rec.unitCost.toFixed(2)}`;
+      document.getElementById('previewSrp').textContent = `₱${rec.srp.toFixed(2)}`;
+      document.getElementById('previewMargin').textContent = `${rec.margin}%`;
+    }
+
+    // Build Material Select Options HTML (with optgroups and live stock balances)
+    function buildMaterialOptionsHtml(selectedCode) {
+      const liveMap = getLiveInventoryMap();
+      const groups = {};
+      ALL_MASTER_MATERIALS.forEach(m => {
+        if (!groups[m.category]) groups[m.category] = [];
+        groups[m.category].push(m);
+      });
+
+      let html = '';
+      for (const cat in groups) {
+        html += `<optgroup label="${cat}">`;
+        groups[cat].forEach(m => {
+          const live = liveMap[m.code];
+          const bal = live ? live.currentBalance : null;
+          const balText = bal !== null ? ` [Bal: ${bal.toLocaleString()} ${m.uom}]` : '';
+          const isSel = m.code === selectedCode ? 'selected' : '';
+          // Encoded value: code|name|uom|cost
+          const val = `${m.code}|${m.name}|${m.uom}|${m.cost}`;
+          html += `<option value="${val}" ${isSel}>${m.code}: ${m.name} · ${m.uom}${balText} (₱${m.cost})</option>`;
+        });
+        html += `</optgroup>`;
+      }
+      return html;
+    }
+
+    // Material Row Management
+    function addMaterialRow(prefillCode, prefillQty) {
+      const container = document.getElementById('materialRowsContainer');
+      const row = document.createElement('div');
+      row.className = "material-row bg-white p-2.5 rounded-xl border border-gray-200 flex flex-wrap items-center gap-3";
+      
+      const code = prefillCode || ALL_MASTER_MATERIALS[0].code;
+      const qty = prefillQty || 1;
+
+      row.innerHTML = `
+        <div class="flex-1 min-w-[240px]">
+          <select class="mat-code-select w-full p-2 border border-gray-300 rounded-lg text-xs font-medium">
+            ${buildMaterialOptionsHtml(code)}
+          </select>
+        </div>
+        <div class="w-32 flex items-center gap-1">
+          <input type="number" min="0.1" step="any" value="${qty}" placeholder="Quantity" class="mat-qty-input w-full p-2 border border-gray-300 rounded-lg text-xs font-mono font-bold text-[#1E7A3E]">
+          <span class="text-[11px] font-bold text-gray-500 whitespace-nowrap mat-uom-label">units</span>
+        </div>
+        <button type="button" onclick="removeMaterialRow(this)" class="text-red-500 hover:text-red-700 p-1.5 rounded hover:bg-red-50" title="Remove row">✕</button>
+      `;
+
+      // Sync UOM label
+      const select = row.querySelector('.mat-code-select');
+      const uomLabel = row.querySelector('.mat-uom-label');
+      function syncUom() {
+        const parts = select.value.split('|');
+        uomLabel.textContent = parts[2] || '';
+      }
+      select.addEventListener('change', syncUom);
+      syncUom();
+
+      container.appendChild(row);
+    }
+
+    function removeMaterialRow(btn) {
+      const container = document.getElementById('materialRowsContainer');
+      if (container.children.length > 1) {
+        btn.closest('.material-row').remove();
+      }
+    }
 
     // Tab Switching
     function switchTab(tab) {
@@ -527,55 +725,37 @@
       }
     }
 
-    // Material Row Adder
-    function addMaterialRow() {
-      const container = document.getElementById('materialRowsContainer');
-      const row = document.createElement('div');
-      row.className = "material-row bg-white p-2.5 rounded-xl border border-gray-200 flex flex-wrap items-center gap-3";
-      row.innerHTML = `
-        <div class="flex-1 min-w-[200px]">
-          <select class="mat-code-select w-full p-2 border border-gray-300 rounded-lg text-xs font-medium">
-            <option value="RM-DRY-001|Fresh Farm Eggs (Coop)|pcs|7">RM-DRY-001: Fresh Farm Eggs (Coop) · pcs</option>
-            <option value="RM-SWT-001|Premium Refined White Sugar (Victorias)|kg|78">RM-SWT-001: Refined White Sugar (Victorias) · kg</option>
-            <option value="RM-SWT-002|Washed Raw Sugar (Brown Sugar)|kg|65">RM-SWT-002: Brown Sugar · kg</option>
-            <option value="RM-FAT-001|Buttercup Margarine (500g)|block|95">RM-FAT-001: Buttercup Margarine · block</option>
-            <option value="RM-FAT-001-BUTTER|Magnolia Gold Unsalted Butter|block|135">RM-FAT-001-BUTTER: Magnolia Gold Unsalted Butter · block</option>
-            <option value="RM-DRY-002|Condensada (Master Chef 1kg)|kg|65">RM-DRY-002: Condensada (Master Chef 1kg) · kg</option>
-            <option value="RM-DRY-003|Evaporada (Jersey 370ml)|L|28">RM-DRY-003: Evaporada (Jersey 370ml) · L</option>
-            <option value="RM-DRY-004|Skimmed Milk Powder (Farmland)|kg|154">RM-DRY-004: Skimmed Milk Powder · kg</option>
-            <option value="RM-FLR-001|Montana Hard Wheat Bread Flour|kg|44">RM-FLR-001: Montana Hard Wheat Bread Flour · kg</option>
-            <option value="PM-BAG-001|Calypso Poly Bag 7x14|pcs|0.56">PM-BAG-001: Calypso Poly Bag 7x14 · pcs</option>
-            <option value="PM-CUP-001|Baking Cups 5 1/2 oz|pcs|0.28">PM-CUP-001: Baking Cups 5 1/2 oz · pcs</option>
-          </select>
-        </div>
-        <div class="w-28">
-          <input type="number" min="1" step="any" value="5" placeholder="Quantity" class="mat-qty-input w-full p-2 border border-gray-300 rounded-lg text-xs font-mono font-bold text-[#1E7A3E]">
-        </div>
-        <button type="button" onclick="removeMaterialRow(this)" class="text-red-500 hover:text-red-700 p-1.5 rounded">✕</button>
-      `;
-      container.appendChild(row);
-    }
-
-    function removeMaterialRow(btn) {
-      const container = document.getElementById('materialRowsContainer');
-      if (container.children.length > 1) {
-        btn.closest('.material-row').remove();
-      }
+    // Broadcast synchronization helper to notify other WMS tabs
+    function broadcastSyncEvent(eventType, entityType, id, origin) {
+      try {
+        if (typeof BroadcastChannel !== 'undefined') {
+          const bc = new BroadcastChannel('JJB_WMS_SYNC_CHANNEL');
+          bc.postMessage({
+            type: 'NEW_REQUISITION',
+            eventType: eventType,
+            entityType: entityType,
+            id: id,
+            origin: origin,
+            timestamp: new Date().toISOString()
+          });
+          bc.close();
+        }
+      } catch (e) {}
     }
 
     // Handle Recipe Form Submit
     document.getElementById('recipeOrderForm').addEventListener('submit', function(e) {
       e.preventDefault();
       const outlet = document.getElementById('recipeOutletSelect').value;
-      const recipeVal = document.getElementById('recipeSelect').value;
-      const [sku, name, yieldStr] = recipeVal.split('|');
+      const sku = document.getElementById('recipeSelect').value;
+      const recipe = ALL_MASTER_RECIPES.find(r => r.sku === sku) || ALL_MASTER_RECIPES[0];
       const multiplier = parseFloat(document.getElementById('recipeMultiplierInput').value) || 1.0;
-      const person = document.getElementById('recipePersonInput').value || 'Authorized Baker';
-      const notes = document.getElementById('recipeNotesInput').value;
+      const person = document.getElementById('recipePersonInput').value.trim() || 'Authorized Baker';
+      const notes = document.getElementById('recipeNotesInput').value.trim();
       const targetDate = document.getElementById('recipeDateInput').value;
 
       const orderId = 'BORD-' + today.replace(/-/g, '') + '-' + Math.floor(100 + Math.random() * 900);
-      const calculatedPcs = Math.round(parseInt(yieldStr, 10) * multiplier);
+      const calculatedPcs = Math.round(recipe.yield * multiplier);
 
       const newOrder = {
         orderId: orderId,
@@ -583,15 +763,15 @@
         targetDate: targetDate,
         outletId: outlet.toLowerCase().replace(/[^a-z0-9]/g, '-'),
         outletName: outlet,
-        recipeSku: sku,
-        recipeName: name,
+        recipeSku: recipe.sku,
+        recipeName: recipe.name,
         batchMultiplier: multiplier,
         requestedQtyPcs: calculatedPcs,
         requestedBy: person,
         enteredBy: person + ' (Outlet Portal)',
         status: 'PENDING_BATCHING',
         bulkRequestStatus: 'NOT_REQUESTED',
-        notes: notes || 'Direct order from branch kiosk terminal'
+        notes: notes || ('Direct requisition for ' + outlet)
       };
 
       try {
@@ -599,11 +779,20 @@
         const existing = JSON.parse(localStorage.getItem(storageKey) || '[]');
         existing.unshift(newOrder);
         localStorage.setItem(storageKey, JSON.stringify(existing));
+
+        // Dispatch storage event for active tabs
+        window.dispatchEvent(new StorageEvent('storage', {
+          key: storageKey,
+          newValue: JSON.stringify(existing)
+        }));
       } catch (err) {
         console.error(err);
       }
 
-      // Sync to Worker
+      // Inter-tab notification
+      broadcastSyncEvent('OUTLET_BATCH_ORDER', 'Recipe Batch Order', orderId, outlet);
+
+      // Background Cloudflare sync
       fetch('/api/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -611,7 +800,7 @@
           idempotencyKey: 'PORTAL_RECIPE_' + orderId,
           eventType: 'OUTLET_BATCH_ORDER',
           orderId: orderId,
-          recipeName: name,
+          recipeName: recipe.name,
           outletName: outlet,
           requestedQtyPcs: calculatedPcs,
           timestamp: new Date().toISOString()
@@ -620,7 +809,7 @@
 
       const box = document.getElementById('confirmBox');
       document.getElementById('confirmDetails').innerHTML = 
-        'Order <strong>' + orderId + '</strong> for <strong>' + name + '</strong> (' + calculatedPcs + ' pcs) requested by <strong>' + person + '</strong> (' + outlet + ') is registered and queued for Romeo Malusay.';
+        'Order <strong>' + orderId + '</strong> for <strong>' + recipe.name + '</strong> (' + calculatedPcs.toLocaleString() + ' pcs) requested by <strong>' + person + '</strong> (' + outlet + ') is registered and queued for Romeo Malusay.';
       box.classList.remove('hidden');
       box.scrollIntoView({ behavior: 'smooth' });
     });
@@ -629,10 +818,10 @@
     document.getElementById('materialOrderForm').addEventListener('submit', function(e) {
       e.preventDefault();
       const line = document.getElementById('matLineSelect').value;
-      const person = document.getElementById('matPersonInput').value || 'Staff Requester';
+      const person = document.getElementById('matPersonInput').value.trim() || 'Staff Requester';
       const purpose = document.getElementById('matPurposeSelect').value;
       const neededDate = document.getElementById('matDateInput').value;
-      const notes = document.getElementById('matNotesInput').value;
+      const notes = document.getElementById('matNotesInput').value.trim();
 
       const slipNo = 'WS-PORTAL-' + today.replace(/-/g, '') + '-' + Math.floor(100 + Math.random() * 900);
 
@@ -645,7 +834,7 @@
         const qtyInput = row.querySelector('.mat-qty-input');
         const [code, desc, uom, unitCostStr] = select.value.split('|');
         const qty = parseFloat(qtyInput.value) || 1;
-        const unitCost = parseFloat(unitCostStr) || 60;
+        const unitCost = parseFloat(unitCostStr) || 45;
         const lineCost = qty * unitCost;
         totalEstCost += lineCost;
 
@@ -655,7 +844,7 @@
           qtyRequestedSec: qty,
           qtyIssuedSec: qty,
           secondaryUom: uom,
-          lotNumber: 'DEFAULT-LOT',
+          lotNumber: 'FEFO-QUEUED',
           storageRoom: 'Dry Room 1',
           estimatedCost: lineCost
         });
@@ -666,7 +855,7 @@
         date: neededDate,
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         requestingEntity: line,
-        department: purpose.includes('Mess Hall') ? 'Indangan Facility Mess Hall (Staff Meals & Snacks)' : 'Production Line',
+        department: purpose.includes('Mess Hall') ? 'Indangan Facility Mess Hall (Staff Meals & Snacks)' : 'Production Floor',
         purpose: purpose,
         requestedBy: person,
         issuedBy: 'Pending Jade Q. Dela Cruz',
@@ -682,11 +871,20 @@
         const existing = JSON.parse(localStorage.getItem(storageKey) || '[]');
         existing.unshift(newWithdrawal);
         localStorage.setItem(storageKey, JSON.stringify(existing));
+
+        // Dispatch storage event for active tabs
+        window.dispatchEvent(new StorageEvent('storage', {
+          key: storageKey,
+          newValue: JSON.stringify(existing)
+        }));
       } catch (err) {
         console.error(err);
       }
 
-      // Sync to Worker
+      // Inter-tab notification
+      broadcastSyncEvent('MATERIAL_WITHDRAWAL', 'Raw Material Requisition', slipNo, line);
+
+      // Background Cloudflare sync
       fetch('/api/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -709,19 +907,19 @@
     });
 
     // Specialty Recipe Ingredient Row Management
-    function addSpecIngredientRow() {
+    function addSpecIngredientRow(prefillName, prefillGrams) {
       const container = document.getElementById('specIngredientsContainer');
       const row = document.createElement('div');
       row.className = "spec-ing-row bg-white p-2.5 rounded-xl border border-gray-200 flex flex-wrap items-center gap-3";
       row.innerHTML = `
         <div class="flex-1 min-w-[200px]">
-          <input type="text" placeholder="Ingredient Name" class="spec-ing-name w-full p-2 border border-gray-300 rounded-lg text-xs font-medium" required>
+          <input type="text" value="${prefillName || ''}" placeholder="Ingredient Name (e.g. Bread Flour, Evaporada)" class="spec-ing-name w-full p-2 border border-gray-300 rounded-lg text-xs font-medium" required>
         </div>
-        <div class="w-28 flex items-center gap-1">
-          <input type="number" min="1" value="100" placeholder="Grams" class="spec-ing-grams w-full p-2 border border-gray-300 rounded-lg text-xs font-mono font-bold text-[#5B2E7A]" required>
+        <div class="w-32 flex items-center gap-1">
+          <input type="number" min="1" value="${prefillGrams || 100}" placeholder="Grams" class="spec-ing-grams w-full p-2 border border-gray-300 rounded-lg text-xs font-mono font-bold text-[#5B2E7A]" required>
           <span class="text-[11px] font-bold text-gray-500">g</span>
         </div>
-        <button type="button" onclick="removeSpecIngredientRow(this)" class="text-red-500 hover:text-red-700 p-1.5 rounded">✕</button>
+        <button type="button" onclick="removeSpecIngredientRow(this)" class="text-red-500 hover:text-red-700 p-1.5 rounded hover:bg-red-50" title="Remove row">✕</button>
       `;
       container.appendChild(row);
     }
@@ -798,9 +996,17 @@
         const existing = JSON.parse(localStorage.getItem(storageKey) || '[]');
         existing.unshift(proposal);
         localStorage.setItem(storageKey, JSON.stringify(existing));
+
+        // Dispatch storage event
+        window.dispatchEvent(new StorageEvent('storage', {
+          key: storageKey,
+          newValue: JSON.stringify(existing)
+        }));
       } catch (err) {
         console.error(err);
       }
+
+      broadcastSyncEvent('SPECIALTY_RECIPE_SUBMITTED', 'Specialty Formulation', proposalId, outlet);
 
       fetch('/api/sync', {
         method: 'POST',
@@ -817,6 +1023,22 @@
         'Specialty Recipe Proposal <strong>' + proposalId + '</strong> for <strong>' + formattedName + '</strong> submitted by Baker <strong>' + baker + '</strong> (' + outlet + ') has been queued for Romeo Malusay &amp; Zaphyr Zur Pomicpic for QA &amp; Master Register approval.';
       box.classList.remove('hidden');
       box.scrollIntoView({ behavior: 'smooth' });
+    });
+
+    // On Load Initialization
+    document.addEventListener('DOMContentLoaded', function() {
+      initRecipeDropdown();
+
+      // Initial clean material row
+      addMaterialRow('RM-DRY-001', 30);
+      addMaterialRow('RM-SWT-002', 5);
+
+      // Initial specialty ingredient rows
+      addSpecIngredientRow('1st Class Hard Wheat Flour', 3000);
+      addSpecIngredientRow('Refined White Sugar', 600);
+      addSpecIngredientRow('Margarine / Butter', 200);
+      addSpecIngredientRow('Instant Dry Yeast', 60);
+      addSpecIngredientRow('Potable Chilled Water', 1200);
     });
   </script>
 </body>

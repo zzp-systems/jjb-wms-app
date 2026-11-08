@@ -20,13 +20,13 @@ export default function AdjustmentsModule({
   const [adjQty, setAdjQty] = useState(1);
   const [adjReason, setAdjReason] = useState('');
 
-  // Quarantine Form State
-  const [ncrNo, setNcrNo] = useState(`NCR-2026-1103-0${quarantineList.length + 1}`);
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const [ncrNo, setNcrNo] = useState(`NCR-${todayStr.replace(/-/g, '')}-${String(quarantineList.length + 1).padStart(3, '0')}`);
   const [ncrItem, setNcrItem] = useState('');
   const [ncrLot, setNcrLot] = useState('');
   const [ncrQty, setNcrQty] = useState('');
-  const [ncrReason, setNcrReason] = useState('Cargo damaged upon delivery receiving dock');
-  const [ncrLoss, setNcrLoss] = useState(500);
+  const [ncrReason, setNcrReason] = useState('');
+  const [ncrLoss, setNcrLoss] = useState(0);
   const [ncrDisposition, setNcrDisposition] = useState('RETURN TO SUPPLIER (Credit Memo)');
 
   const selectedMat = inventory.find(m => m.code === adjMaterial) || inventory[0];

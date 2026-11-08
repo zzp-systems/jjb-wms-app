@@ -9,7 +9,6 @@ import ReportsModule from './components/ReportsModule';
 import EodReportModule from './components/EodReportModule';
 import AuditTrailModule from './components/AuditTrailModule';
 import OrderHistory from './components/OrderHistory';
-import SignatureProductsDashboard from './components/SignatureProductsDashboard';
 import InitialDataImportModal from './components/InitialDataImportModal';
 import LoginModal from './components/LoginModal';
 import OutletRequisitionPortal from './components/OutletRequisitionPortal';
@@ -47,7 +46,33 @@ export default function App() {
 
   const saveToStorage = (key, value) => {
     try {
-      localStorage.setItem(`${STORAGE_KEY}_${key}`, JSON.stringify(value));
+      const fullKey = `${STORAGE_KEY}_${key}`;
+      if ((key === 'batch_orders' || key === 'withdrawals') && Array.isArray(value)) {
+        const existingRaw = localStorage.getItem(fullKey);
+        if (existingRaw) {
+          try {
+            const existingList = JSON.parse(existingRaw);
+            if (Array.isArray(existingList)) {
+              const idField = key === 'batch_orders' ? 'orderId' : 'slipNo';
+              const map = new Map();
+              // First preserve any existing items from other tabs/kiosks
+              existingList.forEach(item => {
+                const id = item[idField] || item.withdrawalNo;
+                if (id) map.set(id, item);
+              });
+              // Then apply items from current React state
+              value.forEach(item => {
+                const id = item[idField] || item.withdrawalNo;
+                if (id) map.set(id, item);
+              });
+              const merged = Array.from(map.values());
+              localStorage.setItem(fullKey, JSON.stringify(merged));
+              return;
+            }
+          } catch (e) {}
+        }
+      }
+      localStorage.setItem(fullKey, JSON.stringify(value));
     } catch (e) {
       console.error("Storage error:", e);
     }
@@ -170,6 +195,74 @@ export default function App() {
   useEffect(() => { saveToStorage('adjustments', adjustments); }, [adjustments]);
   useEffect(() => { saveToStorage('quarantine', quarantineList); }, [quarantineList]);
   useEffect(() => { saveToStorage('audit_logs', auditLogs); }, [auditLogs]);
+
+  // Real-Time Cross-Tab & Floor Kiosk Synchronization
+  useEffect(() => {
+    const reloadExternalData = () => {
+      try {
+        const rawOrders = localStorage.getItem(`${STORAGE_KEY}_batch_orders`);
+        if (rawOrders) {
+          const parsed = JSON.parse(rawOrders);
+          setBatchOrders(parsed);
+        }
+        const rawWithdrawals = localStorage.getItem(`${STORAGE_KEY}_withdrawals`);
+        if (rawWithdrawals) {
+          const parsed = JSON.parse(rawWithdrawals);
+          setWithdrawals(parsed);
+        }
+        const rawInv = localStorage.getItem(`${STORAGE_KEY}_inventory`);
+        if (rawInv) {
+          const parsed = JSON.parse(rawInv);
+          setInventory(parsed);
+        }
+        setRecipes(getAllMasterRecipes());
+      } catch (err) {
+        console.warn("Real-time sync parse error:", err);
+      }
+    };
+
+    // 1. Window Storage Event (fires when another tab updates localStorage)
+    const handleStorageEvent = (e) => {
+      if (
+        e.key === `${STORAGE_KEY}_batch_orders` ||
+        e.key === `${STORAGE_KEY}_withdrawals` ||
+        e.key === `${STORAGE_KEY}_inventory` ||
+        e.key === 'JJB_WMS_LIVE_V4_6_SPECIALTY_RECIPES'
+      ) {
+        reloadExternalData();
+      }
+    };
+    window.addEventListener('storage', handleStorageEvent);
+
+    // 2. Window Focus & Visibility (fires when supervisor switches back to main app tab)
+    const handleFocus = () => reloadExternalData();
+    window.addEventListener('focus', handleFocus);
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') reloadExternalData();
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    // 3. BroadcastChannel (immediate inter-tab messaging)
+    let bc = null;
+    try {
+      if (typeof BroadcastChannel !== 'undefined') {
+        bc = new BroadcastChannel('JJB_WMS_SYNC_CHANNEL');
+        bc.onmessage = (msg) => {
+          if (msg.data && msg.data.type === 'NEW_REQUISITION') {
+            reloadExternalData();
+            showToast(`New ${msg.data.entityType || 'floor requisition'} received from ${msg.data.origin || 'Outlet'}!`);
+          }
+        };
+      }
+    } catch (e) {}
+
+    return () => {
+      window.removeEventListener('storage', handleStorageEvent);
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibility);
+      if (bc) bc.close();
+    };
+  }, []);
 
   // Toast Helper
   const showToast = (message) => {
@@ -743,6 +836,9 @@ export default function App() {
     setPrefilledItem(item);
     if (action === 'receiving') setActiveTab('receiving');
     if (action === 'issuance') setActiveTab('issuance');
+    if (action === 'batching') setActiveTab('batching');
+    if (action === 'orderHistory') setActiveTab('orderHistory');
+    if (action === 'portal') setActiveTab('portal');
   };
 
   // Reset Demo Data
@@ -847,6 +943,8 @@ export default function App() {
             onQuickAction={handleQuickAction}
             storageRooms={STORAGE_ROOMS}
             onOpenImportModal={() => setIsImportModalOpen(true)}
+            batchOrders={batchOrders}
+            withdrawals={withdrawals}
           />
         )}
 
@@ -952,13 +1050,6 @@ export default function App() {
             auditLogs={auditLogs}
             onResetData={handleResetData}
             onExportJson={handleExportJson}
-          />
-        )}
-
-        {/* TAB: SIGNATURE PRODUCTS INVENTORY ANALYTICS (RECHARTS) */}
-        {activeTab === 'signature' && (
-          <SignatureProductsDashboard
-            onNavigateToBatching={() => setActiveTab('batching')}
           />
         )}
 

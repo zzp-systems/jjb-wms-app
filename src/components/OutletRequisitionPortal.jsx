@@ -65,10 +65,11 @@ export default function OutletRequisitionPortal({
   const [matPurpose, setMatPurpose] = useState(CONSUMPTION_PURPOSES[1]);
   const [matNeededDate, setMatNeededDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [matNotes, setMatNotes] = useState('');
-  const [requestedItems, setRequestedItems] = useState([
-    { itemCode: 'RM-DRY-001', qty: 30, uom: 'pcs' },
-    { itemCode: 'RM-SWT-002', qty: 5, uom: 'kg' }
-  ]);
+  const [requestedItems, setRequestedItems] = useState(() => {
+    const firstCode = inventory[0]?.code || 'RM-FLR-001';
+    const firstUom = inventory[0]?.secondaryUom || 'kg';
+    return [{ itemCode: firstCode, qty: 1, uom: firstUom }];
+  });
   const [matSubmittedRequest, setMatSubmittedRequest] = useState(null);
 
   // Form State: Specialty Recipe Proposal (Form-RND-001)
