@@ -2,7 +2,7 @@ import {
   Warehouse, Scale, Truck, FileText, CheckCircle2, 
   Wifi, WifiOff, Smartphone, Laptop, AlertOctagon, Send,
   ShoppingCart, FileSpreadsheet, History, BarChart3,
-  Store, Lock
+  Store, Lock, LogOut
 } from 'lucide-react';
 
 export const ROLES = [
@@ -29,7 +29,8 @@ export default function Header({
   lowStockCount = 0,
   onQuickEod,
   onOpenImportModal,
-  onOpenLoginModal
+  onOpenLoginModal,
+  onLogout
 }) {
   const activeRoleObj = ROLES.find(r => r.name === currentRole) || ROLES[0];
 
@@ -115,7 +116,7 @@ export default function Header({
             <button
               onClick={onOpenLoginModal}
               className="text-[#E5C585] hover:text-white p-1 rounded hover:bg-white/10 transition flex items-center gap-1 text-[11px] font-bold"
-              title="Authenticate Staff Role with Username & Password"
+              title="Authenticate Staff Role with Username & Password or Shift PIN"
             >
               <Lock size={12} className="text-[#C8963E]" />
               <span className="hidden sm:inline">Auth</span>
@@ -132,6 +133,18 @@ export default function Header({
                 </option>
               ))}
             </select>
+            {onLogout && (
+              <>
+                <span className="text-gray-500">|</span>
+                <button
+                  onClick={onLogout}
+                  className="text-gray-400 hover:text-red-400 p-1 rounded hover:bg-white/10 transition"
+                  title="Lock Terminal & Log Out"
+                >
+                  <LogOut size={12} />
+                </button>
+              </>
+            )}
           </div>
 
           {/* One-Time Fresh Data CSV Import */}

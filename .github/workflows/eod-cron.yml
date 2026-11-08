@@ -1,0 +1,16 @@
+name: Nightly 23:45 PHT EOD Settlement Cron
+on:
+  schedule:
+    - cron: '45 15 * * *' # 23:45 PHT (UTC+8)
+  workflow_dispatch:
+
+jobs:
+  trigger-eod:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger EOD Settlement Endpoint
+        run: |
+          PHT_DATE=$(TZ=Asia/Manila date +%Y-%m-%d)
+          curl -fsSL -X POST https://jjb-wms-app.pages.dev/api/sync \
+            -H "Content-Type: application/json" \
+            -d "{\"idempotency_key\":\"EOD-CRON-${PHT_DATE}\",\"event_type\":\"AUTOMATED_EOD_2345_DISPATCH\",\"eventType\":\"AUTOMATED_EOD_2345_DISPATCH\",\"date\":\"${PHT_DATE}\",\"source\":\"GITHUB_CRON\"}"

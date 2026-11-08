@@ -70,6 +70,13 @@ export default function App() {
     } catch (e) {}
     return AUTH_USERS[0]; // Default: Jade Q. Dela Cruz
   });
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    try {
+      return sessionStorage.getItem('JJB_WMS_AUTH_SESSION') === 'ACTIVE';
+    } catch (e) {
+      return false;
+    }
+  });
   const [currentRole, setCurrentRole] = useState(() => authUser?.name || "Jade Q. Dela Cruz");
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -97,12 +104,25 @@ export default function App() {
   const handleLoginSuccess = (user) => {
     setAuthUser(user);
     setCurrentRole(user.name);
+    setIsAuthenticated(true);
+    try {
+      sessionStorage.setItem('JJB_WMS_AUTH_SESSION', 'ACTIVE');
+      localStorage.setItem('JJB_WMS_AUTH_USER', JSON.stringify(user));
+    } catch (e) {}
     setIsLoginModalOpen(false);
     recordAudit(
       "STAFF_LOGIN_AUTHENTICATED",
       `${user.name} (${user.title}) successfully authenticated session at ${user.station}.`
     );
     showToast(`Welcome back, ${user.name}! Terminal authenticated.`);
+  };
+
+  const handleLogout = () => {
+    try {
+      sessionStorage.removeItem('JJB_WMS_AUTH_SESSION');
+    } catch (e) {}
+    setIsAuthenticated(false);
+    showToast("Terminal session locked. Please sign in to proceed.");
   };
 
   // Sync state to LocalStorage
@@ -735,6 +755,20 @@ export default function App() {
   const pendingBatchCount = batchOrders.filter(b => b.status === 'PENDING_BATCHING').length;
   const pendingBulkApprovalCount = batchOrders.filter(b => b.bulkRequestStatus === 'PENDING_JADE_APPROVAL').length;
 
+  // Enforce Mandatory Authentication Gate
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-[#240e32] flex flex-col justify-center items-center p-4">
+        <LoginModal
+          isOpen={true}
+          isMandatoryGate={true}
+          onLoginSuccess={handleLoginSuccess}
+          currentUsername={authUser?.username || ''}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#FAF6EE] text-[#2A1B2E] font-sans flex flex-col relative antialiased selection:bg-[#C8963E] selection:text-white">
       {/* Toast Alert Banner */}
@@ -763,6 +797,7 @@ export default function App() {
         onQuickEod={() => setActiveTab('eod')}
         onOpenImportModal={() => setIsImportModalOpen(true)}
         onOpenLoginModal={() => setIsLoginModalOpen(true)}
+        onLogout={handleLogout}
       />
 
       {/* Main View Container */}

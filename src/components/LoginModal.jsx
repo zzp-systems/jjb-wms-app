@@ -1,18 +1,23 @@
 import React, { useState } from 'react';
 import { 
   Lock, User, Key, ShieldCheck, CheckCircle2, AlertTriangle, 
-  Eye, EyeOff, Sparkles, Building2, ChevronRight, X
+  Eye, EyeOff, Sparkles, Building2, ChevronRight, X, Hash
 } from 'lucide-react';
 import { AUTH_USERS, authenticateUser } from '../data/authUsers';
+
+export const DEFAULT_SHIFT_PIN = "2026";
 
 export default function LoginModal({
   isOpen,
   onClose,
   onLoginSuccess,
-  currentUsername = ''
+  currentUsername = '',
+  isMandatoryGate = false
 }) {
-  const [username, setUsername] = useState(currentUsername);
+  const [username, setUsername] = useState(currentUsername || AUTH_USERS[0].username);
+  const [authMethod, setAuthMethod] = useState('password'); // 'password' | 'pin'
   const [password, setPassword] = useState('');
+  const [shiftPin, setShiftPin] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [loading, setLoading] = useState(false);
@@ -25,31 +30,48 @@ export default function LoginModal({
     setLoading(true);
 
     setTimeout(() => {
-      const user = authenticateUser(username, password);
-      if (user) {
-        onLoginSuccess(user);
+      let matchedUser = null;
+
+      if (authMethod === 'password') {
+        matchedUser = authenticateUser(username, password);
+      } else {
+        // Shift PIN verification
+        if (shiftPin.trim() === DEFAULT_SHIFT_PIN) {
+          matchedUser = AUTH_USERS.find(u => u.username.toLowerCase() === username.trim().toLowerCase());
+        }
+      }
+
+      if (matchedUser) {
+        onLoginSuccess(matchedUser);
         setPassword('');
+        setShiftPin('');
         setErrorMsg('');
       } else {
-        setErrorMsg('Invalid username or password. Please verify credentials.');
+        if (authMethod === 'password') {
+          setErrorMsg('Invalid username or password. Please verify your credentials.');
+        } else {
+          setErrorMsg(`Invalid 4-digit shift PIN for ${username}. (Default active shift PIN: ${DEFAULT_SHIFT_PIN})`);
+        }
       }
       setLoading(false);
     }, 200);
   };
 
+  // Quick select pre-fills ONLY the username; never auto-fills password
   const handleQuickSelect = (u) => {
     setUsername(u.username);
     setPassword('');
+    setShiftPin('');
     setErrorMsg('');
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 overflow-y-auto">
       <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl border border-[#E2D1B8] overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-200">
         
         {/* Header */}
         <div className="bg-[#3D1C52] text-white p-6 relative border-b border-[#C8963E]/40 text-center">
-          {onClose && (
+          {!isMandatoryGate && onClose && (
             <button 
               onClick={onClose}
               className="absolute top-4 right-4 text-gray-300 hover:text-white p-1 rounded-lg hover:bg-white/10 transition"
@@ -70,7 +92,7 @@ export default function LoginModal({
 
           <h2 className="font-serif font-bold text-xl text-white">JJB Warehouse &amp; Kitting OS</h2>
           <p className="text-xs text-[#E5C585] mt-1 font-medium">
-            Staff Role Authentication Gateway · SOP-WAR-002
+            Staff Authentication &amp; Access Control Gate · SOP-WAR-002
           </p>
           <div className="inline-flex items-center gap-1.5 mt-2 bg-[#240e32] px-3 py-1 rounded-full text-[11px] text-gray-300 border border-[#C8963E]/30 font-mono">
             <ShieldCheck size={13} className="text-[#C8963E]" />
@@ -78,11 +100,16 @@ export default function LoginModal({
           </div>
         </div>
 
-        {/* Quick User Selector Bar */}
-        <div className="bg-[#FAF6EE] p-3 border-b border-[#E2D1B8]">
-          <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-2 text-center">
-            Select Terminal User to Pre-Fill:
-          </p>
+        {/* Quick User Selector Bar (Pre-fills Username ONLY) */}
+        <div className="bg-[#FAF6EE] p-3.5 border-b border-[#E2D1B8]">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-[10px] font-bold text-gray-600 uppercase tracking-wider">
+              1. Tap Role Chip to Pre-Fill Username:
+            </p>
+            <span className="text-[10px] text-[#C8963E] font-bold">
+              (Password NEVER auto-filled)
+            </span>
+          </div>
           <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
             {AUTH_USERS.map(u => (
               <button
@@ -105,6 +132,35 @@ export default function LoginModal({
           </div>
         </div>
 
+        {/* Authentication Mode Switcher: Password vs 4-Digit Shift PIN */}
+        <div className="flex border-b border-gray-200 bg-gray-50 text-xs font-semibold">
+          <button
+            type="button"
+            onClick={() => { setAuthMethod('password'); setErrorMsg(''); }}
+            className={`flex-1 py-2.5 text-center flex items-center justify-center gap-1.5 transition ${
+              authMethod === 'password'
+                ? 'bg-white text-[#3D1C52] border-b-2 border-[#3D1C52] font-bold shadow-sm'
+                : 'text-gray-500 hover:text-gray-800'
+            }`}
+          >
+            <Key size={13} />
+            <span>Master Password</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => { setAuthMethod('pin'); setErrorMsg(''); }}
+            className={`flex-1 py-2.5 text-center flex items-center justify-center gap-1.5 transition ${
+              authMethod === 'pin'
+                ? 'bg-white text-[#1E7A3E] border-b-2 border-[#1E7A3E] font-bold shadow-sm'
+                : 'text-gray-500 hover:text-gray-800'
+            }`}
+          >
+            <Hash size={13} />
+            <span>4-Digit Floor Shift PIN</span>
+            <span className="bg-[#1E7A3E] text-white text-[9px] px-1.5 rounded">Fast Switch</span>
+          </button>
+        </div>
+
         {/* Login Form */}
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           {errorMsg && (
@@ -116,7 +172,7 @@ export default function LoginModal({
 
           <div>
             <label className="block text-xs font-bold text-gray-700 mb-1">
-              Terminal Username
+              Authorized Staff Username
             </label>
             <div className="relative">
               <User size={15} className="absolute left-3 top-3 text-gray-400" />
@@ -131,29 +187,60 @@ export default function LoginModal({
             </div>
           </div>
 
-          <div>
-            <label className="block text-xs font-bold text-gray-700 mb-1">
-              Security Password
-            </label>
-            <div className="relative">
-              <Key size={15} className="absolute left-3 top-3 text-gray-400" />
-              <input
-                type={showPassword ? 'text' : 'password'}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter authorized password..."
-                required
-                className="w-full pl-9 pr-10 py-2.5 text-xs border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#C8963E] font-mono"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-3 text-gray-400 hover:text-gray-600"
-              >
-                {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
-              </button>
+          {authMethod === 'password' ? (
+            <div>
+              <div className="flex justify-between items-center mb-1">
+                <label className="block text-xs font-bold text-gray-700">
+                  Security Password
+                </label>
+                <span className="text-[10px] text-gray-400">Production Auth</span>
+              </div>
+              <div className="relative">
+                <Key size={15} className="absolute left-3 top-3 text-gray-400" />
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Enter authorized password..."
+                  required
+                  autoFocus
+                  className="w-full pl-9 pr-10 py-2.5 text-xs border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#C8963E] font-mono"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-3 text-gray-400 hover:text-gray-600"
+                >
+                  {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                </button>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div>
+              <div className="flex justify-between items-center mb-1">
+                <label className="block text-xs font-bold text-gray-700">
+                  4-Digit Active Shift PIN
+                </label>
+                <span className="text-[10px] text-[#1E7A3E] font-bold">Shift: {DEFAULT_SHIFT_PIN}</span>
+              </div>
+              <div className="relative">
+                <Hash size={15} className="absolute left-3 top-3 text-gray-400" />
+                <input
+                  type="password"
+                  maxLength={4}
+                  value={shiftPin}
+                  onChange={(e) => setShiftPin(e.target.value.replace(/\D/g, ''))}
+                  placeholder="Enter 4-digit shift PIN (e.g. 2026)"
+                  required
+                  autoFocus
+                  className="w-full pl-9 pr-4 py-2.5 text-xs border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1E7A3E] font-mono tracking-widest text-base font-bold text-center"
+                />
+              </div>
+              <p className="text-[11px] text-gray-500 mt-1">
+                Allows fast operator switching between Jade &amp; Romeo on shared floor tablets.
+              </p>
+            </div>
+          )}
 
           {/* Active Selection Details Preview */}
           {(() => {
@@ -184,15 +271,15 @@ export default function LoginModal({
               className="w-full bg-[#3D1C52] hover:bg-[#240e32] disabled:opacity-50 text-white font-bold text-xs py-3 rounded-xl shadow-md transition flex items-center justify-center gap-2"
             >
               <Lock size={14} className="text-[#C8963E]" />
-              <span>{loading ? 'Authenticating...' : 'Sign In to Warehouse & Kitting OS'}</span>
+              <span>{loading ? 'Verifying Credentials...' : 'Authenticate & Unlock WMS Terminal'}</span>
             </button>
           </div>
         </form>
 
         {/* Footer Reference */}
         <div className="bg-gray-50 px-6 py-3 border-t border-gray-100 flex items-center justify-between text-[11px] text-gray-500">
-          <span>Single Session Terminal Mode</span>
-          <span className="font-mono text-gray-400">v4.6 Auth Guard</span>
+          <span>Enterprise Role Gate</span>
+          <span className="font-mono text-gray-400">v4.6 Auth Security</span>
         </div>
       </div>
     </div>
