@@ -3,7 +3,7 @@ import {
   ShoppingBag, Search, Filter, RefreshCw, CheckCircle2, Clock, 
   Truck, AlertCircle, FileText, Printer, ArrowUpRight, 
   DollarSign, Package, Calendar, ChevronRight, User, MapPin,
-  Utensils, Coffee, Layers, Tag
+  Utensils, Coffee, Layers, Tag, Inbox
 } from 'lucide-react';
 import { mockOrderService } from '../services/mockOrderService';
 
@@ -11,6 +11,7 @@ export default function OrderHistory({
   currentRole,
   batchOrders = [],
   withdrawals = [],
+  pendingRequests = [],   // NEW — optional, backward-compatible
   onUpdateOrderStatus
 }) {
   const [wholesaleOrders, setWholesaleOrders] = useState([]);
@@ -22,7 +23,6 @@ export default function OrderHistory({
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [updatingId, setUpdatingId] = useState(null);
 
-  // Fetch past wholesale orders from mock service
   const loadWholesaleOrders = async () => {
     setLoading(true);
     try {
@@ -47,10 +47,10 @@ export default function OrderHistory({
     loadWholesaleOrders();
   }, [selectedStatus]);
 
-  // Convert batchOrders into unified order format
+  // ----- Recipe batch orders -----
   const formattedBatchOrders = useMemo(() => {
     return (batchOrders || []).map(b => {
-      const estimatedCost = (b.requestedQtyPcs || 100) * 4.5; // Estimated flour + sugar + shortening cost
+      const estimatedCost = (b.requestedQtyPcs || 100) * 4.5;
       return {
         orderId: b.orderId,
         formType: 'Form-ORD-001',
@@ -86,15 +86,15 @@ export default function OrderHistory({
     });
   }, [batchOrders]);
 
-  // Convert withdrawals into unified order format
+  // ----- Issued withdrawals (already deducted) -----
   const formattedWithdrawals = useMemo(() => {
     return (withdrawals || []).map(w => {
       const isMessHall = (w.requestingEntity || w.requestingLine || '').toLowerCase().includes('mess') ||
                          (w.purpose || '').toLowerCase().includes('meal') ||
                          (w.purpose || '').toLowerCase().includes('snack');
-      
+
       const itemsList = (w.items || []).map(it => {
-        const qty = it.qtyIssuedSec || it.requestedQtySec || it.qty || 1;
+        const qty = it.qtyIssuedSec || it.qtyRequestedSec || it.qty || 1;
         const uom = it.secondaryUom || it.uom || 'kg';
         const costPerUnit = it.unitCost || 65;
         return {
@@ -118,8 +118,8 @@ export default function OrderHistory({
         customerOrOutlet: w.requestingEntity || w.requestingLine || (isMessHall ? 'Indangan Facility Mess Hall' : 'Plant Floor'),
         contactPerson: w.requestedBy || w.requisitionedBy || 'Indangan Facility Staff',
         contactNumber: 'Plant Internal Staff',
-        channel: isMessHall 
-          ? 'Mess Hall Staff Meals & Snacks (Form-WAR-001)' 
+        channel: isMessHall
+          ? 'Mess Hall Staff Meals & Snacks (Form-WAR-001)'
           : 'Raw Material Withdrawal (Form-WAR-001)',
         categoryTag: isMessHall ? 'MESS_HALL' : 'WITHDRAWAL',
         deliveryDriver: w.receivedBy || w.requisitionedBy || 'Bodega Floor Release',
@@ -131,12 +131,63 @@ export default function OrderHistory({
         paymentTerms: isMessHall ? 'Company Subsidized Staff Meals' : 'Operational Cost Center',
         paymentStatus: 'Approved & Deducted',
         notes: w.purpose || w.notes || 'Warehouse raw material withdrawal',
+        sourceChannel: w.sourceChannel || 'MANUAL',
+        linkedRequestId: w.linkedRequestId || null,
         sourceData: w
       };
     });
   }, [withdrawals]);
 
-  // Combine wholesale orders, recipe batch orders, and material withdrawals
+  // ----- NEW: Pending requests (queued, not yet issued, no stock deducted) -----
+  const formattedPendingRequests = useMemo(() => {
+    return (pendingRequests || [])
+      .filter(r => r.status === 'PENDING_ISSUANCE')
+      .map(r => {
+        const isMessHall = (r.requestingEntity || '').toLowerCase().includes('mess') ||
+                           (r.purpose || '').toLowerCase().includes('meal') ||
+                           (r.purpose || '').toLowerCase().includes('snack');
+
+        const itemsList = (r.items || []).map(it => {
+          const qty = it.qtyRequestedSec || it.qty || 1;
+          const uom = it.secondaryUom || 'kg';
+          const unitPrice = it.estimatedCost && qty > 0 ? (it.estimatedCost / qty) : 0;
+          return {
+            sku: it.materialCode || 'RM-RAW',
+            name: it.name || 'Raw Material Item',
+            qty,
+            unit: uom,
+            unitPrice,
+            subtotal: it.estimatedCost || 0
+          };
+        });
+
+        return {
+          orderId: r.requestId,
+          formType: 'Form-WAR-001',
+          orderType: 'PENDING_REQUEST',
+          orderDate: r.dateRequested || new Date().toISOString().slice(0, 10),
+          deliveryDate: r.neededByDate || 'Queued',
+          customerOrOutlet: r.requestingEntity || 'Unspecified',
+          contactPerson: r.requestedBy || 'Authorized Staff',
+          contactNumber: r.enteredBy ? `Entered by: ${r.enteredBy}` : 'Staff Entry',
+          channel: r.sourceChannel === 'PORTAL' ? 'Self-Service Portal Requisition' : 'In-App Staff Entry',
+          categoryTag: isMessHall ? 'MESS_HALL' : 'WITHDRAWAL',
+          deliveryDriver: 'Awaiting Jade Q. Dela Cruz Issuance',
+          status: 'Pending Jade Issuance',
+          rawStatus: 'PENDING_ISSUANCE',
+          items: itemsList,
+          totalCost: Number(r.totalEstimatedCost || 0),
+          logisticsFee: 0,
+          paymentTerms: isMessHall ? 'Company Subsidized Staff Meals' : 'Operational Cost Center',
+          paymentStatus: 'Queued — Not Yet Deducted',
+          notes: r.notes || r.purpose || 'Pending issuance queue',
+          sourceChannel: r.sourceChannel || 'MANUAL',
+          sourceData: r
+        };
+      });
+  }, [pendingRequests]);
+
+  // ----- Combine everything -----
   const allUnifiedOrders = useMemo(() => {
     const wholesaleFormatted = (wholesaleOrders || []).map(o => ({
       ...o,
@@ -145,26 +196,28 @@ export default function OrderHistory({
       categoryTag: 'WHOLESALE'
     }));
 
-    return [...formattedBatchOrders, ...formattedWithdrawals, ...wholesaleFormatted];
-  }, [formattedBatchOrders, formattedWithdrawals, wholesaleOrders]);
+    return [
+      ...formattedPendingRequests,
+      ...formattedBatchOrders,
+      ...formattedWithdrawals,
+      ...wholesaleFormatted
+    ];
+  }, [formattedPendingRequests, formattedBatchOrders, formattedWithdrawals, wholesaleOrders]);
 
-  // Filtered orders based on user selection
   const filteredOrders = useMemo(() => {
     return allUnifiedOrders.filter(order => {
-      // Channel Filter
       if (selectedChannel === 'RECIPE_BATCHING' && order.orderType !== 'RECIPE_BATCH') return false;
       if (selectedChannel === 'MATERIAL_WITHDRAWALS' && order.orderType !== 'MATERIAL_WITHDRAWAL') return false;
+      if (selectedChannel === 'PENDING_REQUESTS' && order.orderType !== 'PENDING_REQUEST') return false;
       if (selectedChannel === 'MESS_HALL' && order.categoryTag !== 'MESS_HALL') return false;
       if (selectedChannel === 'WHOLESALE' && order.orderType !== 'WHOLESALE_DISPATCH') return false;
       if (selectedChannel === 'OUTLETS' && !order.customerOrOutlet.toLowerCase().includes('outlet') && !order.customerOrOutlet.toLowerCase().includes('pan de verde') && !order.customerOrOutlet.toLowerCase().includes('laurice')) return false;
       if (selectedChannel === 'PRODUCTION_LINES' && !order.customerOrOutlet.toLowerCase().includes('hall') && !order.customerOrOutlet.toLowerCase().includes('line')) return false;
 
-      // Status Filter
       if (selectedStatus !== 'ALL') {
         if (order.status !== selectedStatus) return false;
       }
 
-      // Search Query
       if (searchTerm.trim()) {
         const query = searchTerm.toLowerCase();
         const matchesId = order.orderId.toLowerCase().includes(query);
@@ -178,33 +231,31 @@ export default function OrderHistory({
     });
   }, [allUnifiedOrders, selectedChannel, selectedStatus, searchTerm]);
 
-  // Dynamic statistics
   const dynamicStats = useMemo(() => {
     const totalCost = filteredOrders.reduce((sum, o) => sum + (o.totalCost || 0), 0);
     const deliveredCount = filteredOrders.filter(o => o.status === 'Delivered').length;
-    const inProgressCount = filteredOrders.filter(o => o.status !== 'Delivered').length;
+    const inProgressCount = filteredOrders.filter(o => o.status !== 'Delivered' && o.orderType !== 'PENDING_REQUEST').length;
     const messHallCount = filteredOrders.filter(o => o.categoryTag === 'MESS_HALL').length;
+    const pendingCount = filteredOrders.filter(o => o.orderType === 'PENDING_REQUEST').length;
 
     return {
       totalOrders: filteredOrders.length,
       totalCost,
       deliveredCount,
       inProgressCount,
-      messHallCount
+      messHallCount,
+      pendingCount
     };
   }, [filteredOrders]);
 
-  // Status update handler
   const handleStatusChange = async (orderId, newStatus) => {
     setUpdatingId(orderId);
     try {
-      // Check if it's a wholesale order
       const isWholesale = wholesaleOrders.some(o => o.orderId === orderId);
       if (isWholesale) {
         await mockOrderService.updateOrderStatus(orderId, newStatus);
         await loadWholesaleOrders();
       } else if (onUpdateOrderStatus) {
-        // Map to batch order status
         const mappedStatus = newStatus === 'Batched / Kitted' ? 'BATCHED_KITTED' :
                              newStatus === 'Delivered' ? 'RELEASED' : 'PENDING_BATCHING';
         onUpdateOrderStatus(orderId, mappedStatus);
@@ -220,7 +271,6 @@ export default function OrderHistory({
     }
   };
 
-  // Status Badge Helper
   const renderStatusBadge = (status) => {
     switch (status) {
       case 'Delivered':
@@ -234,6 +284,12 @@ export default function OrderHistory({
         return (
           <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-purple-100 text-[#5B2E7A] border border-purple-200 flex items-center gap-1">
             <Package size={12} /> Batched / Kitted
+          </span>
+        );
+      case 'Pending Jade Issuance':
+        return (
+          <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-blue-100 text-blue-800 border border-blue-300 flex items-center gap-1 animate-pulse">
+            <Inbox size={12} /> Pending Jade Issuance
           </span>
         );
       case 'Pending Release':
@@ -259,9 +315,41 @@ export default function OrderHistory({
     }
   };
 
+  const renderSourceChip = (order) => {
+    if (order.orderType === 'PENDING_REQUEST') {
+      return (
+        <span className="text-[9px] font-bold bg-blue-100 text-blue-800 px-1.5 py-0.2 rounded border border-blue-200">
+          QUEUED
+        </span>
+      );
+    }
+    if (order.sourceChannel === 'PORTAL') {
+      return (
+        <span className="text-[9px] font-bold bg-emerald-100 text-emerald-800 px-1.5 py-0.2 rounded border border-emerald-200">
+          PORTAL
+        </span>
+      );
+    }
+    if (order.sourceChannel === 'BULK_BATCHING') {
+      return (
+        <span className="text-[9px] font-bold bg-purple-100 text-purple-800 px-1.5 py-0.2 rounded border border-purple-200">
+          BULK
+        </span>
+      );
+    }
+    if (order.sourceChannel === 'IN_APP_STAFF_ENTRY') {
+      return (
+        <span className="text-[9px] font-bold bg-indigo-100 text-indigo-800 px-1.5 py-0.2 rounded border border-indigo-200">
+          STAFF
+        </span>
+      );
+    }
+    return null;
+  };
+
   return (
     <div className="space-y-6">
-      {/* Module Title & Action Header */}
+      {/* Module Title */}
       <div className="bg-white p-4 md:p-6 rounded-2xl border border-[#E2D1B8] shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <div className="flex items-center gap-2">
@@ -274,7 +362,7 @@ export default function OrderHistory({
             Outlet, Line &amp; Mess Hall Order History
           </h2>
           <p className="text-xs md:text-sm text-gray-600">
-            Unified chronological ledger of all Recipe Batched Ingredients orders, Raw Material withdrawals (including Indangan Mess Hall staff meals/snacks), and past wholesale dispatches.
+            Unified chronological ledger of all Recipe Batched Ingredients orders, Raw Material withdrawals (including Indangan Mess Hall staff meals/snacks), and past wholesale dispatches. Pending portal requests appear as <strong>queued</strong> until Jade issues them.
           </p>
         </div>
 
@@ -329,24 +417,25 @@ export default function OrderHistory({
           </div>
         </div>
 
-        <div className="bg-white p-4 rounded-xl border border-[#E2D1B8] shadow-sm border-l-4 border-l-[#D68910] flex items-center justify-between">
+        <div className="bg-white p-4 rounded-xl border border-[#E2D1B8] shadow-sm border-l-4 border-l-[#2563EB] flex items-center justify-between">
           <div>
-            <p className="text-[11px] text-gray-500 font-bold uppercase tracking-wider">Mess Hall Requisitions</p>
-            <h3 className="text-xl md:text-2xl font-bold font-serif text-[#D68910] mt-0.5">
-              {dynamicStats.messHallCount} Meals/Snacks
+            <p className="text-[11px] text-gray-500 font-bold uppercase tracking-wider">Pending Jade Issuance</p>
+            <h3 className="text-xl md:text-2xl font-bold font-serif text-blue-700 mt-0.5">
+              {dynamicStats.pendingCount} Queued
             </h3>
-            <p className="text-[11px] text-gray-500 mt-1">Indangan staff food service</p>
+            <p className="text-[11px] text-gray-500 mt-1">Awaiting physical handoff confirmation</p>
           </div>
-          <div className="bg-[#D68910]/10 p-3 rounded-lg text-[#D68910]">
-            <Utensils size={24} />
+          <div className="bg-blue-100 p-3 rounded-lg text-blue-700">
+            <Inbox size={24} />
           </div>
         </div>
       </div>
 
-      {/* Filter Channel Tabs Bar */}
+      {/* Filter Channel Tabs */}
       <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
         {[
           { id: 'ALL', label: `All Transactions (${allUnifiedOrders.length})` },
+          { id: 'PENDING_REQUESTS', label: `Pending Issuance (${formattedPendingRequests.length})` },
           { id: 'RECIPE_BATCHING', label: `Recipe Batch Orders (${formattedBatchOrders.length})` },
           { id: 'MATERIAL_WITHDRAWALS', label: `Material Withdrawals (${formattedWithdrawals.length})` },
           { id: 'MESS_HALL', label: `Indangan Mess Hall (${allUnifiedOrders.filter(o => o.categoryTag === 'MESS_HALL').length})` },
@@ -368,13 +457,13 @@ export default function OrderHistory({
         ))}
       </div>
 
-      {/* Search and Status Dropdowns */}
+      {/* Search & Status */}
       <div className="bg-white p-4 rounded-xl border border-[#E2D1B8] shadow-sm flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
         <div className="relative flex-1">
           <Search size={16} className="absolute left-3 top-3 text-gray-400" />
           <input
             type="text"
-            placeholder="Search order ID (BORD / WS / ORD), requester (baker/staff), outlet, product..."
+            placeholder="Search order ID (BORD / WS / REQ / ORD), requester, outlet, product..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-9 pr-4 py-2 text-xs border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C8963E]"
@@ -392,6 +481,7 @@ export default function OrderHistory({
               <option value="ALL">All Statuses</option>
               <option value="Delivered">Delivered / Issued</option>
               <option value="Batched / Kitted">Batched / Kitted</option>
+              <option value="Pending Jade Issuance">Pending Jade Issuance</option>
               <option value="Pending Release">Pending Release</option>
               <option value="In Production">In Production / Batching</option>
             </select>
@@ -412,7 +502,7 @@ export default function OrderHistory({
         </div>
       </div>
 
-      {/* Unified Orders Register Table */}
+      {/* Orders Table */}
       <div className="bg-white rounded-xl border border-[#E2D1B8] shadow-sm overflow-hidden">
         <div className="px-6 py-3.5 bg-[#FAF6EE] border-b border-[#E2D1B8] flex justify-between items-center flex-wrap gap-2">
           <div className="flex items-center gap-2">
@@ -424,7 +514,7 @@ export default function OrderHistory({
             </span>
           </div>
           <p className="text-[11px] text-gray-500">
-            Real-time feed of Recipe Batching, Bodega Withdrawals &amp; Wholesale Logistics
+            Real-time feed of Recipe Batching, Bodega Withdrawals, Pending Requests &amp; Wholesale Logistics
           </p>
         </div>
 
@@ -454,12 +544,15 @@ export default function OrderHistory({
                 {filteredOrders.map((order) => {
                   const itemCount = order.items.reduce((sum, it) => sum + (it.qty || 1), 0);
                   const isMessHall = order.categoryTag === 'MESS_HALL';
+                  const isPending = order.orderType === 'PENDING_REQUEST';
 
                   return (
                     <tr 
                       key={order.orderId} 
                       className={`transition-colors ${
-                        isMessHall ? 'bg-amber-50/40 hover:bg-amber-50' : 'hover:bg-[#FAF6EE]/50'
+                        isPending ? 'bg-blue-50/30 hover:bg-blue-50/60 border-l-2 border-l-blue-400' :
+                        isMessHall ? 'bg-amber-50/40 hover:bg-amber-50' : 
+                        'hover:bg-[#FAF6EE]/50'
                       }`}
                     >
                       <td className="p-3 font-mono font-bold text-[#5B2E7A]">
@@ -469,13 +562,16 @@ export default function OrderHistory({
                         >
                           {order.orderId}
                         </button>
-                        <span className={`text-[9px] font-mono font-bold px-1.5 py-0.2 rounded inline-block mt-0.5 ${
-                          order.formType === 'Form-ORD-001' ? 'bg-purple-100 text-purple-800' :
-                          order.formType === 'Form-WAR-001' ? 'bg-emerald-100 text-emerald-800' :
-                          'bg-indigo-100 text-indigo-800'
-                        }`}>
-                          {order.formType}
-                        </span>
+                        <div className="flex items-center gap-1 mt-0.5 flex-wrap">
+                          <span className={`text-[9px] font-mono font-bold px-1.5 py-0.2 rounded inline-block ${
+                            order.formType === 'Form-ORD-001' ? 'bg-purple-100 text-purple-800' :
+                            order.formType === 'Form-WAR-001' ? 'bg-emerald-100 text-emerald-800' :
+                            'bg-indigo-100 text-indigo-800'
+                          }`}>
+                            {order.formType}
+                          </span>
+                          {renderSourceChip(order)}
+                        </div>
                       </td>
 
                       <td className="p-3">
@@ -553,21 +649,22 @@ export default function OrderHistory({
         )}
       </div>
 
-      {/* MODAL: Full Itemized Order & Requisition Slip */}
+      {/* Modal */}
       {selectedOrder && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
           <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-[#C8963E]/40 space-y-4 my-8">
-            {/* Modal Header */}
             <div className="flex justify-between items-start border-b border-gray-200 pb-4">
               <div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-[10px] font-bold uppercase tracking-wider bg-[#5B2E7A] text-white px-2 py-0.5 rounded font-mono">
                     {selectedOrder.formType}
                   </span>
                   <span className="text-xs font-mono font-bold text-[#5B2E7A]">{selectedOrder.orderId}</span>
+                  {renderSourceChip(selectedOrder)}
                 </div>
                 <h3 className="text-lg md:text-xl font-serif font-bold text-gray-900 mt-1">
                   {selectedOrder.orderType === 'RECIPE_BATCH' ? 'Outlet Recipe Batched Ingredients Order' :
+                   selectedOrder.orderType === 'PENDING_REQUEST' ? 'Queued Material Request — Awaiting Issuance' :
                    selectedOrder.orderType === 'MATERIAL_WITHDRAWAL' ? 'Warehouse Raw Material Withdrawal Slip' :
                    'Outlet Sales Order & Requisition Slip'}
                 </h3>
@@ -583,7 +680,20 @@ export default function OrderHistory({
               </button>
             </div>
 
-            {/* Customer & Delivery Metadata Grid */}
+            {/* Pending-request informational banner */}
+            {selectedOrder.orderType === 'PENDING_REQUEST' && (
+              <div className="bg-blue-50 border border-blue-300 p-3 rounded-xl text-xs text-blue-900 space-y-1">
+                <div className="flex items-center gap-2 font-bold">
+                  <Inbox size={14} /> Awaiting Jade Q. Dela Cruz Issuance
+                </div>
+                <p className="text-[11px]">
+                  This request is queued in Jade's Pending Issuance list in the Stock Release tab.
+                  No inventory has been deducted yet. Once Jade confirms physical handoff and clicks
+                  "Issue &amp; Deduct Stock", this request becomes a formal `Form-WAR-001` withdrawal.
+                </p>
+              </div>
+            )}
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 bg-[#FAF6EE] p-4 rounded-xl border border-[#E2D1B8] text-xs">
               <div className="space-y-1.5">
                 <div>
@@ -616,34 +726,34 @@ export default function OrderHistory({
               </div>
             </div>
 
-            {/* Status & Quick Status Update Row */}
             <div className="flex flex-wrap justify-between items-center gap-2 p-3 bg-white rounded-lg border border-gray-200 text-xs">
               <div className="flex items-center gap-2">
                 <span className="text-gray-500 font-bold uppercase text-[10px]">Current Status:</span>
                 {renderStatusBadge(selectedOrder.status)}
               </div>
 
-              {/* Status Updater for Authorized Roles */}
-              <div className="flex items-center gap-1.5">
-                <span className="text-gray-500 text-[10px] font-bold">Update State:</span>
-                <select
-                  value={selectedOrder.status}
-                  disabled={updatingId === selectedOrder.orderId}
-                  onChange={(e) => handleStatusChange(selectedOrder.orderId, e.target.value)}
-                  className="p-1 border border-gray-300 rounded text-xs font-semibold bg-white cursor-pointer"
-                >
-                  <option value="In Production">In Production / Batching</option>
-                  <option value="Batched / Kitted">Batched / Kitted</option>
-                  <option value="Pending Release">Pending Release</option>
-                  <option value="Delivered">Delivered / Issued</option>
-                </select>
-                {updatingId === selectedOrder.orderId && (
-                  <RefreshCw size={12} className="animate-spin text-[#C8963E]" />
-                )}
-              </div>
+              {/* Only allow status change for non-pending orders */}
+              {selectedOrder.orderType !== 'PENDING_REQUEST' && (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-gray-500 text-[10px] font-bold">Update State:</span>
+                  <select
+                    value={selectedOrder.status}
+                    disabled={updatingId === selectedOrder.orderId}
+                    onChange={(e) => handleStatusChange(selectedOrder.orderId, e.target.value)}
+                    className="p-1 border border-gray-300 rounded text-xs font-semibold bg-white cursor-pointer"
+                  >
+                    <option value="In Production">In Production / Batching</option>
+                    <option value="Batched / Kitted">Batched / Kitted</option>
+                    <option value="Pending Release">Pending Release</option>
+                    <option value="Delivered">Delivered / Issued</option>
+                  </select>
+                  {updatingId === selectedOrder.orderId && (
+                    <RefreshCw size={12} className="animate-spin text-[#C8963E]" />
+                  )}
+                </div>
+              )}
             </div>
 
-            {/* Itemized Products & Total Costing Breakdown */}
             <div>
               <h4 className="text-xs font-bold uppercase text-gray-700 mb-2 flex items-center gap-1">
                 <Package size={14} className="text-[#C8963E]" /> Itemized Products &amp; Price Breakdown:
@@ -690,7 +800,6 @@ export default function OrderHistory({
               </div>
             </div>
 
-            {/* Payment & Instructions Footer */}
             <div className="bg-gray-50 p-3 rounded-lg border border-gray-200 text-xs flex justify-between items-center">
               <div>
                 <span className="font-bold text-gray-700">Allocation Terms: </span>
@@ -702,7 +811,6 @@ export default function OrderHistory({
               </div>
             </div>
 
-            {/* Custodial Sign-Off Block */}
             <div className="grid grid-cols-3 gap-3 pt-2 text-[10px] text-gray-500 text-center border-t border-dashed">
               <div className="border-t pt-1">
                 <p className="font-bold text-gray-700">{selectedOrder.contactPerson}</p>
@@ -710,7 +818,7 @@ export default function OrderHistory({
               </div>
               <div className="border-t pt-1">
                 <p className="font-bold text-gray-700">Jade Q. Dela Cruz</p>
-                <p>Warehouse Supervisor (Dispatched)</p>
+                <p>{selectedOrder.orderType === 'PENDING_REQUEST' ? 'Warehouse Supervisor (Pending)' : 'Warehouse Supervisor (Dispatched)'}</p>
               </div>
               <div className="border-t pt-1">
                 <p className="font-bold text-gray-700">{selectedOrder.deliveryDriver}</p>
@@ -718,7 +826,6 @@ export default function OrderHistory({
               </div>
             </div>
 
-            {/* Modal Actions */}
             <div className="flex justify-between items-center pt-2">
               <button
                 onClick={() => window.print()}

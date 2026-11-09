@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { 
   FileText, Plus, Trash2, CheckCircle2, AlertCircle, 
-  Printer, ArrowUpRight, Clock, ShieldCheck, Scale, AlertTriangle
+  Printer, ArrowUpRight, Clock, ShieldCheck, Scale, AlertTriangle,
+  Inbox, XCircle, Package, Utensils
 } from 'lucide-react';
 import { MASTER_RECIPES } from '../data/recipesData';
 import { calculateRecipeIngredients } from '../utils/wmsLogic';
@@ -12,6 +13,9 @@ export default function IssuanceModule({
   withdrawals, 
   batchOrders = [],
   onApprovePendingWithdrawal,
+  pendingRequests = [],
+  onIssuePendingRequest,
+  onCancelPendingRequest,
   currentRole,
   isMobileMode,
   prefilledItem 
@@ -57,9 +61,22 @@ export default function IssuanceModule({
     }
   ]);
 
-  // Pending Bulk Requisitions awaiting Jade's approval
+  // ----------------------------------------------------------------------
+  // QUEUE 1: Pending bulk requisitions from Romeo (batching workbench)
+  // ----------------------------------------------------------------------
   const pendingBulkRequests = batchOrders.filter(
     b => b.bulkRequestStatus === 'PENDING_JADE_APPROVAL'
+  );
+
+  // ----------------------------------------------------------------------
+  // QUEUE 2: Pending material requests from Portal / in-app staff entry
+  // These are queued by the Outlet Portal (standalone or in-app). They DO
+  // NOT deduct stock. Jade must click "Issue & Deduct Stock" to convert
+  // a request into a withdrawal + trigger inventory decrement + POST
+  // WITHDRAWAL_SAVED to /api/sync.
+  // ----------------------------------------------------------------------
+  const pendingMaterialRequests = (pendingRequests || []).filter(
+    r => r.status === 'PENDING_ISSUANCE'
   );
 
   const handleMaterialChange = (index, code) => {
@@ -118,7 +135,6 @@ export default function IssuanceModule({
     e.preventDefault();
     setValidationError(null);
 
-    // Validate that items have positive quantities
     for (const item of items) {
       if (!item.qtyIssuedSec || item.qtyIssuedSec <= 0) {
         setValidationError(`Please specify a valid quantity for ${item.name}.`);
@@ -137,13 +153,34 @@ export default function IssuanceModule({
       issuedBy: `${currentRole} (Warehouse Custodian)`,
       receivedBy,
       items,
-      status: "ISSUED & RECONCILED"
+      status: "ISSUED & RECONCILED",
+      sourceChannel: 'MANUAL'
     };
 
     onSaveWithdrawal(newWithdrawal);
+    setSlipNo(`WS-${todayStr.replace(/-/g, '')}-${String(withdrawals.length + 2).padStart(3, '0')}`);
+  };
 
-    // Reset Form
-    setSlipNo(`WS-2026-1103-0${withdrawals.length + 2}`);
+  // Split withdrawals by channel for a small traceability chip
+  const channelChip = (w) => {
+    const ch = w.sourceChannel || 'MANUAL';
+    const colors = {
+      PORTAL: 'bg-blue-100 text-blue-800 border-blue-200',
+      IN_APP_STAFF_ENTRY: 'bg-indigo-100 text-indigo-800 border-indigo-200',
+      BULK_BATCHING: 'bg-purple-100 text-purple-800 border-purple-200',
+      MANUAL: 'bg-gray-100 text-gray-700 border-gray-200'
+    };
+    const labels = {
+      PORTAL: 'Portal',
+      IN_APP_STAFF_ENTRY: 'Staff Entry',
+      BULK_BATCHING: 'Bulk',
+      MANUAL: 'Manual'
+    };
+    return (
+      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${colors[ch] || colors.MANUAL}`}>
+        {labels[ch] || ch}
+      </span>
+    );
   };
 
   return (
@@ -169,7 +206,9 @@ export default function IssuanceModule({
         </div>
       </div>
 
-      {/* TOP CARD: PENDING BULK MATERIAL PULL REQUESTS FROM ROMEO MALUSAY */}
+      {/* ================================================================ */}
+      {/* QUEUE 1: PENDING BULK MATERIAL PULL REQUESTS FROM ROMEO MALUSAY */}
+      {/* ================================================================ */}
       {pendingBulkRequests.length > 0 && (
         <div className="bg-amber-50 border-2 border-amber-400 rounded-xl p-4 shadow-md space-y-3">
           <div className="flex justify-between items-center flex-wrap gap-2 border-b border-amber-200 pb-2">
@@ -216,7 +255,6 @@ export default function IssuanceModule({
                     </button>
                   </div>
 
-                  {/* Required bulk ingredients breakdown */}
                   <div className="bg-[#FAF6EE] p-2.5 rounded border border-[#E2D1B8] text-xs">
                     <p className="font-bold text-[#3D1C52] mb-1">Required Raw Materials to Deduct from Bodega:</p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
@@ -244,7 +282,139 @@ export default function IssuanceModule({
         </div>
       )}
 
-      {/* Main Withdrawal Form */}
+      {/* ================================================================ */}
+      {/* QUEUE 2: PENDING MATERIAL REQUESTS FROM PORTAL / STAFF ENTRY    */}
+      {/* ================================================================ */}
+      {pendingMaterialRequests.length > 0 && (
+        <div className="bg-blue-50 border-2 border-blue-400 rounded-xl p-4 shadow-md space-y-3">
+          <div className="flex justify-between items-center flex-wrap gap-2 border-b border-blue-200 pb-2">
+            <div className="flex items-center gap-2">
+              <Inbox size={20} className="text-blue-700" />
+              <div>
+                <h3 className="font-serif font-bold text-base text-blue-900">
+                  Pending Material Requests Awaiting Your Issuance ({pendingMaterialRequests.length})
+                </h3>
+                <p className="text-xs text-blue-700">
+                  Submitted from the Outlet Portal kiosk or in-app staff entry on behalf of a phone-in request.
+                  <strong> Materials are NOT deducted until you click "Issue &amp; Deduct Stock"</strong> — this is the physical handoff confirmation.
+                </p>
+              </div>
+            </div>
+            <span className="text-xs font-bold bg-blue-200 text-blue-900 px-2.5 py-1 rounded-full animate-pulse">
+              Action Required by Jade
+            </span>
+          </div>
+
+          <div className="space-y-3">
+            {pendingMaterialRequests.map(req => {
+              const sourceLabel =
+                req.sourceChannel === 'PORTAL' ? 'Outlet Portal' :
+                req.sourceChannel === 'IN_APP_STAFF_ENTRY' ? 'In-App Staff Entry' :
+                req.sourceChannel || 'Manual';
+
+              return (
+                <div key={req.requestId} className="bg-white p-3.5 rounded-lg border border-blue-200 shadow-xs space-y-2.5">
+                  <div className="flex justify-between items-start gap-2 flex-wrap">
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-mono text-xs font-bold text-blue-700">{req.requestId}</span>
+                        <span className="text-[10px] font-bold bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded uppercase">
+                          {sourceLabel}
+                        </span>
+                        <span className="text-[11px] text-gray-500">
+                          {req.dateRequested} {req.timeRequested}
+                        </span>
+                      </div>
+                      <h4 className="font-bold text-sm text-gray-900 mt-1 flex items-center gap-1.5">
+                        {(req.requestingEntity || '').toLowerCase().includes('mess') && (
+                          <Utensils size={13} className="text-amber-600" />
+                        )}
+                        <span>{req.requestingEntity}</span>
+                      </h4>
+                      <p className="text-xs text-gray-700 mt-0.5">
+                        Requested by: <span className="font-semibold">{req.requestedBy}</span>
+                        {req.enteredBy && req.enteredBy !== req.requestedBy && (
+                          <> · Entered by: <span className="font-semibold">{req.enteredBy}</span></>
+                        )}
+                      </p>
+                      <p className="text-xs text-gray-600">
+                        Purpose: <span className="font-medium">{req.purpose}</span> ·
+                        Needed by: <span className="font-mono font-semibold">{req.neededByDate}</span>
+                      </p>
+                    </div>
+
+                    <div className="text-right">
+                      <div className="text-xs text-gray-500 uppercase font-bold">Est. Value</div>
+                      <div className="font-bold text-emerald-700 text-sm">
+                        ₱{Number(req.totalEstimatedCost || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}
+                      </div>
+                      <div className="text-[11px] text-gray-500">{req.items.length} item{req.items.length !== 1 ? 's' : ''}</div>
+                    </div>
+                  </div>
+
+                  {/* Items list with stock availability indicators */}
+                  <div className="bg-[#FAF6EE] p-2.5 rounded border border-blue-100 text-xs space-y-1">
+                    {req.items.map((it, idx) => {
+                      const mat = inventory.find(m => m.code === it.materialCode);
+                      const available = mat?.currentBalance || 0;
+                      const sufficient = available >= (it.qtyRequestedSec || 0);
+                      return (
+                        <div key={idx} className="flex justify-between items-center gap-2">
+                          <div className="flex-1 min-w-0 truncate">
+                            <span className="font-mono text-[11px] text-blue-700">{it.materialCode}</span>
+                            <span className="text-gray-400 mx-1">·</span>
+                            <span className="text-gray-800">{it.name}</span>
+                          </div>
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            <span className="font-mono font-bold text-blue-800">
+                              {it.qtyRequestedSec} {it.secondaryUom}
+                            </span>
+                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${
+                              sufficient 
+                                ? 'bg-green-100 text-green-800 border-green-200' 
+                                : 'bg-red-100 text-red-800 border-red-200'
+                            }`}>
+                              {sufficient ? `✓ ${available} avail` : `⚠ Only ${available}`}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {req.notes && (
+                    <p className="text-[11px] text-gray-500 italic">Note: {req.notes}</p>
+                  )}
+
+                  <div className="flex gap-2 pt-1 justify-end">
+                    <button
+                      onClick={() => {
+                        const reason = window.prompt('Reason for cancelling this request?', 'Cancelled by Jade');
+                        if (reason !== null) {
+                          onCancelPendingRequest && onCancelPendingRequest(req.requestId, reason);
+                        }
+                      }}
+                      className="bg-red-100 hover:bg-red-200 text-red-700 text-xs font-bold px-4 py-2 rounded-lg flex items-center gap-1.5 transition"
+                    >
+                      <XCircle size={14} /> Cancel Request
+                    </button>
+                    <button
+                      onClick={() => onIssuePendingRequest && onIssuePendingRequest(req.requestId)}
+                      className="bg-[#1E7A3E] hover:bg-[#165c2f] text-white text-xs font-bold px-4 py-2 rounded-lg shadow flex items-center gap-1.5 transition"
+                    >
+                      <CheckCircle2 size={15} /> Issue &amp; Deduct Stock
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ================================================================ */}
+      {/* MANUAL ISSUANCE FORM (existing)                                  */}
+      {/* ================================================================ */}
       <form onSubmit={handleSubmit} className="bg-white p-5 rounded-xl border border-[#E2D1B8] shadow-sm space-y-5">
         <div className="border-b border-gray-200 pb-3 flex justify-between items-center flex-wrap gap-2">
           <h3 className="font-serif font-bold text-[#5B2E7A] flex items-center gap-2 text-base">
@@ -481,7 +651,6 @@ export default function IssuanceModule({
           </div>
         </div>
 
-        {/* Submit */}
         <div className="pt-4 border-t flex justify-end">
           <button
             type="submit"
@@ -519,7 +688,12 @@ export default function IssuanceModule({
             <tbody className="divide-y divide-[#E2D1B8]">
               {withdrawals.map((w, i) => (
                 <tr key={i} className="hover:bg-[#FAF6EE]/50">
-                  <td className="p-3 font-mono font-bold text-[#5B2E7A]">{w.slipNo}</td>
+                  <td className="p-3 font-mono font-bold text-[#5B2E7A]">
+                    <div className="flex flex-col gap-1">
+                      <span>{w.slipNo}</span>
+                      {channelChip(w)}
+                    </div>
+                  </td>
                   <td className="p-3 text-gray-600">{w.date} {w.time}</td>
                   <td className="p-3 font-medium text-gray-900">{w.requestingEntity}</td>
                   <td className="p-3 text-gray-600">{w.purpose}</td>

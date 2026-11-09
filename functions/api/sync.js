@@ -10,12 +10,22 @@
 //     projection_error IS set (visible in admin panel).
 //   - If a handler returns statements, they're applied in one D1 batch.
 //   - Balance-affecting events append a reconciliation UPDATE to the batch.
-//   - Events with no handler (HEARTBEAT_POLL, INVENTORY_ZERO_OUT,
-//     OPENING_BASELINE_CSV_IMPORT, etc.) are marked projected with no
-//     data change — their effects are already baked into current state.
+//   - Events with no handler are marked projected with no data change.
+//
+// Phase 1.5 change — DEDUCTION GATE:
+//   WITHDRAWAL_SAVED / WITHDRAWAL_ISSUED are the ONLY events that decrement
+//   material_lots and write to withdrawals / withdrawal_items. They are
+//   emitted exclusively by Jade Q. Dela Cruz after she confirms physical
+//   issuance — either via IssuanceModule direct save, via the Pending
+//   Issuance Queue ("Issue" button on a queued request), or via batch-order
+//   bulk approval.
+//
+//   MATERIAL_WITHDRAWAL was previously mapped to projectWithdrawal and could
+//   auto-deduct stock from the self-service outlet portal. This is removed:
+//   portal submissions now POST WITHDRAWAL_REQUEST_SUBMITTED (no-op) and land
+//   in the pending_requests queue for Jade's review.
 // ============================================================================
 
-// --------------------------- payload helpers ------------------------------
 const str     = v => (v === null || v === undefined ? null : String(v));
 const num     = v => { const n = Number(v); return Number.isFinite(n) ? n : null; };
 const cents   = v => { const n = Number(v); return Number.isFinite(n) ? Math.round(n * 100) : null; };
@@ -23,11 +33,8 @@ const isoDate = v => (v ? String(v).slice(0, 10) : null);
 const bool    = v => (v ? 1 : 0);
 const pick    = (o, ...keys) => { for (const k of keys) if (o && o[k] != null) return o[k]; return undefined; };
 
-// STRICT is_test_data — accepts true / 1 / '1' / 'true' only
 const asTest = v => (v === true || v === 1 || v === '1' || v === 'true') ? 1 : 0;
 
-// Extract PHT date/time from either ISO-8601 UTC (ends with Z) or bare
-// business timestamp (already PHT, no suffix)
 function phtDate(ts) {
   if (!ts) return null;
   const s = String(ts);
@@ -49,8 +56,6 @@ function phtTime(ts) {
   const m = s.match(/[\sT](\d{2}:\d{2}(?::\d{2})?)/);
   return m ? m[1] : null;
 }
-
-// --------------------------- projection handlers --------------------------
 
 function projectReceiving(env, p, isTest) {
   const stmts = [];
@@ -123,12 +128,7 @@ function projectWithdrawal(env, p, isTest) {
   if (!slipNo) throw new Error('MISSING_SLIP_NO');
 
   const items = p.items || p.lines || [];
-  if (items.length === 0) {
-    // Observed in production: some withdrawal events contain only header
-    // data (slipNo, requestingEntity, purpose) with no items array.
-    // Projecting would insert an empty header — worse than nothing.
-    throw new Error('NO_LINE_ITEMS');
-  }
+  if (items.length === 0) throw new Error('NO_LINE_ITEMS');
 
   stmts.push(env.DB.prepare(`
     INSERT INTO withdrawals
@@ -231,9 +231,6 @@ function projectBatchOrder(env, p, isTest) {
   const orderId = pick(p, 'orderId', 'order_id');
   if (!orderId) throw new Error('MISSING_ORDER_ID');
 
-  // Portal orders often arrive without recipeSku and requestedQtyPcs.
-  // We project the header (which is useful for tracking) but set a
-  // projection_error below via the caller when we detect the gap.
   stmts.push(env.DB.prepare(`
     INSERT INTO batch_orders
       (order_id, outlet_name, recipe_sku, recipe_name_snapshot, requested_qty_pcs,
@@ -290,7 +287,6 @@ function projectBatchOrder(env, p, isTest) {
     isTest
   ));
 
-  // Flag incomplete portal orders — header is preserved but marked
   const hasSku = pick(p, 'recipeSku', 'recipe_sku');
   const hasQty = pick(p, 'requestedQtyPcs', 'requested_qty_pcs');
   if (!hasSku || !hasQty) {
@@ -343,8 +339,7 @@ function projectOrder(env, p, isTest) {
 }
 
 function projectAudit(env, p, isTest) {
-  const stmts = [];
-  stmts.push(env.DB.prepare(`
+  return [env.DB.prepare(`
     INSERT INTO audit_log (timestamp, actor, role, action, details, is_test_data)
     VALUES (?, ?, ?, ?, ?, ?)
   `).bind(
@@ -352,8 +347,7 @@ function projectAudit(env, p, isTest) {
     str(p.actor), str(p.role),
     str(p.action) || 'UNKNOWN',
     str(p.details), isTest
-  ));
-  return stmts;
+  )];
 }
 
 function projectQuarantine(env, p, isTest) {
@@ -458,19 +452,21 @@ function projectSpecialty(env, p, isTest) {
   return stmts;
 }
 
-// --------------------------- dispatcher -----------------------------------
-// Every event_type the floor app has been observed to emit. Types not in
-// this map are informational only (heartbeats, health checks, historical
-// state resets) and are marked projected with no data change.
+// ============================================================================
+// HANDLERS map — every event_type the floor app is allowed to project.
+// Only Jade-issued events are in BALANCE_AFFECTING.
+// ============================================================================
 const HANDLERS = {
   // Receiving
   'RECEIVING_SAVED':              projectReceiving,
   'RECEIVING_CREATED':            projectReceiving,
 
-  // Withdrawal (material issuance)
+  // Withdrawal (Jade-issued only — see comment below)
   'WITHDRAWAL_SAVED':             projectWithdrawal,
   'WITHDRAWAL_ISSUED':            projectWithdrawal,
-  'MATERIAL_WITHDRAWAL':          projectWithdrawal,       // observed in production
+  // REMOVED: 'MATERIAL_WITHDRAWAL' — was previously auto-deducted.
+  // Portal submissions are now routed through Jade's Pending Issuance
+  // queue and only reach sync as WITHDRAWAL_SAVED after she confirms.
 
   // Adjustments
   'ADJUSTMENT_SAVED':             projectAdjustment,
@@ -482,16 +478,16 @@ const HANDLERS = {
   'BATCH_BULK_APPROVED':          projectBatchOrder,
   'BATCH_COMPLETED':              projectBatchOrder,
   'BATCH_RELEASED':               projectBatchOrder,
-  'OUTLET_BATCH_ORDER':           projectBatchOrder,       // observed in production
+  'OUTLET_BATCH_ORDER':           projectBatchOrder,
 
   // Wholesale orders
   'ORDER_SAVED':                  projectOrder,
   'ORDER_CREATED':                projectOrder,
 
-  // Audit log (includes historical INVENTORY_ZERO_OUT as an `action` field)
+  // Audit log
   'AUDIT_LOG':                    projectAudit,
   'AUDIT_LOG_ENTRY':              projectAudit,
-  'WMS_AUDIT_EVENT':              projectAudit,            // observed in production
+  'WMS_AUDIT_EVENT':              projectAudit,
 
   // Quarantine / NCR
   'QUARANTINE_SAVED':             projectQuarantine,
@@ -503,27 +499,39 @@ const HANDLERS = {
   'SPECIALTY_PROPOSAL_APPROVED':  projectSpecialty,
 
   // NOTE — Deliberately OMITTED (no handler = marked projected, no data change):
-  //   HEARTBEAT_POLL              — liveness signal, no data side-effect
-  //   INVENTORY_CHECK             — read-only check, no data side-effect
-  //   INVENTORY_ZERO_OUT          — mass reset; effect already baked into
-  //                                 current state via CSV import. Projecting
-  //                                 retroactively would double-zero lots.
-  //   OPENING_BASELINE_CSV_IMPORT — historical import event; effect already
-  //                                 baked into current state. Same reasoning.
-  //   AUTOMATED_EOD_2345_DISPATCH — cron liveness marker, no data side-effect
+  //   HEARTBEAT_POLL               — liveness signal, no data side-effect
+  //   INVENTORY_CHECK              — read-only check, no data side-effect
+  //   INVENTORY_ZERO_OUT           — mass reset; effect already baked into
+  //                                  current state via CSV import. Projecting
+  //                                  retroactively would double-zero lots.
+  //   OPENING_BASELINE_CSV_IMPORT  — historical import event; effect already
+  //                                  baked into current state.
+  //   AUTOMATED_EOD_2345_DISPATCH  — cron liveness marker, no data side-effect
+  //
+  //   WITHDRAWAL_REQUEST_SUBMITTED — Phase 1.5: portal/direct-request
+  //                                  submissions land here for audit only.
+  //                                  They do NOT create withdrawal records
+  //                                  and do NOT decrement material_lots.
+  //                                  Stock only changes via WITHDRAWAL_SAVED
+  //                                  after Jade clicks "Issue".
+  //
+  //   MATERIAL_WITHDRAWAL          — legacy event from earlier portal build;
+  //                                  intentionally no longer projected to
+  //                                  prevent auto-deduction without Jade's
+  //                                  explicit approval. Old cached portals
+  //                                  will still no-op safely.
+  //
+  //   WITHDRAWAL_REQUEST_CANCELLED — audit-only; no stock effect.
 };
 
-// Events whose projection mutates material_lots or current_balance —
-// requires the reconciliation UPDATE to run in the same batch
 const BALANCE_AFFECTING = new Set([
   'RECEIVING_SAVED','RECEIVING_CREATED',
-  'WITHDRAWAL_SAVED','WITHDRAWAL_ISSUED','MATERIAL_WITHDRAWAL',
+  'WITHDRAWAL_SAVED','WITHDRAWAL_ISSUED',
   'ADJUSTMENT_SAVED',
+  // 'MATERIAL_WITHDRAWAL' removed — no auto-deduct path from portal.
 ]);
 
 function buildReconciliationStatement(env) {
-  // Bounded (75 materials max). Idempotent. Runs inside the same batch as
-  // the projection so a partial failure rolls everything back.
   return env.DB.prepare(`
     UPDATE materials
     SET current_balance = COALESCE((
@@ -537,23 +545,17 @@ function buildReconciliationStatement(env) {
   `);
 }
 
-// --------------------------- entry point ----------------------------------
 export async function onRequestPost({ request, env }) {
   let body;
   try { body = await request.json(); }
   catch { return json({ status: 'error', error: 'invalid_json' }, 400); }
 
-  // ---- Detect request shape ------------------------------------------------
-  //   Shape A (structured):  { event_type, idempotency_key, payload: {...} }
-  //   Shape B (flat):        { idempotencyKey, eventType, ...payload fields }
   let type, key, payload;
   if (body.event_type || body.type || body.payload || body.data) {
-    // Shape A
     type    = String(body.event_type || body.type || '').toUpperCase();
     key     = String(body.idempotency_key || body.id || crypto.randomUUID());
     payload = body.payload || body.data || {};
   } else {
-    // Shape B — the body IS the payload
     payload = body;
     type    = String(body.eventType || body.event_type || body.type || '').toUpperCase();
     key     = String(body.idempotencyKey || body.idempotency_key || body.id || crypto.randomUUID());
@@ -561,7 +563,6 @@ export async function onRequestPost({ request, env }) {
 
   const isTest = asTest(payload.is_test_data);
 
-  // ---- Idempotency row -----------------------------------------------------
   const existing = await env.DB.prepare(
     `SELECT id, projected_at, synced_to_gas FROM sync_events WHERE idempotency_key = ?`
   ).bind(key).first();
@@ -580,7 +581,6 @@ export async function onRequestPost({ request, env }) {
     `SELECT id, projected_at, synced_to_gas FROM sync_events WHERE idempotency_key = ?`
   ).bind(key).first();
 
-  // ---- Projection ----------------------------------------------------------
   let projectionOk  = !!state?.projected_at;
   let softWarning   = null;
 
@@ -589,7 +589,6 @@ export async function onRequestPost({ request, env }) {
     if (handler) {
       try {
         const stmts = handler(env, payload, isTest);
-        // Handler may attach a non-fatal warning (e.g. partial portal order)
         if (stmts && stmts._softWarning) softWarning = stmts._softWarning;
         if (BALANCE_AFFECTING.has(type)) stmts.push(buildReconciliationStatement(env));
         if (stmts.length > 0) await env.DB.batch(stmts);
@@ -598,15 +597,12 @@ export async function onRequestPost({ request, env }) {
         ).bind(softWarning, key).run();
         projectionOk = true;
       } catch (e) {
-        // Structural failure (e.g. NO_LINE_ITEMS) — mark projected so we
-        // don't retry forever, but record the reason for the admin panel.
         await env.DB.prepare(
           `UPDATE sync_events SET projected_at = datetime('now'), projection_error = ? WHERE idempotency_key = ?`
         ).bind(String(e.message || e), key).run();
         projectionOk = true;
       }
     } else {
-      // No handler — mark projected with no data change
       await env.DB.prepare(
         `UPDATE sync_events SET projected_at = datetime('now') WHERE idempotency_key = ?`
       ).bind(key).run();
@@ -614,7 +610,6 @@ export async function onRequestPost({ request, env }) {
     }
   }
 
-  // ---- GAS forward (existing behavior, unchanged) --------------------------
   let gasOk = !!state?.synced_to_gas;
   if (!gasOk && env.GAS_WEB_APP_URL) {
     try {

@@ -12,7 +12,6 @@
   </style>
 </head>
 <body class="bg-[#FAF6EE] text-[#2A1B2E] min-h-screen flex flex-col">
-  <!-- Top Corporate Strip -->
   <header class="bg-[#3D1C52] text-white p-4 shadow-md border-b border-[#C8963E]/40">
     <div class="max-w-4xl mx-auto flex items-center justify-between flex-wrap gap-3">
       <div class="flex items-center gap-3">
@@ -30,10 +29,7 @@
     </div>
   </header>
 
-  <!-- Main Kiosk Container -->
   <main class="flex-1 max-w-4xl mx-auto w-full p-4 md:p-6 space-y-5">
-    
-    <!-- Portal Introduction Banner -->
     <div class="bg-gradient-to-r from-[#240e32] to-[#3D1C52] text-white p-5 rounded-2xl border border-[#C8963E]/40 shadow-lg flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
       <div>
         <div class="flex items-center gap-2">
@@ -46,6 +42,9 @@
         <p class="text-xs text-gray-300">
           For Retail Outlets, Commercial Baking Halls, and Indangan Facility Mess Hall (Staff Meals &amp; Snacks).
         </p>
+        <p class="text-[11px] text-[#E5C585] mt-1">
+          ⓘ Submissions are <strong>requests</strong> — Jade Q. Dela Cruz reviews and confirms issuance before any stock is deducted.
+        </p>
       </div>
       <div class="text-right text-xs bg-white/10 px-3 py-1.5 rounded-xl border border-white/10 hidden md:block">
         <span class="text-[#E5C585] font-bold">Fulfillment Desks:</span>
@@ -54,37 +53,20 @@
       </div>
     </div>
 
-    <!-- Mode Selector Tabs -->
     <div class="bg-white p-1.5 rounded-2xl border border-[#E2D1B8] shadow-sm flex flex-col md:flex-row gap-2">
-      <button
-        id="tabBtnRecipe"
-        type="button"
-        onclick="switchTab('recipe')"
-        class="flex-1 py-2.5 px-4 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 bg-[#3D1C52] text-white shadow"
-      >
+      <button id="tabBtnRecipe" type="button" onclick="switchTab('recipe')" class="flex-1 py-2.5 px-4 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 bg-[#3D1C52] text-white shadow">
         <span>1. Order Recipe Batched Ingredients (`Form-ORD-001`)</span>
       </button>
-      <button
-        id="tabBtnMaterial"
-        type="button"
-        onclick="switchTab('material')"
-        class="flex-1 py-2.5 px-4 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 bg-[#FAF6EE] text-gray-700 hover:bg-gray-100"
-      >
+      <button id="tabBtnMaterial" type="button" onclick="switchTab('material')" class="flex-1 py-2.5 px-4 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 bg-[#FAF6EE] text-gray-700 hover:bg-gray-100">
         <span>2. Request Raw Materials &amp; Packaging (`Form-WAR-001`)</span>
         <span class="text-[10px] bg-[#1E7A3E] text-white px-1.5 py-0.2 rounded font-bold">Mess Hall &amp; Floor</span>
       </button>
-      <button
-        id="tabBtnSpecialty"
-        type="button"
-        onclick="switchTab('specialty')"
-        class="flex-1 py-2.5 px-4 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 bg-[#FAF6EE] text-gray-700 hover:bg-gray-100"
-      >
+      <button id="tabBtnSpecialty" type="button" onclick="switchTab('specialty')" class="flex-1 py-2.5 px-4 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 bg-[#FAF6EE] text-gray-700 hover:bg-gray-100">
         <span>3. Propose Specialty Recipe (`Form-RND-001`)</span>
         <span class="text-[10px] bg-[#B87333] text-white px-1.5 py-0.2 rounded font-bold">R&amp;D New</span>
       </button>
     </div>
 
-    <!-- Confirmation Toast Banner -->
     <div id="confirmBox" class="hidden bg-emerald-50 border-2 border-emerald-500 text-emerald-900 p-4 rounded-2xl shadow-md transition space-y-1">
       <div class="flex items-center gap-2">
         <span class="text-lg">✓</span>
@@ -93,9 +75,7 @@
       <p id="confirmDetails" class="text-xs"></p>
     </div>
 
-    <!-- ============================================================= -->
-    <!-- FORM 1: RECIPE BATCHED INGREDIENTS (Form-ORD-001) -->
-    <!-- ============================================================= -->
+    <!-- FORM 1: RECIPE BATCHED INGREDIENTS -->
     <div id="recipeSection" class="bg-white p-6 rounded-2xl border border-[#E2D1B8] shadow-sm space-y-4">
       <div class="border-b border-gray-100 pb-3 flex justify-between items-center flex-wrap gap-2">
         <div>
@@ -109,7 +89,6 @@
 
       <form id="recipeOrderForm" class="space-y-4 text-xs">
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <!-- Requesting Location -->
           <div>
             <label class="block font-bold text-gray-700 mb-1">Requesting Production Line / Outlet *</label>
             <select id="recipeOutletSelect" class="w-full p-2.5 border border-gray-300 rounded-xl bg-white font-medium focus:ring-2 focus:ring-[#C8963E]" required>
@@ -123,103 +102,43 @@
               <option value="Other Department (Write-in below)">Other Production Line / Branch (Write-in)</option>
             </select>
           </div>
-
-          <!-- Requisitioned By -->
           <div>
             <label class="block font-bold text-gray-700 mb-1">Requisitioned By (Baker / Staff Name) *</label>
-            <input 
-              type="text" 
-              id="recipePersonInput" 
-              placeholder="e.g. Feliciano Gomera / Jhoanna Tejano" 
-              class="w-full p-2.5 border border-gray-300 rounded-xl font-medium focus:ring-2 focus:ring-[#C8963E]"
-              required
-            >
+            <input type="text" id="recipePersonInput" placeholder="e.g. Feliciano Gomera / Jhoanna Tejano" class="w-full p-2.5 border border-gray-300 rounded-xl font-medium focus:ring-2 focus:ring-[#C8963E]" required>
           </div>
-
-          <!-- Recipe Formulation -->
           <div class="md:col-span-2">
             <label class="block font-bold text-gray-700 mb-1">Standardized Master Recipe Formulation *</label>
-            <select id="recipeSelect" class="w-full p-2.5 border border-gray-300 rounded-xl bg-white font-medium focus:ring-2 focus:ring-[#C8963E]" required onchange="updateRecipePreview()">
-              <!-- Dynamically populated from ALL_MASTER_RECIPES -->
-            </select>
+            <select id="recipeSelect" class="w-full p-2.5 border border-gray-300 rounded-xl bg-white font-medium focus:ring-2 focus:ring-[#C8963E]" required onchange="updateRecipePreview()"></select>
           </div>
-
-          <!-- Dynamic Formulation Yield & Economics Card -->
           <div class="md:col-span-2 bg-[#FAF6EE] p-3.5 rounded-xl border border-[#E2D1B8] flex flex-wrap items-center justify-between gap-3 text-xs">
-            <div>
-              <span class="text-gray-500 text-[10px] uppercase font-bold">Standard Piece Yield @ 1.0x:</span>
-              <p id="previewBaseYield" class="font-bold text-[#3D1C52]">~85 pieces</p>
-            </div>
-            <div>
-              <span class="text-gray-500 text-[10px] uppercase font-bold">Total Batch Yield:</span>
-              <p id="previewTotalYield" class="font-extrabold text-[#1E7A3E] text-sm">85 pieces</p>
-            </div>
-            <div>
-              <span class="text-gray-500 text-[10px] uppercase font-bold">Unit Production Cost:</span>
-              <p id="previewUnitCost" class="font-mono text-gray-700">₱1.45</p>
-            </div>
-            <div>
-              <span class="text-gray-500 text-[10px] uppercase font-bold">Suggested Retail Price (SRP):</span>
-              <p id="previewSrp" class="font-mono font-bold text-[#5B2E7A]">₱3.00</p>
-            </div>
-            <div>
-              <span class="text-gray-500 text-[10px] uppercase font-bold">Gross Margin:</span>
-              <p id="previewMargin" class="font-bold text-emerald-700">51.7%</p>
-            </div>
+            <div><span class="text-gray-500 text-[10px] uppercase font-bold">Standard Piece Yield @ 1.0x:</span><p id="previewBaseYield" class="font-bold text-[#3D1C52]">~85 pieces</p></div>
+            <div><span class="text-gray-500 text-[10px] uppercase font-bold">Total Batch Yield:</span><p id="previewTotalYield" class="font-extrabold text-[#1E7A3E] text-sm">85 pieces</p></div>
+            <div><span class="text-gray-500 text-[10px] uppercase font-bold">Unit Production Cost:</span><p id="previewUnitCost" class="font-mono text-gray-700">₱1.45</p></div>
+            <div><span class="text-gray-500 text-[10px] uppercase font-bold">Suggested Retail Price (SRP):</span><p id="previewSrp" class="font-mono font-bold text-[#5B2E7A]">₱3.00</p></div>
+            <div><span class="text-gray-500 text-[10px] uppercase font-bold">Gross Margin:</span><p id="previewMargin" class="font-bold text-emerald-700">51.7%</p></div>
           </div>
-
-          <!-- Multiplier -->
           <div>
             <label class="block font-bold text-gray-700 mb-1">Batch Scaling Multiplier *</label>
-            <input 
-              type="number" 
-              id="recipeMultiplierInput" 
-              value="1.0" 
-              min="0.25" 
-              max="10" 
-              step="0.25" 
-              class="w-full p-2.5 border border-gray-300 rounded-xl font-mono font-bold text-[#5B2E7A] focus:ring-2 focus:ring-[#C8963E]"
-              required
-              oninput="updateRecipePreview()"
-            >
+            <input type="number" id="recipeMultiplierInput" value="1.0" min="0.25" max="10" step="0.25" class="w-full p-2.5 border border-gray-300 rounded-xl font-mono font-bold text-[#5B2E7A] focus:ring-2 focus:ring-[#C8963E]" required oninput="updateRecipePreview()">
           </div>
-
-          <!-- Delivery Date -->
           <div>
             <label class="block font-bold text-gray-700 mb-1">Needed Delivery Date *</label>
-            <input 
-              type="date" 
-              id="recipeDateInput" 
-              class="w-full p-2.5 border border-gray-300 rounded-xl font-medium focus:ring-2 focus:ring-[#C8963E]"
-              required
-            >
+            <input type="date" id="recipeDateInput" class="w-full p-2.5 border border-gray-300 rounded-xl font-medium focus:ring-2 focus:ring-[#C8963E]" required>
           </div>
         </div>
-
         <div>
           <label class="block font-bold text-gray-700 mb-1">Special Preparation Notes &amp; Dispatch Instructions</label>
-          <textarea 
-            id="recipeNotesInput" 
-            rows="2" 
-            placeholder="e.g. Priority dispatch for 06:00 AM delivery van. Ensure bread improver and yeast are pre-separated." 
-            class="w-full p-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#C8963E]"
-          ></textarea>
+          <textarea id="recipeNotesInput" rows="2" placeholder="e.g. Priority dispatch for 06:00 AM delivery van. Ensure bread improver and yeast are pre-separated." class="w-full p-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#C8963E]"></textarea>
         </div>
-
         <div class="pt-2 flex justify-end">
-          <button 
-            type="submit" 
-            class="bg-[#3D1C52] hover:bg-[#240e32] text-white font-bold text-xs px-6 py-3 rounded-xl shadow-md transition flex items-center gap-2"
-          >
+          <button type="submit" class="bg-[#3D1C52] hover:bg-[#240e32] text-white font-bold text-xs px-6 py-3 rounded-xl shadow-md transition flex items-center gap-2">
             <span>✓ Dispatch Requisition to Romeo Malusay's Scaling Queue</span>
           </button>
         </div>
       </form>
     </div>
 
-    <!-- ============================================================= -->
-    <!-- FORM 2: RAW MATERIAL & PACKAGING WITHDRAWAL (Form-WAR-001) -->
-    <!-- ============================================================= -->
+    <!-- FORM 2: RAW MATERIAL & PACKAGING WITHDRAWAL -->
     <div id="materialSection" class="hidden bg-white p-6 rounded-2xl border border-[#E2D1B8] shadow-sm space-y-4">
       <div class="border-b border-gray-100 pb-3 flex justify-between items-center flex-wrap gap-2">
         <div>
@@ -227,13 +146,12 @@
             Form-WAR-001 · Raw Material Requisition
           </span>
           <h3 class="text-lg font-bold font-serif text-[#1E7A3E] mt-1">Raw Material &amp; Packaging Withdrawal Request</h3>
-          <p class="text-xs text-gray-500">Request bulk flours, fresh eggs, sugars, margarines, dairy, or packaging for Indangan Mess Hall meals/snacks and plant operations.</p>
+          <p class="text-xs text-gray-500">Request bulk flours, fresh eggs, sugars, margarines, dairy, or packaging. <strong>Materials are only deducted after Jade Q. Dela Cruz confirms issuance.</strong></p>
         </div>
       </div>
 
       <form id="materialOrderForm" class="space-y-4 text-xs">
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <!-- Requesting Line -->
           <div>
             <label class="block font-bold text-gray-700 mb-1">Requesting Production Line / Facility *</label>
             <select id="matLineSelect" class="w-full p-2.5 border border-gray-300 rounded-xl bg-white font-medium focus:ring-2 focus:ring-[#1E7A3E]" required>
@@ -248,20 +166,10 @@
               <option value="Other Production Line / Branch (Write-in)">Other Production Line / Branch (Write-in)</option>
             </select>
           </div>
-
-          <!-- Requisitioned By -->
           <div>
             <label class="block font-bold text-gray-700 mb-1">Requisitioned By (Baker / Cook / Staff Name) *</label>
-            <input 
-              type="text" 
-              id="matPersonInput" 
-              placeholder="e.g. Maria Elena / Indangan Cook" 
-              class="w-full p-2.5 border border-gray-300 rounded-xl font-medium focus:ring-2 focus:ring-[#1E7A3E]"
-              required
-            >
+            <input type="text" id="matPersonInput" placeholder="e.g. Maria Elena / Indangan Cook" class="w-full p-2.5 border border-gray-300 rounded-xl font-medium focus:ring-2 focus:ring-[#1E7A3E]" required>
           </div>
-
-          <!-- Purpose -->
           <div>
             <label class="block font-bold text-gray-700 mb-1">Consumption Purpose *</label>
             <select id="matPurposeSelect" class="w-full p-2.5 border border-gray-300 rounded-xl bg-white font-medium focus:ring-2 focus:ring-[#1E7A3E]">
@@ -276,24 +184,12 @@
           </div>
         </div>
 
-        <!-- Materials List -->
         <div class="border border-gray-200 rounded-xl p-4 bg-[#FAF6EE] space-y-3">
           <div class="flex justify-between items-center">
-            <span class="font-bold text-xs text-[#3D1C52] uppercase tracking-wider">
-              Requested Material Items (All 75 Warehouse Materials &amp; Packaging):
-            </span>
-            <button 
-              type="button" 
-              onclick="addMaterialRow()"
-              class="bg-[#1E7A3E] hover:bg-[#165c2f] text-white font-bold text-[11px] px-3 py-1.5 rounded-lg shadow transition"
-            >
-              + Add Material
-            </button>
+            <span class="font-bold text-xs text-[#3D1C52] uppercase tracking-wider">Requested Material Items (All 75 Warehouse Materials &amp; Packaging):</span>
+            <button type="button" onclick="addMaterialRow()" class="bg-[#1E7A3E] hover:bg-[#165c2f] text-white font-bold text-[11px] px-3 py-1.5 rounded-lg shadow transition">+ Add Material</button>
           </div>
-
-          <div id="materialRowsContainer" class="space-y-2">
-            <!-- Dynamically populated rows -->
-          </div>
+          <div id="materialRowsContainer" class="space-y-2"></div>
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -308,25 +204,18 @@
         </div>
 
         <div class="pt-2 flex justify-end">
-          <button 
-            type="submit" 
-            class="bg-[#1E7A3E] hover:bg-[#165c2f] text-white font-bold text-xs px-6 py-3 rounded-xl shadow-md transition flex items-center gap-2"
-          >
-            <span>✓ Submit Material Requisition to Jade Dela Cruz (`Form-WAR-001`)</span>
+          <button type="submit" class="bg-[#1E7A3E] hover:bg-[#165c2f] text-white font-bold text-xs px-6 py-3 rounded-xl shadow-md transition flex items-center gap-2">
+            <span>✓ Submit Request to Jade Dela Cruz's Pending Issuance Queue (`Form-WAR-001`)</span>
           </button>
         </div>
       </form>
     </div>
 
-    <!-- ============================================================= -->
-    <!-- FORM 3: PROPOSE SPECIALTY RECIPE (Form-RND-001) -->
-    <!-- ============================================================= -->
+    <!-- FORM 3: PROPOSE SPECIALTY RECIPE -->
     <div id="specialtySection" class="hidden bg-white p-6 rounded-2xl border border-[#E2D1B8] shadow-sm space-y-4">
       <div class="border-b border-gray-100 pb-3 flex justify-between items-center flex-wrap gap-2">
         <div>
-          <span class="text-[10px] font-mono font-bold bg-[#B87333] text-white px-2 py-0.5 rounded">
-            Form-RND-001 · Baker Specialty Formulation Proposal
-          </span>
+          <span class="text-[10px] font-mono font-bold bg-[#B87333] text-white px-2 py-0.5 rounded">Form-RND-001 · Baker Specialty Formulation Proposal</span>
           <h3 class="text-lg font-bold font-serif text-[#B87333] mt-1">Propose New or Specialty Recipe</h3>
           <p class="text-xs text-gray-500">Submit new or seasonal bakery formulations directly from the branch to Romeo Malusay and Zaphyr Zur Pomicpic for QA verification and inclusion into Master Formulations.</p>
         </div>
@@ -334,19 +223,14 @@
 
       <form id="specialtyRecipeForm" class="space-y-4 text-xs">
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <!-- Commercial Name -->
           <div class="md:col-span-2">
             <label class="block font-bold text-gray-700 mb-1">Recipe Commercial Title / Product Name *</label>
             <input type="text" id="specTitleInput" placeholder="e.g. Davao Durian Hopia / Cheese Bread Supreme / Spanish Pan de Coco" class="w-full p-2.5 border border-gray-300 rounded-xl font-medium focus:ring-2 focus:ring-[#B87333]" required>
           </div>
-
-          <!-- Proposing Baker -->
           <div>
             <label class="block font-bold text-gray-700 mb-1">Proposing Baker Name *</label>
             <input type="text" id="specBakerInput" placeholder="e.g. Feliciano T. Gomera" class="w-full p-2.5 border border-gray-300 rounded-xl font-medium focus:ring-2 focus:ring-[#B87333]" required>
           </div>
-
-          <!-- Outlet -->
           <div>
             <label class="block font-bold text-gray-700 mb-1">Originating Branch / Facility *</label>
             <select id="specOutletSelect" class="w-full p-2.5 border border-gray-300 rounded-xl bg-white font-medium focus:ring-2 focus:ring-[#B87333]">
@@ -358,89 +242,56 @@
               <option value="Indangan Plant (Pastry &amp; Cakes Line)">Indangan Plant (Pastry &amp; Cakes Line)</option>
             </select>
           </div>
-
-          <!-- Total Flour Weight -->
           <div>
             <label class="block font-bold text-gray-700 mb-1">Total Flour Weight in Batch (kg) *</label>
             <input type="number" id="specFlourKgInput" min="0.5" step="0.5" value="3.0" class="w-full p-2.5 border border-gray-300 rounded-xl font-mono font-bold text-[#5B2E7A] focus:ring-2 focus:ring-[#B87333]" required>
             <span class="text-[10px] text-gray-500 mt-0.5 block">All flour types combined (Base for Baker's %)</span>
           </div>
-
-          <!-- Flour Description -->
           <div>
             <label class="block font-bold text-gray-700 mb-1">Flour Types Specification *</label>
             <input type="text" id="specFlourDescInput" value="1st Class Hard Wheat Flour Basis" class="w-full p-2.5 border border-gray-300 rounded-xl font-medium focus:ring-2 focus:ring-[#B87333]" required>
           </div>
-
-          <!-- Target Yield -->
           <div>
             <label class="block font-bold text-gray-700 mb-1">Standard Piece Yield (units) *</label>
             <input type="number" id="specYieldInput" min="1" value="100" class="w-full p-2.5 border border-gray-300 rounded-xl font-mono font-bold text-gray-800 focus:ring-2 focus:ring-[#B87333]" required>
           </div>
-
-          <!-- Unit Piece Weight -->
           <div>
             <label class="block font-bold text-gray-700 mb-1">Piece Scaling Weight (grams) *</label>
             <input type="number" id="specWeightInput" min="5" value="40" class="w-full p-2.5 border border-gray-300 rounded-xl font-mono font-bold text-gray-800 focus:ring-2 focus:ring-[#B87333]" required>
           </div>
-
-          <!-- Suggested Retail Price (SRP) -->
           <div>
             <label class="block font-bold text-gray-700 mb-1">Suggested Retail Price (SRP ₱) *</label>
             <input type="number" id="specSrpInput" min="1" step="0.25" value="8.00" class="w-full p-2.5 border border-gray-300 rounded-xl font-mono font-bold text-[#1E7A3E] focus:ring-2 focus:ring-[#B87333]" required>
           </div>
-
-          <!-- Estimated Unit Cost -->
           <div>
             <label class="block font-bold text-gray-700 mb-1">Estimated Unit Production Cost (₱) *</label>
             <input type="number" id="specCostInput" min="0.5" step="0.05" value="3.50" class="w-full p-2.5 border border-gray-300 rounded-xl font-mono font-bold text-gray-700 focus:ring-2 focus:ring-[#B87333]" required>
           </div>
         </div>
 
-        <!-- Specialty Ingredients Table -->
         <div class="border border-gray-200 rounded-xl p-4 bg-[#FAF6EE] space-y-3">
           <div class="flex justify-between items-center">
             <div>
-              <span class="font-bold text-xs text-[#3D1C52] uppercase tracking-wider block">
-                Batch Ingredient Formula (Bill of Materials):
-              </span>
+              <span class="font-bold text-xs text-[#3D1C52] uppercase tracking-wider block">Batch Ingredient Formula (Bill of Materials):</span>
               <span class="text-[10px] text-gray-500">Specify exact ingredient quantities in grams per batch</span>
             </div>
-            <button 
-              type="button" 
-              onclick="addSpecIngredientRow()"
-              class="bg-[#B87333] hover:bg-[#9c6028] text-white font-bold text-[11px] px-3 py-1.5 rounded-lg shadow transition"
-            >
-              + Add Ingredient Line
-            </button>
+            <button type="button" onclick="addSpecIngredientRow()" class="bg-[#B87333] hover:bg-[#9c6028] text-white font-bold text-[11px] px-3 py-1.5 rounded-lg shadow transition">+ Add Ingredient Line</button>
           </div>
-
-          <div id="specIngredientsContainer" class="space-y-2">
-            <!-- Dynamically populated ingredient lines -->
-          </div>
+          <div id="specIngredientsContainer" class="space-y-2"></div>
         </div>
 
         <div>
           <label class="block font-bold text-gray-700 mb-1">Mixing &amp; Proofing Instructions / CCPs</label>
-          <textarea 
-            id="specNotesInput" 
-            rows="2" 
-            placeholder="e.g. Mix spiral for 2 mins low, 6 mins high until gluten windowpane. Proof 60 mins @ 34°C. Exit dough temp 26°C." 
-            class="w-full p-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#B87333]"
-          ></textarea>
+          <textarea id="specNotesInput" rows="2" placeholder="e.g. Mix spiral for 2 mins low, 6 mins high until gluten windowpane. Proof 60 mins @ 34°C. Exit dough temp 26°C." class="w-full p-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#B87333]"></textarea>
         </div>
 
         <div class="pt-2 flex justify-end">
-          <button 
-            type="submit" 
-            class="bg-[#B87333] hover:bg-[#9c6028] text-white font-bold text-xs px-6 py-3 rounded-xl shadow-md transition flex items-center gap-2"
-          >
+          <button type="submit" class="bg-[#B87333] hover:bg-[#9c6028] text-white font-bold text-xs px-6 py-3 rounded-xl shadow-md transition flex items-center gap-2">
             <span>✓ Submit Specialty Recipe to Romeo Malusay &amp; Zaphyr Pomicpic (`Form-RND-001`)</span>
           </button>
         </div>
       </form>
     </div>
-
   </main>
 
   <footer class="bg-[#240e32] text-[#E5C585] text-center p-3 text-[11px] border-t border-[#C8963E]/30">
@@ -448,9 +299,6 @@
   </footer>
 
   <script>
-    // -------------------------------------------------------------
-    // MASTER RECIPES REGISTER (30 STANDARDIZED COMMERCIAL RECIPES)
-    // -------------------------------------------------------------
     const ALL_MASTER_RECIPES = [
       { sku: "BRD-PAN-6KG", name: "Classic Pandesal – 6.0 kg 1st Class Flour Basis | Yield: ~170 pieces (35 g raw dough each)", yield: 170, flourKg: 6, unitCost: 1.45, srp: 3.00, margin: 51.7 },
       { sku: "BRD-PAN-3KG", name: "Classic Pandesal – 3.0 kg 1st Class Flour Basis | Yield: ~85 pieces (35 g raw dough each)", yield: 85, flourKg: 3, unitCost: 1.45, srp: 3.00, margin: 51.7 },
@@ -484,11 +332,7 @@
       { sku: "SUB-GLZ-001", name: "Biscocho Buttermilk Sweet Glaze – 10.0 kg Sugar Sub-Assembly | Yield: Glazes ~1,500 slices", yield: 1500, flourKg: 3, unitCost: 120.00, srp: 220.00, margin: 45.5 }
     ];
 
-    // -------------------------------------------------------------
-    // MASTER MATERIALS REGISTER (ALL 75 WAREHOUSE ITEMS & PACKAGING)
-    // -------------------------------------------------------------
     const ALL_MASTER_MATERIALS = [
-      // Flour & Grains (8 items)
       { code: "RM-FLR-001", category: "Flour & Grains", name: "All Purpose Flour", uom: "kg", cost: 42.0 },
       { code: "RM-FLR-002", category: "Flour & Grains", name: "3rd Class Soft Wheat Flour (Isla - General Milling)", uom: "kg", cost: 36.8 },
       { code: "RM-FLR-003", category: "Flour & Grains", name: "1st Class Hard Wheat Flour (Naga Rossa)", uom: "kg", cost: 44.8 },
@@ -497,14 +341,10 @@
       { code: "RM-DRY-005", category: "Flour & Grains", name: "Desiccated Coconut (Good Seed Food Co. - 500g)", uom: "kg", cost: 95.0 },
       { code: "RM-DRY-006", category: "Flour & Grains", name: "Sesame Seed — 1 kg", uom: "kg", cost: 195.0 },
       { code: "RM-FLR-007", category: "Flour & Grains", name: "White Tower Cornstarch — 25 kg Sack", uom: "kg", cost: 34.0 },
-
-      // Sugars & Sweeteners (4 items)
       { code: "RM-SWT-001", category: "Sugars & Sweeteners", name: "Crystal Brown Sugar", uom: "kg", cost: 44.0 },
       { code: "RM-SWT-002", category: "Sugars & Sweeteners", name: "Refined White Sugar (Victorias)", uom: "kg", cost: 53.0 },
       { code: "RM-SWT-003", category: "Sugars & Sweeteners", name: "Refined Iodized Fine Salt", uom: "kg", cost: 15.2 },
       { code: "RM-SWT-004", category: "Sugars & Sweeteners", name: "Washed Raw Sugar", uom: "kg", cost: 48.0 },
-
-      // Fats & Oils (7 items)
       { code: "RM-FAT-001", category: "Fats, Margarine & Oils", name: "Refrigerated Margarine (Buttercup)", uom: "kg", cost: 95.0 },
       { code: "RM-FAT-001-BUTTER", category: "Fats, Margarine & Oils", name: "Unsalted Butter (Magnolia Gold)", uom: "kg", cost: 135.0 },
       { code: "RM-FAT-002", category: "Fats, Margarine & Oils", name: "Coconut Oil (Marca Leon)", uom: "kg", cost: 85.3 },
@@ -512,15 +352,11 @@
       { code: "RM-FAT-004", category: "Fats, Margarine & Oils", name: "Premium Margarine (Sunny Suy)", uom: "kg", cost: 59.0 },
       { code: "RM-FAT-005", category: "Fats, Margarine & Oils", name: "Palm Oil (Unlabeled Bulk)", uom: "kg", cost: 81.2 },
       { code: "RM-FAT-006", category: "Fats, Margarine & Oils", name: "Refined Vegetable Cooking Oil", uom: "kg", cost: 79.4 },
-
-      // Dairy & Eggs (5 items)
       { code: "RM-DRY-001", category: "Dairy, Eggs & Milks", name: "Fresh Farm Eggs (Grade A - Coop)", uom: "pcs", cost: 7.0 },
       { code: "RM-DRY-002", category: "Dairy, Eggs & Milks", name: "Sweetened Condensed Milk (Master Chef 1kg)", uom: "kg", cost: 65.0 },
       { code: "RM-DRY-003", category: "Dairy, Eggs & Milks", name: "Evaporated Milk (Jersey 370ml)", uom: "L", cost: 28.0 },
       { code: "RM-DRY-004", category: "Dairy, Eggs & Milks", name: "Skimmed Milk Powder (Farmland)", uom: "kg", cost: 154.0 },
       { code: "RM-DRY-007", category: "Dairy, Eggs & Milks", name: "Condensed Creamer (Jersey 390g)", uom: "kg", cost: 52.0 },
-
-      // Leavening & Additives (9 items)
       { code: "RM-LEV-001", category: "Leaveners & Additives", name: "Instant Dry Active Yeast (Mauripan / Saf-Instant)", uom: "kg", cost: 240.0 },
       { code: "RM-LEV-002", category: "Leaveners & Additives", name: "Double Acting Baking Powder (White Angel)", uom: "kg", cost: 110.0 },
       { code: "RM-LEV-003", category: "Leaveners & Additives", name: "Calcium Propionate (CSP Bread Mold Inhibitor)", uom: "kg", cost: 220.0 },
@@ -530,16 +366,12 @@
       { code: "RM-LEV-007", category: "Leaveners & Additives", name: "Carbonato — 500 g", uom: "kg", cost: 65.0 },
       { code: "RM-LEV-008", category: "Leaveners & Additives", name: "Bakers Field Whip It", uom: "kg", cost: 260.0 },
       { code: "RM-LEV-009", category: "Leaveners & Additives", name: "Baking Soda — 500 g", uom: "kg", cost: 55.0 },
-
-      // Flavors & Colors (6 items)
       { code: "RM-FLV-001", category: "Flavors & Colors", name: "Ube Flavor & Color Blend (Unibake 5L)", uom: "L", cost: 370.0 },
       { code: "RM-FLV-002", category: "Flavors & Colors", name: "Vanilla Flavor FF (Kanegie 3.79L)", uom: "L", cost: 224.0 },
       { code: "RM-FLV-003", category: "Flavors & Colors", name: "Neco Egg Yellow Food Coloring Powder (500g)", uom: "kg", cost: 180.0 },
       { code: "RM-FLV-005", category: "Flavors & Colors", name: "Dutché Special Alkalized Dark Cocoa Powder", uom: "kg", cost: 380.0 },
       { code: "RM-FLV-006", category: "Flavors & Colors", name: "Neco Choco Brown 500g", uom: "kg", cost: 180.0 },
       { code: "RM-FLV-007", category: "Flavors & Colors", name: "Neco Choco Brown 125g", uom: "kg", cost: 55.0 },
-
-      // Packaging Materials (35 items)
       { code: "PM-PAP-001", category: "Packaging & Wrapping", name: "Glassine Wax Paper Sheets (Otap Wrapping)", uom: "pcs", cost: 0.84 },
       { code: "PM-PAP-002", category: "Packaging & Wrapping", name: "Baking Pan Pattern Paper (Laminated Sheets)", uom: "pcs", cost: 0.90 },
       { code: "PM-BOX-001", category: "Packaging & Wrapping", name: "Jang-Jang Master Shipping Carton Box (50 pk/box)", uom: "pcs", cost: 29.0 },
@@ -575,12 +407,9 @@
       { code: "PM-BAG-019", category: "Packaging & Wrapping", name: "Sabako 5x6 002 (1,000/ream)", uom: "pcs", cost: 0.28 },
       { code: "PM-BAG-020", category: "Packaging & Wrapping", name: "Sabako 10x18 (500/ream)", uom: "pcs", cost: 0.56 },
       { code: "PM-BAG-021", category: "Packaging & Wrapping", name: "Cutty Shark Ice Bag 10x18 (1,000/ream)", uom: "pcs", cost: 0.28 },
-
-      // Utilities & Fuel (1 item)
       { code: "UT-GAS-001", category: "Utilities & Fuel", name: "Solane LPG 50kg Industrial Tank", uom: "tank", cost: 2850.0 }
     ];
 
-    // Helper: Read live inventory from localStorage if available
     function getLiveInventoryMap() {
       try {
         const raw = localStorage.getItem('JJB_WMS_LIVE_V4_6_STATE_inventory');
@@ -594,12 +423,10 @@
       return {};
     }
 
-    // Initialize Dates
     const today = new Date().toISOString().slice(0, 10);
     document.getElementById('recipeDateInput').value = today;
     document.getElementById('matDateInput').value = today;
 
-    // Populate Recipe Dropdown
     function initRecipeDropdown() {
       const select = document.getElementById('recipeSelect');
       select.innerHTML = '';
@@ -609,17 +436,14 @@
         opt.textContent = `${r.sku}: ${r.name}`;
         select.appendChild(opt);
       });
-      // Default to Classic Pandesal 6kg
       select.value = 'BRD-PAN-6KG';
       updateRecipePreview();
     }
 
-    // Dynamic Recipe Preview Calculator
     function updateRecipePreview() {
       const sku = document.getElementById('recipeSelect').value;
       const mult = parseFloat(document.getElementById('recipeMultiplierInput').value) || 1.0;
       const rec = ALL_MASTER_RECIPES.find(r => r.sku === sku) || ALL_MASTER_RECIPES[0];
-
       const totalPcs = Math.round(rec.yield * mult);
       document.getElementById('previewBaseYield').textContent = `~${rec.yield} pcs (${rec.flourKg} kg flour)`;
       document.getElementById('previewTotalYield').textContent = `${totalPcs.toLocaleString()} pieces (${(rec.flourKg * mult).toFixed(1)} kg flour)`;
@@ -628,7 +452,6 @@
       document.getElementById('previewMargin').textContent = `${rec.margin}%`;
     }
 
-    // Build Material Select Options HTML (with optgroups and live stock balances)
     function buildMaterialOptionsHtml(selectedCode) {
       const liveMap = getLiveInventoryMap();
       const groups = {};
@@ -636,7 +459,6 @@
         if (!groups[m.category]) groups[m.category] = [];
         groups[m.category].push(m);
       });
-
       let html = '';
       for (const cat in groups) {
         html += `<optgroup label="${cat}">`;
@@ -645,7 +467,6 @@
           const bal = live ? live.currentBalance : null;
           const balText = bal !== null ? ` [Bal: ${bal.toLocaleString()} ${m.uom}]` : '';
           const isSel = m.code === selectedCode ? 'selected' : '';
-          // Encoded value: code|name|uom|cost
           const val = `${m.code}|${m.name}|${m.uom}|${m.cost}`;
           html += `<option value="${val}" ${isSel}>${m.code}: ${m.name} · ${m.uom}${balText} (₱${m.cost})</option>`;
         });
@@ -654,15 +475,12 @@
       return html;
     }
 
-    // Material Row Management
     function addMaterialRow(prefillCode, prefillQty) {
       const container = document.getElementById('materialRowsContainer');
       const row = document.createElement('div');
       row.className = "material-row bg-white p-2.5 rounded-xl border border-gray-200 flex flex-wrap items-center gap-3";
-      
       const code = prefillCode || ALL_MASTER_MATERIALS[0].code;
       const qty = prefillQty || 1;
-
       row.innerHTML = `
         <div class="flex-1 min-w-[240px]">
           <select class="mat-code-select w-full p-2 border border-gray-300 rounded-lg text-xs font-medium">
@@ -675,8 +493,6 @@
         </div>
         <button type="button" onclick="removeMaterialRow(this)" class="text-red-500 hover:text-red-700 p-1.5 rounded hover:bg-red-50" title="Remove row">✕</button>
       `;
-
-      // Sync UOM label
       const select = row.querySelector('.mat-code-select');
       const uomLabel = row.querySelector('.mat-uom-label');
       function syncUom() {
@@ -685,18 +501,14 @@
       }
       select.addEventListener('change', syncUom);
       syncUom();
-
       container.appendChild(row);
     }
 
     function removeMaterialRow(btn) {
       const container = document.getElementById('materialRowsContainer');
-      if (container.children.length > 1) {
-        btn.closest('.material-row').remove();
-      }
+      if (container.children.length > 1) btn.closest('.material-row').remove();
     }
 
-    // Tab Switching
     function switchTab(tab) {
       const recipeSec = document.getElementById('recipeSection');
       const matSec = document.getElementById('materialSection');
@@ -725,7 +537,6 @@
       }
     }
 
-    // Broadcast synchronization helper to notify other WMS tabs
     function broadcastSyncEvent(eventType, entityType, id, origin) {
       try {
         if (typeof BroadcastChannel !== 'undefined') {
@@ -743,7 +554,7 @@
       } catch (e) {}
     }
 
-    // Handle Recipe Form Submit
+    // ─── RECIPE ORDER SUBMIT — full payload so projectBatchOrder links correctly
     document.getElementById('recipeOrderForm').addEventListener('submit', function(e) {
       e.preventDefault();
       const outlet = document.getElementById('recipeOutletSelect').value;
@@ -758,9 +569,7 @@
       const calculatedPcs = Math.round(recipe.yield * multiplier);
 
       const newOrder = {
-        orderId: orderId,
-        requestDate: today,
-        targetDate: targetDate,
+        orderId, requestDate: today, targetDate,
         outletId: outlet.toLowerCase().replace(/[^a-z0-9]/g, '-'),
         outletName: outlet,
         recipeSku: recipe.sku,
@@ -779,42 +588,35 @@
         const existing = JSON.parse(localStorage.getItem(storageKey) || '[]');
         existing.unshift(newOrder);
         localStorage.setItem(storageKey, JSON.stringify(existing));
+        window.dispatchEvent(new StorageEvent('storage', { key: storageKey, newValue: JSON.stringify(existing) }));
+      } catch (err) { console.error(err); }
 
-        // Dispatch storage event for active tabs
-        window.dispatchEvent(new StorageEvent('storage', {
-          key: storageKey,
-          newValue: JSON.stringify(existing)
-        }));
-      } catch (err) {
-        console.error(err);
-      }
-
-      // Inter-tab notification
       broadcastSyncEvent('OUTLET_BATCH_ORDER', 'Recipe Batch Order', orderId, outlet);
 
-      // Background Cloudflare sync
       fetch('/api/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           idempotencyKey: 'PORTAL_RECIPE_' + orderId,
           eventType: 'OUTLET_BATCH_ORDER',
-          orderId: orderId,
+          orderId, outletName: outlet,
+          recipeSku: recipe.sku,
           recipeName: recipe.name,
-          outletName: outlet,
           requestedQtyPcs: calculatedPcs,
+          batchMultiplier: multiplier,
+          status: 'PENDING_BATCHING',
           timestamp: new Date().toISOString()
         })
       }).catch(function() {});
 
       const box = document.getElementById('confirmBox');
-      document.getElementById('confirmDetails').innerHTML = 
+      document.getElementById('confirmDetails').innerHTML =
         'Order <strong>' + orderId + '</strong> for <strong>' + recipe.name + '</strong> (' + calculatedPcs.toLocaleString() + ' pcs) requested by <strong>' + person + '</strong> (' + outlet + ') is registered and queued for Romeo Malusay.';
       box.classList.remove('hidden');
       box.scrollIntoView({ behavior: 'smooth' });
     });
 
-    // Handle Material Form Submit
+    // ─── MATERIAL REQUEST SUBMIT — writes to Jade's pending queue, NO auto-deduct
     document.getElementById('materialOrderForm').addEventListener('submit', function(e) {
       e.preventDefault();
       const line = document.getElementById('matLineSelect').value;
@@ -823,7 +625,11 @@
       const neededDate = document.getElementById('matDateInput').value;
       const notes = document.getElementById('matNotesInput').value.trim();
 
-      const slipNo = 'WS-PORTAL-' + today.replace(/-/g, '') + '-' + Math.floor(100 + Math.random() * 900);
+      const now = new Date();
+      const requestId = 'REQ-' + now.getTime();
+      const requestSlipNo = 'WS-REQ-' + now.getTime().toString().slice(-8);
+      const nowTime = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const liveMap = getLiveInventoryMap();
 
       const rows = document.querySelectorAll('.material-row');
       const items = [];
@@ -834,79 +640,93 @@
         const qtyInput = row.querySelector('.mat-qty-input');
         const [code, desc, uom, unitCostStr] = select.value.split('|');
         const qty = parseFloat(qtyInput.value) || 1;
-        const unitCost = parseFloat(unitCostStr) || 45;
+        const unitCost = parseFloat(unitCostStr) || 0;
         const lineCost = qty * unitCost;
         totalEstCost += lineCost;
-
+        const liveMat = liveMap[code] || {};
         items.push({
           materialCode: code,
           name: desc,
           qtyRequestedSec: qty,
-          qtyIssuedSec: qty,
           secondaryUom: uom,
-          lotNumber: 'FEFO-QUEUED',
-          storageRoom: 'Dry Room 1',
-          estimatedCost: lineCost
+          storageRoom: liveMat.room || 'Dry Room 1',
+          estimatedCost: lineCost,
+          remarks: 'Portal req: ' + purpose
         });
       });
 
-      const newWithdrawal = {
-        slipNo: slipNo,
-        date: neededDate,
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      const newRequest = {
+        requestId,
+        requestSlipNo,
+        sourceChannel: 'PORTAL',
+        dateRequested: today,
+        timeRequested: nowTime,
+        neededByDate: neededDate,
         requestingEntity: line,
-        department: purpose.includes('Mess Hall') ? 'Indangan Facility Mess Hall (Staff Meals & Snacks)' : 'Production Floor',
-        purpose: purpose,
+        department: purpose.includes('Mess Hall')
+          ? 'Indangan Facility Mess Hall (Staff Meals & Snacks)'
+          : 'Production Floor',
+        purpose,
         requestedBy: person,
-        issuedBy: 'Pending Jade Q. Dela Cruz',
-        receivedBy: person,
-        items: items,
-        totalCost: totalEstCost,
-        status: 'ISSUED & RECONCILED',
-        notes: notes || ('Material requisition for ' + line)
+        enteredBy: person + ' (Portal)',
+        notes,
+        items,
+        totalEstimatedCost: totalEstCost,
+        status: 'PENDING_ISSUANCE',
+        createdAt: now.toISOString(),
+        issuedAt: null,
+        issuedBy: null,
+        withdrawalSlipNo: null
       };
 
+      // Write to PENDING REQUESTS queue — NOT withdrawals. No stock deduction.
       try {
-        const storageKey = 'JJB_WMS_LIVE_V4_6_STATE_withdrawals';
+        const storageKey = 'JJB_WMS_LIVE_V4_6_STATE_pending_requests';
         const existing = JSON.parse(localStorage.getItem(storageKey) || '[]');
-        existing.unshift(newWithdrawal);
+        existing.unshift(newRequest);
         localStorage.setItem(storageKey, JSON.stringify(existing));
+        window.dispatchEvent(new StorageEvent('storage', { key: storageKey, newValue: JSON.stringify(existing) }));
+      } catch (err) { console.error(err); }
 
-        // Dispatch storage event for active tabs
-        window.dispatchEvent(new StorageEvent('storage', {
-          key: storageKey,
-          newValue: JSON.stringify(existing)
-        }));
-      } catch (err) {
-        console.error(err);
-      }
+      broadcastSyncEvent('WITHDRAWAL_REQUEST_SUBMITTED', 'Material Request', requestId, line);
 
-      // Inter-tab notification
-      broadcastSyncEvent('MATERIAL_WITHDRAWAL', 'Raw Material Requisition', slipNo, line);
-
-      // Background Cloudflare sync
+      // Informational sync event — sync.js treats WITHDRAWAL_REQUEST_SUBMITTED as a
+      // no-op (no handler → projected_at set, no data change, no stock deduction).
       fetch('/api/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          idempotencyKey: 'PORTAL_MAT_' + slipNo,
-          eventType: 'MATERIAL_WITHDRAWAL',
-          slipNo: slipNo,
-          requestingEntity: line,
-          requestedBy: person,
-          purpose: purpose,
-          timestamp: new Date().toISOString()
+          idempotencyKey: 'PORTAL_REQ_' + requestId,
+          eventType: 'WITHDRAWAL_REQUEST_SUBMITTED',
+          payload: {
+            requestId,
+            requestSlipNo,
+            sourceChannel: 'PORTAL',
+            date: today,
+            time: nowTime,
+            neededByDate: neededDate,
+            requestingEntity: line,
+            department: newRequest.department,
+            requestedBy: person,
+            enteredBy: newRequest.enteredBy,
+            purpose,
+            notes,
+            totalEstimatedCost: totalEstCost,
+            itemCount: items.length,
+            items,
+            status: 'PENDING_ISSUANCE',
+            timestamp: now.toISOString()
+          }
         })
       }).catch(function() {});
 
       const box = document.getElementById('confirmBox');
-      document.getElementById('confirmDetails').innerHTML = 
-        'Requisition <strong>' + slipNo + '</strong> requested by <strong>' + person + '</strong> for <strong>' + line + '</strong> (' + items.length + ' materials, Total: ₱' + totalEstCost.toLocaleString() + ') is submitted to Jade Dela Cruz.';
+      document.getElementById('confirmDetails').innerHTML =
+        'Request <strong>' + requestId + '</strong> submitted by <strong>' + person + '</strong> for <strong>' + line + '</strong> (' + items.length + ' materials, Est: ₱' + totalEstCost.toLocaleString() + ') is queued for <strong>Jade Q. Dela Cruz</strong>. Materials will only be deducted once Jade confirms physical issuance.';
       box.classList.remove('hidden');
       box.scrollIntoView({ behavior: 'smooth' });
     });
 
-    // Specialty Recipe Ingredient Row Management
     function addSpecIngredientRow(prefillName, prefillGrams) {
       const container = document.getElementById('specIngredientsContainer');
       const row = document.createElement('div');
@@ -926,12 +746,12 @@
 
     function removeSpecIngredientRow(btn) {
       const container = document.getElementById('specIngredientsContainer');
-      if (container.children.length > 1) {
-        btn.closest('.spec-ing-row').remove();
-      }
+      if (container.children.length > 1) btn.closest('.spec-ing-row').remove();
     }
 
-    // Handle Specialty Recipe Form Submit
+    // ─── SPECIALTY SUBMIT — routes through SPECIALTY_PROPOSAL_CREATED so
+    //     sync.js projectSpecialty actually fires (was SPECIALTY_RECIPE_SUBMITTED,
+    //     which is not in HANDLERS → silent no-op).
     document.getElementById('specialtyRecipeForm').addEventListener('submit', function(e) {
       e.preventDefault();
       const title = document.getElementById('specTitleInput').value.trim();
@@ -948,17 +768,11 @@
       const baseFlourGrams = flourKg * 1000;
       const ingRows = document.querySelectorAll('.spec-ing-row');
       const ingredients = [];
-
       ingRows.forEach(function(row, idx) {
         const name = row.querySelector('.spec-ing-name').value.trim();
         const grams = parseFloat(row.querySelector('.spec-ing-grams').value) || 0;
         const pct = baseFlourGrams > 0 ? parseFloat(((grams / baseFlourGrams) * 100).toFixed(1)) : 0;
-        ingredients.push({
-          code: 'RM-SPEC-' + (idx + 1),
-          name: name,
-          gramsPerBatch: grams,
-          pct: pct
-        });
+        ingredients.push({ code: 'RM-SPEC-' + (idx + 1), name, gramsPerBatch: grams, pct });
       });
 
       const formattedName = title + ' – ' + flourKg.toFixed(1) + ' kg ' + flourDesc + ' | Yield: ~' + yieldPcs + ' pieces (' + weight + ' g each)';
@@ -967,9 +781,7 @@
       const margin = (((srp - cost) / srp) * 100).toFixed(1);
 
       const proposal = {
-        proposalId: proposalId,
-        sku: sku,
-        title: title,
+        proposalId, sku, title,
         name: formattedName,
         category: 'Signature Pastry / Specialty',
         targetFacility: outlet,
@@ -986,7 +798,7 @@
         srp: srp,
         grossMarginPct: parseFloat(margin),
         mixingNotes: notes,
-        ingredients: ingredients,
+        ingredients,
         status: 'PENDING_APPROVAL',
         submittedAt: new Date().toISOString()
       };
@@ -996,44 +808,32 @@
         const existing = JSON.parse(localStorage.getItem(storageKey) || '[]');
         existing.unshift(proposal);
         localStorage.setItem(storageKey, JSON.stringify(existing));
+        window.dispatchEvent(new StorageEvent('storage', { key: storageKey, newValue: JSON.stringify(existing) }));
+      } catch (err) { console.error(err); }
 
-        // Dispatch storage event
-        window.dispatchEvent(new StorageEvent('storage', {
-          key: storageKey,
-          newValue: JSON.stringify(existing)
-        }));
-      } catch (err) {
-        console.error(err);
-      }
-
-      broadcastSyncEvent('SPECIALTY_RECIPE_SUBMITTED', 'Specialty Formulation', proposalId, outlet);
+      broadcastSyncEvent('SPECIALTY_PROPOSAL_CREATED', 'Specialty Formulation', proposalId, outlet);
 
       fetch('/api/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           idempotencyKey: 'PORTAL_SPEC_' + proposalId,
-          eventType: 'SPECIALTY_RECIPE_SUBMITTED',
+          eventType: 'SPECIALTY_PROPOSAL_CREATED',
           payload: proposal
         })
       }).catch(function() {});
 
       const box = document.getElementById('confirmBox');
-      document.getElementById('confirmDetails').innerHTML = 
-        'Specialty Recipe Proposal <strong>' + proposalId + '</strong> for <strong>' + formattedName + '</strong> submitted by Baker <strong>' + baker + '</strong> (' + outlet + ') has been queued for Romeo Malusay &amp; Zaphyr Zur Pomicpic for QA &amp; Master Register approval.';
+      document.getElementById('confirmDetails').innerHTML =
+        'Specialty Recipe Proposal <strong>' + proposalId + '</strong> for <strong>' + formattedName + '</strong> submitted by Baker <strong>' + baker + '</strong> (' + outlet + ') queued for Romeo Malusay &amp; Zaphyr Zur Pomicpic.';
       box.classList.remove('hidden');
       box.scrollIntoView({ behavior: 'smooth' });
     });
 
-    // On Load Initialization
     document.addEventListener('DOMContentLoaded', function() {
       initRecipeDropdown();
-
-      // Initial clean material row
       addMaterialRow('RM-DRY-001', 30);
       addMaterialRow('RM-SWT-002', 5);
-
-      // Initial specialty ingredient rows
       addSpecIngredientRow('1st Class Hard Wheat Flour', 3000);
       addSpecIngredientRow('Refined White Sugar', 600);
       addSpecIngredientRow('Margarine / Butter', 200);

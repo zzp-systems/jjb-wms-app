@@ -26,6 +26,7 @@ export default function Header({
   queueCount = 0,
   pendingBatchCount = 0,
   pendingBulkApprovalCount = 0,
+  pendingRequestCount = 0,
   lowStockCount = 0,
   onQuickEod,
   onOpenImportModal,
@@ -33,6 +34,10 @@ export default function Header({
   onLogout
 }) {
   const activeRoleObj = ROLES.find(r => r.name === currentRole) || ROLES[0];
+
+  // Unified issuance queue count = bulk requisitions from Romeo +
+  // portal/staff material requests awaiting Jade's Issue click.
+  const issuanceQueueTotal = pendingBulkApprovalCount + pendingRequestCount;
 
   return (
     <header className="bg-[#3D1C52] text-white shadow-xl sticky top-0 z-30 border-b border-[#C8963E]/40">
@@ -179,7 +184,7 @@ export default function Header({
             id: 'issuance', 
             label: '3. Stock Release', 
             icon: FileText, 
-            badge: pendingBulkApprovalCount > 0 ? `${pendingBulkApprovalCount} Bulk Req` : null, 
+            badge: issuanceQueueTotal > 0 ? `${issuanceQueueTotal} To Issue` : null, 
             badgeColor: 'bg-[#C0392B] animate-pulse', 
             roleHighlight: 'Jade Q. Dela Cruz' 
           },

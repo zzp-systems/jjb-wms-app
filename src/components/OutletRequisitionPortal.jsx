@@ -3,7 +3,8 @@ import {
   Store, ShoppingCart, Send, CheckCircle2, Clock, 
   Utensils, Coffee, Truck, Layers, Plus, Trash2, 
   AlertTriangle, Package, Calendar, User, FileText, Check,
-  Sparkles, DollarSign, Award, ChevronRight, HelpCircle
+  Sparkles, DollarSign, Award, ChevronRight, HelpCircle,
+  Inbox
 } from 'lucide-react';
 import { MASTER_RECIPES } from '../data/recipesData';
 import { 
@@ -44,9 +45,9 @@ export default function OutletRequisitionPortal({
   onSpecialtyRecipeSubmitted,
   currentRole
 }) {
-  const [activePortalTab, setActivePortalTab] = useState('recipe_batch'); // 'recipe_batch' | 'raw_material' | 'specialty_recipe'
+  const [activePortalTab, setActivePortalTab] = useState('recipe_batch');
 
-  // Form State: Recipe Batched Ingredients
+  // Recipe Batched Ingredients form state
   const [targetLocation, setTargetLocation] = useState(REQUISITION_LOCATIONS[0].id);
   const [customLocationName, setCustomLocationName] = useState('');
   const [requisitionerName, setRequisitionerName] = useState('');
@@ -58,7 +59,7 @@ export default function OutletRequisitionPortal({
   const [recipeNotes, setRecipeNotes] = useState('');
   const [batchSubmittedOrder, setBatchSubmittedOrder] = useState(null);
 
-  // Form State: Raw Material Requisition
+  // Raw Material Requisition form state
   const [matLocation, setMatLocation] = useState('indangan-messhall');
   const [customMatLocation, setCustomMatLocation] = useState('');
   const [matRequisitioner, setMatRequisitioner] = useState('');
@@ -72,7 +73,7 @@ export default function OutletRequisitionPortal({
   });
   const [matSubmittedRequest, setMatSubmittedRequest] = useState(null);
 
-  // Form State: Specialty Recipe Proposal (Form-RND-001)
+  // Specialty Recipe Proposal form state
   const [specTitle, setSpecTitle] = useState('');
   const [specBaker, setSpecBaker] = useState('');
   const [specLocation, setSpecLocation] = useState(REQUISITION_LOCATIONS[0].id);
@@ -99,18 +100,16 @@ export default function OutletRequisitionPortal({
     setStoredProposals(loadStoredSpecialtyProposals());
   }, [submittedProposal]);
 
-  // Selected Recipe Object
   const currentRecipe = recipes.find(r => r.sku === selectedRecipeSku) || recipes[0];
   const calculatedPieces = Math.round((currentRecipe?.unitPieceYield || 100) * batchMultiplier);
 
-  // Resolved Location Name
   const getResolvedLocationName = (locId, customText) => {
     if (locId === 'custom-other') return customText.trim() || 'Unspecified Production Line';
     const loc = REQUISITION_LOCATIONS.find(l => l.id === locId);
     return loc ? loc.name : locId;
   };
 
-  // Submit Recipe Batch Order
+  // ---- Submit recipe batch order (goes to Romeo's queue — unaffected by new flow) ----
   const handleRecipeSubmit = (e) => {
     e.preventDefault();
     const resolvedLocation = getResolvedLocationName(targetLocation, customLocationName);
@@ -139,7 +138,7 @@ export default function OutletRequisitionPortal({
     setRecipeNotes('');
   };
 
-  // Raw Material Item Management
+  // ---- Raw material item management ----
   const handleAddItemRow = () => {
     const firstMat = inventory[0] || { code: 'RM-FLR-001', secondaryUom: 'kg' };
     setRequestedItems(prev => [
@@ -158,15 +157,17 @@ export default function OutletRequisitionPortal({
       copy[idx] = { ...copy[idx], [field]: value };
       if (field === 'itemCode') {
         const mat = inventory.find(m => m.code === value);
-        if (mat) {
-          copy[idx].uom = mat.secondaryUom;
-        }
+        if (mat) copy[idx].uom = mat.secondaryUom;
       }
       return copy;
     });
   };
 
-  // Submit Raw Material Requisition
+  // ---- Submit raw material request — goes to Jade's Pending Issuance queue ----
+  // IMPORTANT: This does NOT deduct stock. App.jsx routes this to
+  // handleSubmitWithdrawalRequest() which only writes to pending_requests
+  // and posts an audit-only WITHDRAWAL_REQUEST_SUBMITTED event. Jade must
+  // later click "Issue & Deduct Stock" in the Stock Release tab.
   const handleMaterialSubmit = (e) => {
     e.preventDefault();
     if (requestedItems.length === 0) return;
@@ -186,25 +187,28 @@ export default function OutletRequisitionPortal({
       };
     });
 
-    const newWithdrawal = {
+    const newRequest = {
       withdrawalNo: `WTR-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.floor(100 + Math.random() * 900)}`,
       withdrawalDate: matNeededDate,
       requestingLine: resolvedLocation,
       requisitionedBy: person,
       purpose: matPurpose,
-      releasedBy: 'Pending Warehouse Supervisor (Jade)',
+      // Kept for legacy consumers, but App.jsx overrides status to PENDING_ISSUANCE
       status: 'PENDING_ISSUANCE',
       notes: matNotes.trim() || `Material requisition for ${resolvedLocation} (${matPurpose})`,
       items: lineItems,
-      totalCost: lineItems.reduce((acc, it) => acc + (it.estimatedCost || 0), 0)
+      totalCost: lineItems.reduce((acc, it) => acc + (it.estimatedCost || 0), 0),
+      // Marks this as an in-app staff entry so Jade's pending queue shows the
+      // correct "Entered By" attribution (currentRole) rather than "Portal".
+      sourceChannel: 'IN_APP_STAFF_ENTRY'
     };
 
-    onSubmitMaterialRequest(newWithdrawal);
-    setMatSubmittedRequest(newWithdrawal);
+    onSubmitMaterialRequest(newRequest);
+    setMatSubmittedRequest(newRequest);
     setMatNotes('');
   };
 
-  // Specialty Recipe Proposal Management
+  // ---- Specialty recipe management ----
   const handleAddSpecIngredient = () => {
     const firstMat = inventory[0] || { code: 'RM-FLR-001', name: 'Raw Material' };
     setSpecIngredients(prev => [
@@ -223,9 +227,7 @@ export default function OutletRequisitionPortal({
       copy[idx] = { ...copy[idx], [field]: value };
       if (field === 'code') {
         const mat = inventory.find(m => m.code === value);
-        if (mat) {
-          copy[idx].name = mat.name;
-        }
+        if (mat) copy[idx].name = mat.name;
       }
       return copy;
     });
@@ -251,30 +253,27 @@ export default function OutletRequisitionPortal({
         ingredients: specIngredients
       });
 
-      // Save to localStorage
       const existing = loadStoredSpecialtyProposals();
       const updated = [proposal, ...existing];
       persistSpecialtyProposals(updated);
       setStoredProposals(updated);
       setSubmittedProposal(proposal);
 
-      // Trigger callback if provided
-      if (onSpecialtyRecipeSubmitted) {
-        onSpecialtyRecipeSubmitted(proposal);
-      }
+      if (onSpecialtyRecipeSubmitted) onSpecialtyRecipeSubmitted(proposal);
 
-      // Sync to cloudflare endpoint
+      // FIXED: eventType must match a sync.js HANDLERS key.
+      // SPECIALTY_PROPOSAL_CREATED routes to projectSpecialty.
+      // (Was SPECIALTY_RECIPE_SUBMITTED — no handler, silent no-op.)
       fetch('/api/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          eventType: 'SPECIALTY_RECIPE_SUBMITTED',
+          eventType: 'SPECIALTY_PROPOSAL_CREATED',
           idempotencyKey: `PROP-${proposal.proposalId}-${Date.now()}`,
           payload: proposal
         })
       }).catch(err => console.warn('Background sync error:', err));
 
-      // Reset form
       setSpecTitle('');
       setSpecMixingNotes('');
     } catch (err) {
@@ -282,7 +281,6 @@ export default function OutletRequisitionPortal({
     }
   };
 
-  // Live computed margin for specialty proposal
   const liveMarginPct = specSrp > 0 ? (((specSrp - specUnitCost) / specSrp) * 100).toFixed(1) : '0.0';
   const liveBatchFlourGrams = (parseFloat(specFlourKg) || 1) * 1000;
 
@@ -303,6 +301,9 @@ export default function OutletRequisitionPortal({
             </div>
             <p className="text-xs text-[#E5C585] mt-0.5">
               Direct terminal for Outlets, Plant Lines, and Indangan Facility Mess Hall to request Batched Recipes, Raw Materials, or propose New Specialty Formulations.
+            </p>
+            <p className="text-[11px] text-[#E5C585] mt-1 italic">
+              ⓘ Raw material submissions are requests only — Jade Q. Dela Cruz confirms physical issuance before any stock is deducted.
             </p>
           </div>
         </div>
@@ -361,12 +362,9 @@ export default function OutletRequisitionPortal({
         </button>
       </div>
 
-      {/* ========================================================================= */}
-      {/* TAB 1: ORDER RECIPE BATCHED INGREDIENTS */}
-      {/* ========================================================================= */}
+      {/* ============ TAB 1: ORDER RECIPE BATCHED INGREDIENTS ============ */}
       {activePortalTab === 'recipe_batch' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Main Formulation Requisition Form */}
           <div className="lg:col-span-2 bg-white p-6 rounded-2xl border border-[#E2D1B8] shadow-sm space-y-5">
             <div className="border-b border-gray-100 pb-3 flex justify-between items-center flex-wrap gap-2">
               <div>
@@ -399,7 +397,6 @@ export default function OutletRequisitionPortal({
 
             <form onSubmit={handleRecipeSubmit} className="space-y-4 text-xs">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Requesting Unit / Line Dropdown */}
                 <div>
                   <label className="block font-bold text-gray-700 mb-1">
                     Requesting Production Line / Outlet / Department *
@@ -411,14 +408,11 @@ export default function OutletRequisitionPortal({
                     required
                   >
                     {REQUISITION_LOCATIONS.map(loc => (
-                      <option key={loc.id} value={loc.id}>
-                        {loc.name}
-                      </option>
+                      <option key={loc.id} value={loc.id}>{loc.name}</option>
                     ))}
                   </select>
                 </div>
 
-                {/* Custom Line Name if 'custom-other' */}
                 {targetLocation === 'custom-other' ? (
                   <div>
                     <label className="block font-bold text-gray-700 mb-1">
@@ -449,7 +443,6 @@ export default function OutletRequisitionPortal({
                   </div>
                 )}
 
-                {/* Recipe Formulation Selection */}
                 <div className="md:col-span-2">
                   <label className="block font-bold text-gray-700 mb-1">
                     Standardized Master Recipe Formulation ({recipes.length} Commercial Formulations Available) *
@@ -461,14 +454,11 @@ export default function OutletRequisitionPortal({
                     required
                   >
                     {recipes.map(r => (
-                      <option key={r.sku} value={r.sku}>
-                        {r.sku}: {r.name}
-                      </option>
+                      <option key={r.sku} value={r.sku}>{r.sku}: {r.name}</option>
                     ))}
                   </select>
                 </div>
 
-                {/* Batch Multiplier */}
                 <div>
                   <label className="block font-bold text-gray-700 mb-1">
                     Batch Scaling Multiplier *
@@ -488,7 +478,6 @@ export default function OutletRequisitionPortal({
                   </span>
                 </div>
 
-                {/* Purpose of Order */}
                 <div>
                   <label className="block font-bold text-gray-700 mb-1">
                     Purpose of Requisition *
@@ -499,14 +488,11 @@ export default function OutletRequisitionPortal({
                     className="w-full p-2.5 border border-gray-300 rounded-xl bg-white font-medium focus:ring-2 focus:ring-[#C8963E]"
                   >
                     {CONSUMPTION_PURPOSES.map((pur, i) => (
-                      <option key={i} value={pur}>
-                        {pur}
-                      </option>
+                      <option key={i} value={pur}>{pur}</option>
                     ))}
                   </select>
                 </div>
 
-                {/* Delivery Date */}
                 <div>
                   <label className="block font-bold text-gray-700 mb-1">
                     Needed Delivery Date *
@@ -520,7 +506,6 @@ export default function OutletRequisitionPortal({
                   />
                 </div>
 
-                {/* Delivery Time */}
                 <div>
                   <label className="block font-bold text-gray-700 mb-1">
                     Target Fulfillment Time
@@ -534,7 +519,6 @@ export default function OutletRequisitionPortal({
                 </div>
               </div>
 
-              {/* Special Instructions */}
               <div>
                 <label className="block font-bold text-gray-700 mb-1">
                   Special Preparation / Proofing / Ice Substitution Notes
@@ -560,7 +544,6 @@ export default function OutletRequisitionPortal({
             </form>
           </div>
 
-          {/* Recipe Specifications Card with Financials */}
           <div className="bg-[#FAF6EE] p-5 rounded-2xl border border-[#E2D1B8] space-y-4">
             <h4 className="font-bold text-xs text-[#3D1C52] uppercase tracking-wider flex items-center gap-1.5 border-b border-[#E2D1B8] pb-2">
               <Package size={15} className="text-[#C8963E]" /> Formulation Bill of Materials &amp; Yield
@@ -582,7 +565,6 @@ export default function OutletRequisitionPortal({
                 </div>
               </div>
 
-              {/* Economic Metrics from Executive Cockpit */}
               <div className="bg-white p-3 rounded-xl border border-[#E2D1B8] grid grid-cols-2 gap-2">
                 <div>
                   <span className="text-gray-500 text-[10px]">SRP / Unit:</span>
@@ -644,9 +626,7 @@ export default function OutletRequisitionPortal({
         </div>
       )}
 
-      {/* ========================================================================= */}
-      {/* TAB 2: REQUEST RAW MATERIALS & PACKAGING (Form-WAR-001) */}
-      {/* ========================================================================= */}
+      {/* ============ TAB 2: RAW MATERIALS (Form-WAR-001) — QUEUED, NOT ISSUED ============ */}
       {activePortalTab === 'raw_material' && (
         <div className="bg-white p-6 rounded-2xl border border-[#E2D1B8] shadow-sm space-y-5">
           <div className="border-b border-gray-100 pb-3 flex justify-between items-center flex-wrap gap-2">
@@ -655,7 +635,8 @@ export default function OutletRequisitionPortal({
                 Raw Materials, Ingredients &amp; Packaging Requisition
               </h3>
               <p className="text-xs text-gray-500">
-                For Indangan Facility Mess Hall meals, snacks, branch floor supplies, or packaging materials. Queues into Jade Q. Dela Cruz's stock release bay.
+                For Indangan Facility Mess Hall meals, snacks, branch floor supplies, or packaging materials.
+                <strong className="text-amber-700"> Submissions are queued for Jade Q. Dela Cruz's approval — stock is deducted only after she confirms physical issuance.</strong>
               </p>
             </div>
             <span className="text-[11px] font-mono font-bold bg-[#1E7A3E] text-white px-2.5 py-1 rounded">
@@ -664,16 +645,17 @@ export default function OutletRequisitionPortal({
           </div>
 
           {matSubmittedRequest && (
-            <div className="bg-emerald-50 border border-emerald-300 p-4 rounded-xl text-xs space-y-1 text-emerald-900 animate-in fade-in">
-              <div className="flex items-center gap-2 font-bold text-sm">
-                <CheckCircle2 size={16} className="text-emerald-600" />
-                <span>Material Requisition Dispatched to Bodega Release Bay!</span>
+            <div className="bg-blue-50 border border-blue-300 p-4 rounded-xl text-xs space-y-1 text-blue-900 animate-in fade-in">
+              <div className="flex items-center gap-2 font-bold text-sm text-blue-800">
+                <Inbox size={16} />
+                <span>Material Request Queued for Jade's Issuance!</span>
               </div>
               <p>
-                Slip <strong className="font-mono">{matSubmittedRequest.withdrawalNo}</strong> with {matSubmittedRequest.items.length} items logged for <strong>{matSubmittedRequest.requestingLine}</strong> ({matSubmittedRequest.purpose}).
+                Request <strong className="font-mono">{matSubmittedRequest.withdrawalNo}</strong> with {matSubmittedRequest.items.length} items logged for <strong>{matSubmittedRequest.requestingLine}</strong> ({matSubmittedRequest.purpose}).
               </p>
-              <p className="text-[11px] text-emerald-700">
-                Assigned Issuer: Jade Q. Dela Cruz · Tab 3 Stock Issuance
+              <p className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 p-2 rounded font-semibold">
+                ⚠ Stock is <span className="underline">NOT</span> deducted yet.
+                Jade Q. Dela Cruz must click <em>"Issue &amp; Deduct Stock"</em> in the Stock Release tab to confirm the physical handoff before inventory is decremented.
               </p>
             </div>
           )}
@@ -691,9 +673,7 @@ export default function OutletRequisitionPortal({
                   required
                 >
                   {REQUISITION_LOCATIONS.map(loc => (
-                    <option key={loc.id} value={loc.id}>
-                      {loc.name}
-                    </option>
+                    <option key={loc.id} value={loc.id}>{loc.name}</option>
                   ))}
                 </select>
               </div>
@@ -732,15 +712,12 @@ export default function OutletRequisitionPortal({
                   className="w-full p-2.5 border border-gray-300 rounded-xl bg-white font-medium focus:ring-2 focus:ring-[#1E7A3E]"
                 >
                   {CONSUMPTION_PURPOSES.map((pur, i) => (
-                    <option key={i} value={pur}>
-                      {pur}
-                    </option>
+                    <option key={i} value={pur}>{pur}</option>
                   ))}
                 </select>
               </div>
             </div>
 
-            {/* Line Items Table */}
             <div className="bg-[#FAF6EE] p-4 rounded-xl border border-[#E2D1B8] space-y-3">
               <div className="flex justify-between items-center">
                 <span className="font-bold text-gray-800 text-xs uppercase tracking-wider flex items-center gap-1.5">
@@ -804,7 +781,6 @@ export default function OutletRequisitionPortal({
               </div>
             </div>
 
-            {/* Notes & Date */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block font-bold text-gray-700 mb-1">Needed By Date *</label>
@@ -834,20 +810,17 @@ export default function OutletRequisitionPortal({
                 type="submit"
                 className="bg-[#1E7A3E] hover:bg-[#165c2f] text-white font-bold text-xs px-6 py-3 rounded-xl shadow-md transition flex items-center gap-2"
               >
-                <CheckCircle2 size={14} />
-                <span>Submit Material Withdrawal (`Form-WAR-001`)</span>
+                <Send size={14} />
+                <span>Submit Request to Jade's Pending Issuance Queue (`Form-WAR-001`)</span>
               </button>
             </div>
           </form>
         </div>
       )}
 
-      {/* ========================================================================= */}
-      {/* TAB 3: PROPOSE SPECIALTY / SEASONAL RECIPE (Form-RND-001) */}
-      {/* ========================================================================= */}
+      {/* ============ TAB 3: SPECIALTY RECIPE PROPOSAL ============ */}
       {activePortalTab === 'specialty_recipe' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Main Proposal Form */}
           <div className="lg:col-span-2 bg-white p-6 rounded-2xl border border-[#E2D1B8] shadow-sm space-y-5">
             <div className="border-b border-gray-100 pb-3 flex justify-between items-center flex-wrap gap-2">
               <div>
@@ -881,7 +854,6 @@ export default function OutletRequisitionPortal({
 
             <form onSubmit={handleSpecialtySubmit} className="space-y-4 text-xs">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Recipe Commercial Title */}
                 <div className="md:col-span-2">
                   <label className="block font-bold text-gray-700 mb-1">
                     Recipe Commercial Title / Product Name *
@@ -896,7 +868,6 @@ export default function OutletRequisitionPortal({
                   />
                 </div>
 
-                {/* Proposing Baker */}
                 <div>
                   <label className="block font-bold text-gray-700 mb-1">
                     Proposing Baker Name *
@@ -911,7 +882,6 @@ export default function OutletRequisitionPortal({
                   />
                 </div>
 
-                {/* Requesting Outlet / Line */}
                 <div>
                   <label className="block font-bold text-gray-700 mb-1">
                     Branch / Production Facility *
@@ -923,14 +893,11 @@ export default function OutletRequisitionPortal({
                     required
                   >
                     {REQUISITION_LOCATIONS.map(loc => (
-                      <option key={loc.id} value={loc.id}>
-                        {loc.name}
-                      </option>
+                      <option key={loc.id} value={loc.id}>{loc.name}</option>
                     ))}
                   </select>
                 </div>
 
-                {/* Product Category */}
                 <div>
                   <label className="block font-bold text-gray-700 mb-1">
                     Product Category *
@@ -949,7 +916,6 @@ export default function OutletRequisitionPortal({
                   </select>
                 </div>
 
-                {/* Total Flour Used (kg) */}
                 <div>
                   <label className="block font-bold text-gray-700 mb-1">
                     Total Flour Weight in Batch (kg) *
@@ -968,7 +934,6 @@ export default function OutletRequisitionPortal({
                   </span>
                 </div>
 
-                {/* Flour Blend Description */}
                 <div className="md:col-span-2">
                   <label className="block font-bold text-gray-700 mb-1">
                     Flour Blend Breakdown / Description *
@@ -983,7 +948,6 @@ export default function OutletRequisitionPortal({
                   />
                 </div>
 
-                {/* Expected Piece Yield */}
                 <div>
                   <label className="block font-bold text-gray-700 mb-1">
                     Standard Piece Yield per Batch *
@@ -998,7 +962,6 @@ export default function OutletRequisitionPortal({
                   />
                 </div>
 
-                {/* Raw Dough Piece Weight */}
                 <div>
                   <label className="block font-bold text-gray-700 mb-1">
                     Raw Dough Piece Weight (Grams)
@@ -1013,7 +976,6 @@ export default function OutletRequisitionPortal({
                   />
                 </div>
 
-                {/* Target SRP */}
                 <div>
                   <label className="block font-bold text-gray-700 mb-1">
                     Target Suggested Retail Price (SRP ₱) *
@@ -1029,7 +991,6 @@ export default function OutletRequisitionPortal({
                   />
                 </div>
 
-                {/* Estimated Unit Cost */}
                 <div>
                   <label className="block font-bold text-gray-700 mb-1">
                     Estimated Ingredient Cost / Unit (₱)
@@ -1045,7 +1006,6 @@ export default function OutletRequisitionPortal({
                 </div>
               </div>
 
-              {/* Dynamic Ingredient Bill of Materials */}
               <div className="bg-[#FAF6EE] p-4 rounded-xl border border-[#E2D1B8] space-y-3">
                 <div className="flex justify-between items-center">
                   <div>
@@ -1077,9 +1037,7 @@ export default function OutletRequisitionPortal({
                             className="w-full p-2 border border-gray-300 rounded-lg text-xs font-medium"
                           >
                             {inventory.map(m => (
-                              <option key={m.code} value={m.code}>
-                                {m.code}: {m.name}
-                              </option>
+                              <option key={m.code} value={m.code}>{m.code}: {m.name}</option>
                             ))}
                           </select>
                         </div>
@@ -1108,7 +1066,6 @@ export default function OutletRequisitionPortal({
                           onClick={() => handleRemoveSpecIngredient(idx)}
                           disabled={specIngredients.length <= 1}
                           className="text-red-500 hover:text-red-700 disabled:opacity-30 p-1.5 rounded hover:bg-red-50"
-                          title="Remove Ingredient"
                         >
                           <Trash2 size={14} />
                         </button>
@@ -1118,7 +1075,6 @@ export default function OutletRequisitionPortal({
                 </div>
               </div>
 
-              {/* Mixing Instructions / Notes */}
               <div>
                 <label className="block font-bold text-gray-700 mb-1">
                   Mixing / Proofing / Baking SOP Notes &amp; CCP Targets
@@ -1144,7 +1100,6 @@ export default function OutletRequisitionPortal({
             </form>
           </div>
 
-          {/* Right Preview & Live Economics Card */}
           <div className="space-y-4">
             <div className="bg-[#FAF6EE] p-5 rounded-2xl border border-[#E2D1B8] space-y-3">
               <h4 className="font-bold text-xs text-[#B87333] uppercase tracking-wider flex items-center gap-1.5 border-b border-[#E2D1B8] pb-2">
@@ -1184,7 +1139,6 @@ export default function OutletRequisitionPortal({
               </div>
             </div>
 
-            {/* List of Previously Submitted Proposals */}
             <div className="bg-white p-4 rounded-2xl border border-gray-200 space-y-3">
               <h5 className="font-bold text-xs text-gray-800 uppercase tracking-wider flex items-center justify-between">
                 <span>Recent Specialty Proposals</span>
