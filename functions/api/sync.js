@@ -1,49 +1,28 @@
 // ============================================================================
-// JJB WMS — /api/sync  (Phase 1.5 dual-write projection + Phase 2.5 polling)
+// JJB WMS — /api/sync  (Phase 1.5 projection + Phase 2.5 polling)
 //
-// POST  /api/sync          — inbound floor-app events (Shape A or B)
-// GET   /api/sync?since_id — outbound poll for pending requests (cross-device)
-//
-// Handles BOTH request shapes the app has been observed to use:
-//   Shape A (structured): { event_type, idempotency_key, payload: {...} }
-//   Shape B (flat):       { idempotencyKey, eventType, ...payload fields }
-//
-// Projection semantics:
-//   - If a handler throws, projected_at IS set (no infinite retry) and
-//     projection_error IS set (visible in admin panel).
-//   - If a handler returns statements, they're applied in one D1 batch.
-//   - Balance-affecting events append a reconciliation UPDATE to the batch.
-//   - Events with no handler are marked projected with no data change.
-//
-// Phase 1.5 — DEDUCTION GATE:
-//   WITHDRAWAL_SAVED / WITHDRAWAL_ISSUED are the ONLY events that decrement
-//   material_lots and write to withdrawals / withdrawal_items. They are
-//   emitted exclusively by Jade Q. Dela Cruz after she confirms physical
-//   issuance — either via IssuanceModule direct save, via the Pending
-//   Issuance Queue ("Issue" button on a queued request), or via batch-order
-//   bulk approval.
-//
-//   MATERIAL_WITHDRAWAL was previously mapped to projectWithdrawal and could
-//   auto-deduct stock from the self-service outlet portal. This is removed:
-//   portal submissions now POST WITHDRAWAL_REQUEST_SUBMITTED (no-op) and land
-//   in the pending_requests queue for Jade's review.
-//
-// Phase 2.5 — CROSS-DEVICE REQUEST POLLING:
-//   GET returns recent WITHDRAWAL_REQUEST_SUBMITTED / WITHDRAWAL_REQUEST_
-//   CANCELLED events from sync_events using a monotonic `id` cursor. This
-//   lets Jade's main app pick up kiosk submissions made from a DIFFERENT
-//   browser or device. localStorage + BroadcastChannel are same-origin same-
-//   browser only; D1 is the shared store that closes this gap.
+// POST /api/sync            — inbound floor-app events
+// GET  /api/sync?since_id=N — cross-device polling for pending requests
 // ============================================================================
 
-const str     = v => (v === null || v === undefined ? null : String(v));
-const num     = v => { const n = Number(v); return Number.isFinite(n) ? n : null; };
-const cents   = v => { const n = Number(v); return Number.isFinite(n) ? Math.round(n * 100) : null; };
+// --------------------------- helpers -------------------------------------
+const str = v => (v === null || v === undefined ? null : String(v));
+const num = v => { const n = Number(v); return Number.isFinite(n) ? n : null; };
+const cents = v => { const n = Number(v); return Number.isFinite(n) ? Math.round(n * 100) : null; };
 const isoDate = v => (v ? String(v).slice(0, 10) : null);
-const bool    = v => (v ? 1 : 0);
-const pick    = (o, ...keys) => { for (const k of keys) if (o && o[k] != null) return o[k]; return undefined; };
-
+const bool = v => (v ? 1 : 0);
+const pick = (o, ...keys) => {
+  for (const k of keys) if (o && o[k] != null) return o[k];
+  return undefined;
+};
 const asTest = v => (v === true || v === 1 || v === '1' || v === 'true') ? 1 : 0;
+
+function json(body, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
 
 function phtDate(ts) {
   if (!ts) return null;
@@ -67,6 +46,7 @@ function phtTime(ts) {
   return m ? m[1] : null;
 }
 
+// --------------------------- projection handlers -------------------------
 function projectReceiving(env, p, isTest) {
   const stmts = [];
   const reportNo = pick(p, 'reportNo', 'report_no');
@@ -116,7 +96,7 @@ function projectReceiving(env, p, isTest) {
     ));
 
     const lotNo = pick(item, 'lotNumber', 'lot_number');
-    const qty   = num(pick(item, 'secondaryQty', 'qty')) || 0;
+    const qty = num(pick(item, 'secondaryQty', 'qty')) || 0;
     if (lotNo && qty) {
       stmts.push(env.DB.prepare(`
         INSERT INTO material_lots (material_code, lot_number, expiry_date, qty_sec, location, is_test_data)
@@ -191,7 +171,7 @@ function projectWithdrawal(env, p, isTest) {
     ));
 
     const lotNo = pick(item, 'lotNumber', 'lot_number');
-    const qty   = num(pick(item, 'qtyIssuedSec', 'qty_issued_sec', 'qtyIssued')) || 0;
+    const qty = num(pick(item, 'qtyIssuedSec', 'qty_issued_sec', 'qtyIssued')) || 0;
     if (lotNo && qty) {
       stmts.push(env.DB.prepare(`
         UPDATE material_lots SET qty_sec = qty_sec - ?, updated_at = datetime('now')
@@ -207,8 +187,8 @@ function projectAdjustment(env, p, isTest) {
   const materialCode = pick(p, 'materialCode', 'material_code');
   if (!materialCode) throw new Error('MISSING_MATERIAL_CODE');
 
-  const type   = String(p.type || p.adjustmentType || '').toUpperCase();
-  const qty    = num(pick(p, 'qtySec', 'qty_sec')) || 0;
+  const type = String(p.type || p.adjustmentType || '').toUpperCase();
+  const qty = num(pick(p, 'qtySec', 'qty_sec')) || 0;
   const signed = type === 'OUT' ? -qty : qty;
 
   stmts.push(env.DB.prepare(`
@@ -237,11 +217,10 @@ function projectAdjustment(env, p, isTest) {
 }
 
 function projectBatchOrder(env, p, isTest) {
-  const stmts = [];
   const orderId = pick(p, 'orderId', 'order_id');
   if (!orderId) throw new Error('MISSING_ORDER_ID');
 
-  stmts.push(env.DB.prepare(`
+  return [env.DB.prepare(`
     INSERT INTO batch_orders
       (order_id, outlet_name, recipe_sku, recipe_name_snapshot, requested_qty_pcs,
        batch_multiplier, status, bulk_request_status, bulk_requisition_slip_no,
@@ -295,14 +274,7 @@ function projectBatchOrder(env, p, isTest) {
     str(pick(p, 'releasedAt', 'released_at')),
     str(pick(p, 'releasedTo', 'released_to')),
     isTest
-  ));
-
-  const hasSku = pick(p, 'recipeSku', 'recipe_sku');
-  const hasQty = pick(p, 'requestedQtyPcs', 'requested_qty_pcs');
-  if (!hasSku || !hasQty) {
-    stmts._softWarning = 'PARTIAL_PORTAL_ORDER_NO_SKU_OR_QTY';
-  }
-  return stmts;
+  )];
 }
 
 function projectOrder(env, p, isTest) {
@@ -462,70 +434,36 @@ function projectSpecialty(env, p, isTest) {
   return stmts;
 }
 
-// ============================================================================
-// HANDLERS map — every event_type the floor app is allowed to project.
-// Only Jade-issued events are in BALANCE_AFFECTING.
-// ============================================================================
+// --------------------------- dispatcher -----------------------------------
 const HANDLERS = {
-  // Receiving
-  'RECEIVING_SAVED':              projectReceiving,
-  'RECEIVING_CREATED':            projectReceiving,
-
-  // Withdrawal (Jade-issued only — see comment block at top of file)
-  'WITHDRAWAL_SAVED':             projectWithdrawal,
-  'WITHDRAWAL_ISSUED':            projectWithdrawal,
-  // REMOVED: 'MATERIAL_WITHDRAWAL' — was previously auto-deducted.
-  // Portal submissions route through Jade's Pending Issuance queue and only
-  // reach sync as WITHDRAWAL_SAVED after she confirms physical handoff.
-
-  // Adjustments
-  'ADJUSTMENT_SAVED':             projectAdjustment,
-
-  // Batch orders (kitting)
-  'BATCH_ORDER_SAVED':            projectBatchOrder,
-  'BATCH_ORDER_UPDATED':          projectBatchOrder,
-  'BATCH_CREATED':                projectBatchOrder,
-  'BATCH_BULK_APPROVED':          projectBatchOrder,
-  'BATCH_COMPLETED':              projectBatchOrder,
-  'BATCH_RELEASED':               projectBatchOrder,
-  'OUTLET_BATCH_ORDER':           projectBatchOrder,
-
-  // Wholesale orders
-  'ORDER_SAVED':                  projectOrder,
-  'ORDER_CREATED':                projectOrder,
-
-  // Audit log
-  'AUDIT_LOG':                    projectAudit,
-  'AUDIT_LOG_ENTRY':              projectAudit,
-  'WMS_AUDIT_EVENT':              projectAudit,
-
-  // Quarantine / NCR
-  'QUARANTINE_SAVED':             projectQuarantine,
-  'QUARANTINE_FILED':             projectQuarantine,
-
-  // Specialty recipe proposals
-  'SPECIALTY_PROPOSAL_SAVED':     projectSpecialty,
-  'SPECIALTY_PROPOSAL_CREATED':   projectSpecialty,
-  'SPECIALTY_PROPOSAL_APPROVED':  projectSpecialty,
-
-  // NOTE — Deliberately OMITTED (no handler = marked projected, no data change):
-  //   HEARTBEAT_POLL               — liveness signal, no data side-effect
-  //   INVENTORY_CHECK              — read-only check, no data side-effect
-  //   INVENTORY_ZERO_OUT           — mass reset; effect already baked into
-  //                                  current state via CSV import
-  //   OPENING_BASELINE_CSV_IMPORT  — historical import event; effect already
-  //                                  baked into current state
-  //   AUTOMATED_EOD_2345_DISPATCH  — cron liveness marker, no side-effect
-  //   WITHDRAWAL_REQUEST_SUBMITTED — queue-only, no deduction
-  //   WITHDRAWAL_REQUEST_CANCELLED — audit-only, no deduction
-  //   MATERIAL_WITHDRAWAL          — legacy event, intentionally no longer
-  //                                  projected to prevent auto-deduction
+  'RECEIVING_SAVED': projectReceiving,
+  'RECEIVING_CREATED': projectReceiving,
+  'WITHDRAWAL_SAVED': projectWithdrawal,
+  'WITHDRAWAL_ISSUED': projectWithdrawal,
+  'ADJUSTMENT_SAVED': projectAdjustment,
+  'BATCH_ORDER_SAVED': projectBatchOrder,
+  'BATCH_ORDER_UPDATED': projectBatchOrder,
+  'BATCH_CREATED': projectBatchOrder,
+  'BATCH_BULK_APPROVED': projectBatchOrder,
+  'BATCH_COMPLETED': projectBatchOrder,
+  'BATCH_RELEASED': projectBatchOrder,
+  'OUTLET_BATCH_ORDER': projectBatchOrder,
+  'ORDER_SAVED': projectOrder,
+  'ORDER_CREATED': projectOrder,
+  'AUDIT_LOG': projectAudit,
+  'AUDIT_LOG_ENTRY': projectAudit,
+  'WMS_AUDIT_EVENT': projectAudit,
+  'QUARANTINE_SAVED': projectQuarantine,
+  'QUARANTINE_FILED': projectQuarantine,
+  'SPECIALTY_PROPOSAL_SAVED': projectSpecialty,
+  'SPECIALTY_PROPOSAL_CREATED': projectSpecialty,
+  'SPECIALTY_PROPOSAL_APPROVED': projectSpecialty
 };
 
 const BALANCE_AFFECTING = new Set([
-  'RECEIVING_SAVED','RECEIVING_CREATED',
-  'WITHDRAWAL_SAVED','WITHDRAWAL_ISSUED',
-  'ADJUSTMENT_SAVED',
+  'RECEIVING_SAVED', 'RECEIVING_CREATED',
+  'WITHDRAWAL_SAVED', 'WITHDRAWAL_ISSUED',
+  'ADJUSTMENT_SAVED'
 ]);
 
 function buildReconciliationStatement(env) {
@@ -542,20 +480,24 @@ function buildReconciliationStatement(env) {
   `);
 }
 
+// --------------------------- POST handler --------------------------------
 export async function onRequestPost({ request, env }) {
   let body;
-  try { body = await request.json(); }
-  catch { return json({ status: 'error', error: 'invalid_json' }, 400); }
+  try {
+    body = await request.json();
+  } catch {
+    return json({ status: 'error', error: 'invalid_json' }, 400);
+  }
 
   let type, key, payload;
   if (body.event_type || body.type || body.payload || body.data) {
-    type    = String(body.event_type || body.type || '').toUpperCase();
-    key     = String(body.idempotency_key || body.id || crypto.randomUUID());
+    type = String(body.event_type || body.type || '').toUpperCase();
+    key = String(body.idempotency_key || body.id || crypto.randomUUID());
     payload = body.payload || body.data || {};
   } else {
     payload = body;
-    type    = String(body.eventType || body.event_type || body.type || '').toUpperCase();
-    key     = String(body.idempotencyKey || body.idempotency_key || body.id || crypto.randomUUID());
+    type = String(body.eventType || body.event_type || body.type || '').toUpperCase();
+    key = String(body.idempotencyKey || body.idempotency_key || body.id || crypto.randomUUID());
   }
 
   const isTest = asTest(payload.is_test_data);
@@ -578,20 +520,19 @@ export async function onRequestPost({ request, env }) {
     `SELECT id, projected_at, synced_to_gas FROM sync_events WHERE idempotency_key = ?`
   ).bind(key).first();
 
-  let projectionOk  = !!state?.projected_at;
-  let softWarning   = null;
+  let projectionOk = !!state?.projected_at;
+  let softWarning = null;
 
   if (!projectionOk) {
     const handler = HANDLERS[type];
     if (handler) {
       try {
         const stmts = handler(env, payload, isTest);
-        if (stmts && stmts._softWarning) softWarning = stmts._softWarning;
         if (BALANCE_AFFECTING.has(type)) stmts.push(buildReconciliationStatement(env));
         if (stmts.length > 0) await env.DB.batch(stmts);
         await env.DB.prepare(
-          `UPDATE sync_events SET projected_at = datetime('now'), projection_error = ? WHERE idempotency_key = ?`
-        ).bind(softWarning, key).run();
+          `UPDATE sync_events SET projected_at = datetime('now'), projection_error = NULL WHERE idempotency_key = ?`
+        ).bind(key).run();
         projectionOk = true;
       } catch (e) {
         await env.DB.prepare(
@@ -611,9 +552,9 @@ export async function onRequestPost({ request, env }) {
   if (!gasOk && env.GAS_WEB_APP_URL) {
     try {
       const res = await fetch(env.GAS_WEB_APP_URL, {
-        method:  'POST',
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ event_type: type, payload }),
+        body: JSON.stringify({ event_type: type, payload })
       });
       gasOk = res.ok;
     } catch (e) {
@@ -630,34 +571,17 @@ export async function onRequestPost({ request, env }) {
   }
 
   return json({
-    status:        'ok',
-    event_type:    type,
-    idempotency:   key,
-    projected:     projectionOk,
+    status: 'ok',
+    event_type: type,
+    idempotency: key,
+    projected: projectionOk,
     synced_to_gas: gasOk,
-    is_test_data:  isTest,
-    warning:       softWarning,
+    is_test_data: isTest,
+    warning: softWarning
   });
 }
-// ============================================================================
-// GET /api/sync?since_id=N
-//
-// Phase 2.5 — cross-device request polling.
-//
-// Returns recent WITHDRAWAL_REQUEST_*, BATCH_ORDER_*, OUTLET_BATCH_ORDER, and
-// SPECIALTY_PROPOSAL_* events from sync_events using a monotonic `id` cursor.
-// This lets Jade's and Romeo's desktops pick up kiosk submissions made from a
-// DIFFERENT browser or device. localStorage + BroadcastChannel are same-
-// origin same-browser only; D1 is the shared store that closes this gap.
-//
-// Response shape:
-//   {
-//     ok: true,
-//     since_id, server_max_id, last_event_id,  // last_event_id aliases server_max_id
-//     count, events: [{id, key, type, event_type, payload, created_at}],
-//     batch_orders: [...]  // last 25 recent batch orders for hydration
-//   }
-// ============================================================================
+
+// --------------------------- GET handler (Phase 2.5) ---------------------
 export async function onRequestGet({ request, env }) {
   if (!env.DB) {
     return json({ ok: false, error: 'D1 not configured' }, 500);
@@ -696,8 +620,6 @@ export async function onRequestGet({ request, env }) {
     return json({ ok: false, error: String(e.message || e) }, 500);
   }
 
-  // Fetch recent batch orders for hydration (mobile BATCH_ORDER_SAVED arrives
-  // with limited fields; this lets Romeo's desktop see the full row from D1)
   try {
     const boOut = await env.DB.prepare(`
       SELECT * FROM batch_orders
@@ -707,18 +629,16 @@ export async function onRequestGet({ request, env }) {
     `).all();
     recentBatchOrders = boOut?.results || [];
   } catch (e) {
-    // Non-fatal — polling still works for requests
+    // Non-fatal
   }
 
-  const serverMaxId = events.length > 0
-    ? events[events.length - 1].id
-    : sinceId;
+  const serverMaxId = events.length > 0 ? events[events.length - 1].id : sinceId;
 
   return json({
     ok: true,
     since_id: sinceId,
     server_max_id: serverMaxId,
-    last_event_id: serverMaxId,   // alias for compatibility with clients using this name
+    last_event_id: serverMaxId,
     count: events.length,
     events: events.map((r) => {
       let payload = {};
@@ -727,7 +647,7 @@ export async function onRequestGet({ request, env }) {
         id: r.id,
         key: r.idempotency_key,
         type: r.event_type,
-        event_type: r.event_type,   // alias — some clients use ev.event_type
+        event_type: r.event_type,
         payload,
         created_at: r.created_at
       };
