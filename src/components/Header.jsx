@@ -1,27 +1,43 @@
-import { 
-  Warehouse, Scale, Truck, FileText, CheckCircle2, 
-  Wifi, WifiOff, Smartphone, Laptop, AlertOctagon, Send,
-  ShoppingCart, FileSpreadsheet, History, BarChart3,
-  Store, Lock, LogOut
+import React, { useState, useEffect } from 'react';
+import {
+  LayoutDashboard,
+  PackagePlus,
+  PackageMinus,
+  Scale,
+  SlidersHorizontal,
+  FileSpreadsheet,
+  Clock,
+  ShieldCheck,
+  Wifi,
+  WifiOff,
+  Smartphone,
+  Monitor,
+  Upload,
+  UserCheck,
+  Store,
+  ClipboardList,
+  LogOut,
+  Database,
+  FlaskConical
 } from 'lucide-react';
 
 export const ROLES = [
-  { id: "jade", name: "Jade Q. Dela Cruz", title: "Warehouse Supervisor", station: "Receiving Dock & Bodega Storage" },
-  { id: "romeo", name: "Romeo B. Malusay", title: "Ingredient Batching Preparer", station: "Dry Room 2 & Batching Workbench" },
-  { id: "mariejohn", name: "Mariejohn F. Tacuban", title: "Inventory & Purchasing Manager", station: "Admin & Reconciliation" },
-  { id: "grace", name: "Grace P. Suico", title: "FSCO & QA Control Director", station: "QA Bench & Quarantine Control" },
-  { id: "angelina", name: "Angelina P. Sun", title: "Head of Administration / COA", station: "Executive Office" },
-  { id: "zaphyr", name: "Zaphyr Zur T. Pomicpic", title: "Systems Director & Architect", station: "Executive & Systems Engineering" }
+  "Jade Q. Dela Cruz (Warehouse Supervisor)",
+  "Romeo B. Malusay (Ingredient Batching Preparer)",
+  "Mariejohn F. Tacuban (Inventory & Purchasing Manager)",
+  "Grace P. Suico (FSCO & QA Director)",
+  "Angelina P. Sun (Head of Admin / COA)",
+  "Zaphyr Zur T. Pomicpic (Systems Director & Architect)"
 ];
 
-export default function Header({ 
-  currentRole, 
-  setCurrentRole, 
-  activeTab, 
-  setActiveTab, 
-  isMobileMode, 
+export default function Header({
+  currentRole,
+  setCurrentRole,
+  activeTab,
+  setActiveTab,
+  isMobileMode,
   setIsMobileMode,
-  isOffline, 
+  isOffline,
   setIsOffline,
   queueCount = 0,
   pendingBatchCount = 0,
@@ -31,201 +47,265 @@ export default function Header({
   onQuickEod,
   onOpenImportModal,
   onOpenLoginModal,
-  onLogout
+  onLogout,
+  onOpenAdminModal,
+  isTestMode = false,
+  setIsTestMode
 }) {
-  const activeRoleObj = ROLES.find(r => r.name === currentRole) || ROLES[0];
+  const [phtTime, setPhtTime] = useState('');
 
-  // Unified issuance queue count = bulk requisitions from Romeo +
-  // portal/staff material requests awaiting Jade's Issue click.
+  useEffect(() => {
+    const updateClock = () => {
+      const now = new Date();
+      const formatted = now.toLocaleString('en-PH', {
+        timeZone: 'Asia/Manila',
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: true
+      });
+      setPhtTime(formatted);
+    };
+    updateClock();
+    const timer = setInterval(updateClock, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Role permission gate: Only Zaphyr Zur T. Pomicpic (SYSTEMS_DIRECTOR)
+  // and Angelina P. Sun (ADMIN_COA) have can_delete_test_data = 1
+  const isAdminPrivilege =
+    Boolean(currentRole) &&
+    (currentRole.includes('Zaphyr') ||
+      currentRole.includes('Angelina') ||
+      currentRole.includes('Systems Director') ||
+      currentRole.includes('COA'));
+
+  // Combined issuance queue: Romeo's bulk requisitions + Jade's portal requests
   const issuanceQueueTotal = pendingBulkApprovalCount + pendingRequestCount;
 
+  const navItems = [
+    { id: 'dashboard', label: '1. Command Center', icon: LayoutDashboard, badge: lowStockCount > 0 ? lowStockCount : null, badgeColor: 'bg-red-600 text-white' },
+    { id: 'portal', label: '2. Outlet & Line Portal', icon: Store, badge: 'KIOSK', badgeColor: 'bg-[#C8963E] text-[#240e32]' },
+    { id: 'receiving', label: '3. Inbound Receiving', icon: PackagePlus },
+    {
+      id: 'issuance',
+      label: '4. Stock Withdrawal',
+      icon: PackageMinus,
+      badge: issuanceQueueTotal > 0 ? issuanceQueueTotal : null,
+      badgeColor: 'bg-amber-500 text-black animate-pulse'
+    },
+    { id: 'batching', label: '5. Romeo Batching', icon: Scale, badge: pendingBatchCount > 0 ? pendingBatchCount : null, badgeColor: 'bg-amber-500 text-black' },
+    { id: 'orderHistory', label: '6. Requisition & Order Ledger', icon: ClipboardList },
+    { id: 'adjustments', label: '7. Adjustments & NCR', icon: SlidersHorizontal },
+    { id: 'reports', label: '8. Reports & POs', icon: FileSpreadsheet },
+    { id: 'eod', label: '9. 23:45 EOD Dossier', icon: Clock },
+    { id: 'audit', label: '10. Audit Trail', icon: ShieldCheck }
+  ];
+
+  const matchedRoleOption =
+    ROLES.find((r) => r.startsWith(currentRole.split(' (')[0])) || ROLES[0];
+
   return (
-    <header className="bg-[#3D1C52] text-white shadow-xl sticky top-0 z-30 border-b border-[#C8963E]/40">
-      {/* Top Corporate Strip */}
-      <div className="bg-[#240e32] px-3 py-1.5 text-xs text-[#E5C585] flex flex-wrap justify-between items-center border-b border-[#5B2E7A]/60">
-        <div className="flex items-center gap-2">
-          <span className="font-semibold text-white tracking-wide">JANG-JANG BAKESHOP &amp; KINGDOM CONFECTIONARY</span>
-          <span className="hidden sm:inline text-gray-400">|</span>
-          <span className="hidden sm:inline">Indangan Plant FDA LTO #3000013388488 · Valid to Dec 2026</span>
-        </div>
-        <div className="flex items-center gap-3 text-[11px]">
-          <span className="text-gray-300">Davao City Bodega Central</span>
-          <span className="bg-[#C8963E]/20 text-[#E5C585] px-2 py-0.5 rounded font-mono border border-[#C8963E]/30">
-            SOP-WAR-002 / SOP-PRO-004
-          </span>
-        </div>
-      </div>
-
-      {/* Main Header Row */}
-      <div className="px-4 py-2.5 flex flex-wrap justify-between items-center gap-3">
-        {/* Brand & Facility Info */}
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-white p-1 border-2 border-[#C8963E] flex items-center justify-center shadow-md flex-shrink-0">
-            <img 
-              src="https://raw.githubusercontent.com/zzp-systems/jjb-systems/refs/heads/main/jjb-logo-transaparent.png" 
-              alt="JJB Logo" 
-              className="w-full h-full object-contain"
-              onError={(e) => { e.target.style.display = 'none'; }}
-            />
+    <header className="bg-[#240e32] text-white shadow-xl border-b-2 border-[#C8963E] sticky top-0 z-40">
+      {/* Active Sandbox Mode Banner */}
+      {isTestMode && (
+        <div className="bg-amber-500 text-[#240e32] px-4 py-1 text-[11px] font-extrabold tracking-wide flex items-center justify-between border-b border-amber-300">
+          <div className="flex items-center gap-2">
+            <FlaskConical size={14} className="animate-bounce" />
+            <span>
+              SANDBOX / TRAINING MODE ACTIVE — All new transactions are tagged with{' '}
+              <code className="bg-black/15 px-1 rounded">is_test_data = 1</code> and can be cleanly purged from the D1 Admin Panel.
+            </span>
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="font-serif font-bold text-base md:text-lg text-white leading-tight">
-                JJB Warehouse &amp; Kitting OS
-              </h1>
-              <span className="bg-[#C8963E] text-[#240e32] font-bold text-[10px] px-1.5 py-0.5 rounded uppercase">
-                v4.6 WMS
-              </span>
-            </div>
-            <p className="text-[11px] text-[#E5C585]">
-              Active User: <span className="font-semibold text-white">{activeRoleObj.name}</span> ({activeRoleObj.title})
-            </p>
-          </div>
-        </div>
-
-        {/* Control Badges & Role Switcher */}
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* Quick Tablet/Mobile Mode Toggle */}
-          <button
-            onClick={() => setIsMobileMode(!isMobileMode)}
-            className={`px-2.5 py-1.5 rounded text-xs font-semibold flex items-center gap-1.5 transition border ${
-              isMobileMode 
-                ? 'bg-[#C8963E] text-[#240e32] border-[#C8963E]' 
-                : 'bg-[#5B2E7A]/60 text-gray-200 border-[#7A3F9E] hover:text-white'
-            }`}
-            title="Toggle Mobile/Tablet Touch-Optimized Layout for Floor Tasks"
-          >
-            {isMobileMode ? <Smartphone size={13} /> : <Laptop size={13} />}
-            <span className="hidden sm:inline">{isMobileMode ? "Tablet Mode" : "Desktop Mode"}</span>
-          </button>
-
-          {/* Offline / Online Queue Toggle */}
-          <button
-            onClick={() => setIsOffline(!isOffline)}
-            className={`px-2.5 py-1.5 rounded text-xs font-semibold flex items-center gap-1.5 transition border ${
-              isOffline
-                ? 'bg-[#C0392B] text-white border-red-400 animate-pulse'
-                : 'bg-[#1E7A3E] text-white border-green-500'
-            }`}
-            title="Simulate Local Queue vs Online Sync"
-          >
-            {isOffline ? <WifiOff size={13} /> : <Wifi size={13} />}
-            <span>{isOffline ? "Offline Queue" : "Live Synced"}</span>
-            {queueCount > 0 && (
-              <span className="bg-white/20 px-1 rounded text-[10px]">({queueCount})</span>
-            )}
-          </button>
-
-          {/* Role Switcher & Auth Modal Trigger */}
-          <div className="flex items-center gap-1.5 bg-[#240e32] border border-[#C8963E]/60 rounded px-2 py-1">
+          {isAdminPrivilege && setIsTestMode && (
             <button
-              onClick={onOpenLoginModal}
-              className="text-[#E5C585] hover:text-white p-1 rounded hover:bg-white/10 transition flex items-center gap-1 text-[11px] font-bold"
-              title="Authenticate Staff Role with Username & Password or Shift PIN"
+              onClick={() => setIsTestMode(false)}
+              className="bg-[#240e32] text-amber-300 hover:bg-black px-2.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider transition"
             >
-              <Lock size={12} className="text-[#C8963E]" />
-              <span className="hidden sm:inline">Auth</span>
+              Exit Sandbox Mode
             </button>
-            <span className="text-gray-500">|</span>
-            <select
-              value={currentRole}
-              onChange={(e) => setCurrentRole(e.target.value)}
-              className="bg-transparent text-white text-xs font-medium focus:outline-none cursor-pointer"
-            >
-              {ROLES.map(r => (
-                <option key={r.id} value={r.name} className="bg-[#3D1C52] text-white">
-                  {r.name} · {r.title}
-                </option>
-              ))}
-            </select>
-            {onLogout && (
-              <>
-                <span className="text-gray-500">|</span>
-                <button
-                  onClick={onLogout}
-                  className="text-gray-400 hover:text-red-400 p-1 rounded hover:bg-white/10 transition"
-                  title="Lock Terminal & Log Out"
-                >
-                  <LogOut size={12} />
-                </button>
-              </>
-            )}
-          </div>
-
-          {/* One-Time Fresh Data CSV Import */}
-          <button
-            onClick={onOpenImportModal}
-            className="bg-[#240e32] hover:bg-[#1a0a24] text-[#E5C585] border border-[#C8963E]/60 font-bold text-xs px-2.5 py-1.5 rounded shadow flex items-center gap-1.5 transition"
-            title="Upload Opening Physical Inventory Count CSV or Reset to Zero Baseline"
-          >
-            <FileSpreadsheet size={13} className="text-[#C8963E]" />
-            <span className="hidden lg:inline">Fresh Data /</span> Import CSV
-          </button>
-
-          {/* Quick EOD Action */}
-          <button
-            onClick={onQuickEod}
-            className="bg-gradient-to-r from-[#C8963E] to-[#E5C585] hover:from-[#b58330] hover:to-[#d4b06f] text-[#240e32] font-bold text-xs px-3 py-1.5 rounded shadow flex items-center gap-1.5 transition"
-            title="Open Automated 23:45 End-of-Day Settlement Report"
-          >
-            <Send size={13} />
-            <span className="hidden md:inline">23:45</span> EOD Report
-          </button>
+          )}
         </div>
-      </div>
+      )}
 
-      {/* Navigation Tabs Bar */}
-      <nav className="bg-[#240e32] px-2 flex overflow-x-auto gap-1 border-t border-[#5B2E7A]/40 scrollbar-none">
-        {[
-          { id: 'dashboard', label: '1. Live FEFO Inventory', icon: Warehouse, badge: lowStockCount > 0 ? `${lowStockCount} Low` : null, badgeColor: 'bg-[#D68910]' },
-          { id: 'portal', label: 'Outlet & Line Portal', icon: Store, badge: 'Requisitions', badgeColor: 'bg-[#1E7A3E]' },
-          { id: 'receiving', label: '2. Inbound Receiving', icon: Truck, roleHighlight: 'Jade Q. Dela Cruz' },
-          { 
-            id: 'issuance', 
-            label: '3. Stock Release', 
-            icon: FileText, 
-            badge: issuanceQueueTotal > 0 ? `${issuanceQueueTotal} To Issue` : null, 
-            badgeColor: 'bg-[#C0392B] animate-pulse', 
-            roleHighlight: 'Jade Q. Dela Cruz' 
-          },
-          { 
-            id: 'batching', 
-            label: '4. Batching & Kitting', 
-            icon: Scale, 
-            badge: pendingBatchCount > 0 ? `${pendingBatchCount} Pending` : null, 
-            badgeColor: 'bg-[#C8963E]', 
-            roleHighlight: 'Romeo B. Malusay' 
-          },
-          { id: 'orderHistory', label: 'Unified Order History', icon: History, badge: 'Orders & Requisitions', badgeColor: 'bg-[#5B2E7A]' },
-          { id: 'adjustments', label: '5. Adjustments & Quarantine', icon: AlertOctagon },
-          { id: 'reports', label: '6. Reports & PO Generator', icon: ShoppingCart },
-          { id: 'eod', label: '7. 23:45 EOD Report', icon: Send, badge: 'Daily 23:45', badgeColor: 'bg-[#1E7A3E]' },
-          { id: 'audit', label: '8. Audit Trail', icon: CheckCircle2 }
-        ].map(tab => {
-          const Icon = tab.icon;
-          const isActive = activeTab === tab.id;
-          const isHighlighted = tab.roleHighlight === currentRole;
-
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-semibold whitespace-nowrap border-b-2 transition-all relative ${
-                isActive 
-                  ? 'border-[#C8963E] text-[#E5C585] bg-[#3D1C52]' 
-                  : 'border-transparent text-gray-300 hover:text-white hover:bg-white/5'
-              } ${isHighlighted ? 'ring-1 ring-[#C8963E]/40' : ''}`}
-            >
-              <Icon size={14} className={isActive ? 'text-[#C8963E]' : 'text-gray-400'} />
-              <span>{tab.label}</span>
-              {tab.badge && (
-                <span className={`text-[10px] text-white px-1.5 py-0.2 rounded-full font-bold ${tab.badgeColor}`}>
-                  {tab.badge}
+      {/* Top Corporate Bar */}
+      <div className="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <img
+            src="/jjb-logo-transaparent.png"
+            alt="Jang-Jang Bakeshop Logo"
+            className="h-11 w-11 object-contain rounded-xl bg-white/10 p-1 border border-[#C8963E]/50 shadow"
+            onError={(e) => {
+              e.currentTarget.style.display = 'none';
+            }}
+          />
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[10px] font-extrabold uppercase tracking-widest px-2 py-0.5 rounded bg-[#C8963E] text-[#240e32]">
+                JJB-WMS v4.6
+              </span>
+              <span className="text-[11px] text-[#E5C585] font-semibold">
+                Indangan Central Commissary · FDA LTO #3000013388488
+              </span>
+              {isTestMode && (
+                <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded bg-amber-400 text-black border border-amber-200 flex items-center gap-1 shadow">
+                  <FlaskConical size={11} /> SANDBOX (is_test_data=1)
                 </span>
               )}
+            </div>
+            <h1 className="text-base md:text-lg font-extrabold tracking-tight text-white">
+              Jang-Jang Bakeshop & Kingdom Confectionary — Warehouse Management System
+            </h1>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <div className="hidden lg:flex items-center gap-1.5 bg-white/10 px-3 py-1.5 rounded-lg border border-white/15 text-[#E5C585] font-mono text-[11px]">
+            <Clock size={13} />
+            <span>{phtTime || 'PHT (UTC+8)'}</span>
+          </div>
+
+          {isAdminPrivilege && (
+            <div className="flex items-center gap-1.5 bg-[#38144c] px-2 py-1 rounded-xl border border-[#C8963E]/60 shadow-inner">
+              {setIsTestMode && (
+                <button
+                  onClick={() => setIsTestMode(!isTestMode)}
+                  className={`px-2.5 py-1 rounded-lg font-bold flex items-center gap-1 text-[11px] transition ${
+                    isTestMode
+                      ? 'bg-amber-400 text-black shadow'
+                      : 'bg-white/10 text-amber-200 hover:bg-white/20'
+                  }`}
+                  title="Toggle Sandbox / Training Mode (tags new transactions with is_test_data = 1)"
+                >
+                  <FlaskConical size={13} />
+                  <span>{isTestMode ? 'Sandbox: ON' : 'Sandbox'}</span>
+                </button>
+              )}
+
+              {onOpenAdminModal && (
+                <button
+                  onClick={onOpenAdminModal}
+                  className="px-2.5 py-1 rounded-lg font-bold bg-[#C8963E] hover:bg-[#d9a74a] text-[#240e32] flex items-center gap-1 text-[11px] shadow transition"
+                  title="Open Cloudflare D1 24-Table Backend Admin Panel & Test Purge Engine"
+                >
+                  <Database size={13} />
+                  <span>D1 Admin</span>
+                </button>
+              )}
+            </div>
+          )}
+
+          {onOpenImportModal && (
+            <button
+              onClick={onOpenImportModal}
+              className="bg-white/10 hover:bg-white/20 text-[#E5C585] border border-[#C8963E]/40 px-2.5 py-1.5 rounded-lg font-bold flex items-center gap-1 transition"
+              title="Import Physical Inventory Count CSV Baseline"
+            >
+              <Upload size={13} />
+              <span className="hidden sm:inline">CSV Baseline</span>
             </button>
-          );
-        })}
+          )}
+
+          <button
+            onClick={() => setIsMobileMode(!isMobileMode)}
+            className={`px-2.5 py-1.5 rounded-lg font-bold flex items-center gap-1 border transition ${
+              isMobileMode
+                ? 'bg-[#C8963E] text-[#240e32] border-[#E5C585]'
+                : 'bg-white/10 text-gray-200 border-white/15 hover:bg-white/20'
+            }`}
+            title="Toggle Floor Tablet Kiosk Ergonomic Mode"
+          >
+            {isMobileMode ? <Smartphone size={14} /> : <Monitor size={14} />}
+            <span className="hidden md:inline">{isMobileMode ? 'Tablet UI' : 'Desktop UI'}</span>
+          </button>
+
+          <button
+            onClick={() => setIsOffline(!isOffline)}
+            className={`px-2.5 py-1.5 rounded-lg font-bold flex items-center gap-1 border transition ${
+              isOffline
+                ? 'bg-red-600/90 text-white border-red-400'
+                : 'bg-emerald-700/80 text-emerald-100 border-emerald-500/50 hover:bg-emerald-700'
+            }`}
+            title="Toggle Offline Floor Cache Simulation"
+          >
+            {isOffline ? <WifiOff size={14} /> : <Wifi size={14} />}
+            <span className="hidden sm:inline">
+              {isOffline ? `Offline (${queueCount})` : 'Edge Online'}
+            </span>
+          </button>
+
+          <select
+            value={matchedRoleOption}
+            onChange={(e) => {
+              const cleanName = e.target.value.split(' (')[0];
+              setCurrentRole(cleanName);
+            }}
+            aria-label="Active Operator Role"
+            className="bg-[#180822] text-[#E5C585] border border-[#C8963E]/60 rounded-lg px-2.5 py-1.5 text-xs font-bold focus:outline-none focus:border-[#C8963E] max-w-[210px] truncate"
+          >
+            {ROLES.map((role) => (
+              <option key={role} value={role} className="bg-[#240e32] text-white">
+                {role}
+              </option>
+            ))}
+          </select>
+
+          {onOpenLoginModal && (
+            <button
+              onClick={onOpenLoginModal}
+              className="bg-[#C8963E]/20 hover:bg-[#C8963E]/30 text-[#E5C585] border border-[#C8963E] px-2.5 py-1.5 rounded-lg font-bold flex items-center gap-1 transition"
+              title="Switch Authenticated Staff Account"
+            >
+              <UserCheck size={14} />
+              <span>Auth</span>
+            </button>
+          )}
+
+          {onLogout && (
+            <button
+              onClick={onLogout}
+              className="bg-red-600/20 hover:bg-red-600 text-red-200 hover:text-white border border-red-500/40 p-1.5 rounded-lg transition"
+              title="Lock Terminal Session"
+            >
+              <LogOut size={14} />
+            </button>
+          )}
+        </div>
+      </div>
+
+      <nav className="bg-[#1a0924] border-t border-white/10">
+        <div className="max-w-7xl mx-auto px-4 flex items-center gap-1 overflow-x-auto py-1.5 no-scrollbar">
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = activeTab === item.id;
+            return (
+              <button
+                key={item.id}
+                onClick={() => setActiveTab(item.id)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap flex items-center gap-1.5 transition shrink-0 ${
+                  isActive
+                    ? 'bg-[#C8963E] text-[#240e32] shadow-md'
+                    : 'text-gray-300 hover:bg-white/10 hover:text-white'
+                }`}
+              >
+                <Icon size={14} />
+                <span>{item.label}</span>
+                {item.badge !== null && item.badge !== undefined && (
+                  <span
+                    className={`ml-1 px-1.5 py-0.2 rounded-full text-[10px] font-extrabold ${
+                      item.badgeColor || 'bg-red-600 text-white'
+                    }`}
+                  >
+                    {item.badge}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
       </nav>
     </header>
   );

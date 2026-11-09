@@ -12,6 +12,7 @@ import OrderHistory from './components/OrderHistory';
 import InitialDataImportModal from './components/InitialDataImportModal';
 import LoginModal from './components/LoginModal';
 import OutletRequisitionPortal from './components/OutletRequisitionPortal';
+import AdminDatabaseModal from './components/AdminDatabaseModal';
 
 import { MASTER_MATERIALS, STORAGE_ROOMS } from './data/materialsData';
 import { MASTER_RECIPES, OUTLETS, getAllMasterRecipes } from './data/recipesData';
@@ -111,6 +112,13 @@ const buildNormalizedWithdrawalItems = (rawItems, materialsList) => {
   });
 };
 
+// ============================================================================
+// Phase 2 — Sandbox mode persistence key. Uses localStorage so the flag
+// survives page refresh within a browser session. Reset to false on
+// login and logout for safety (see handleLoginSuccess / handleLogout).
+// ============================================================================
+const SANDBOX_STORAGE_KEY = 'JJB_WMS_SANDBOX_MODE';
+
 export default function App() {
   // Persistence Helpers
   const getSaved = (key, fallback) => {
@@ -192,9 +200,31 @@ export default function App() {
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [recipes, setRecipes] = useState(() => getAllMasterRecipes());
 
-  // Unified Edge Sync Dispatcher
+  // Phase 2 — Admin modal + Sandbox Mode state
+  const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
+  const [isTestMode, setIsTestMode] = useState(() => {
+    try {
+      return localStorage.getItem(SANDBOX_STORAGE_KEY) === 'true';
+    } catch (e) {
+      return false;
+    }
+  });
+
+  // Phase 2 — Persist sandbox mode so page refresh keeps the current setting
+  useEffect(() => {
+    try {
+      localStorage.setItem(SANDBOX_STORAGE_KEY, String(isTestMode));
+    } catch (e) {}
+  }, [isTestMode]);
+
+  // Unified Edge Sync Dispatcher — Phase 2 injects is_test_data into every payload
+  // so sync.js asTest() correctly tags rows when Sandbox Mode is active.
   const postSyncEvent = (eventType, idempotencyKey, payloadData = {}) => {
     if (isOffline) return;
+    const enrichedPayload = {
+      ...payloadData,
+      is_test_data: isTestMode ? 1 : 0
+    };
     fetch(WORKER_SYNC_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -203,8 +233,8 @@ export default function App() {
         eventType: eventType,
         idempotency_key: idempotencyKey,
         idempotencyKey: idempotencyKey,
-        payload: payloadData,
-        ...payloadData
+        payload: enrichedPayload,
+        ...enrichedPayload
       })
     }).catch((err) => console.warn('Background sync error:', err));
   };
@@ -296,6 +326,8 @@ export default function App() {
       localStorage.setItem('JJB_WMS_AUTH_USER', JSON.stringify(user));
     } catch (e) {}
     setIsLoginModalOpen(false);
+    // Phase 2: Reset sandbox on new session for safety
+    setIsTestMode(false);
     recordAudit(
       "STAFF_LOGIN_AUTHENTICATED",
       `${user.name} (${user.title}) successfully authenticated session at ${user.station}.`
@@ -308,6 +340,8 @@ export default function App() {
       sessionStorage.removeItem('JJB_WMS_AUTH_SESSION');
     } catch (e) {}
     setIsAuthenticated(false);
+    // Phase 2: Reset sandbox on logout for safety
+    setIsTestMode(false);
     showToast("Terminal session locked. Please sign in to proceed.");
   };
 
@@ -418,7 +452,7 @@ export default function App() {
   }, [lastEodTriggerDate]);
 
   // ============================================================================
-  // WORKFLOW 1 — Inbound Receiving Save (unchanged)
+  // WORKFLOW 1 — Inbound Receiving Save
   // ============================================================================
   const handleSaveReceiving = (newReport) => {
     setReceivingReports(prev => [newReport, ...prev]);
@@ -474,9 +508,9 @@ export default function App() {
   };
 
   // ============================================================================
-  // Shared issuance core — used by both handleSaveWithdrawal (Jade direct)
-  // and handleIssuePendingRequest (Jade approves a queued request).
-  // Assumes materials were physically pulled & handed over before this runs.
+  // Shared issuance core — used by handleSaveWithdrawal (Jade direct),
+  // handleIssuePendingRequest (Jade approves a queued request), and
+  // handleApprovePendingWithdrawal (Jade approves Romeo's bulk requisition).
   // ============================================================================
   const performWithdrawal = (newWithdrawal, opts = {}) => {
     const normalizedItems = buildNormalizedWithdrawalItems(newWithdrawal.items, inventory);
@@ -526,9 +560,6 @@ export default function App() {
     return enrichedWithdrawal;
   };
 
-  // ============================================================================
-  // WORKFLOW 2 — Jade direct issuance (via IssuanceModule "Save Withdrawal")
-  // ============================================================================
   const handleSaveWithdrawal = (newWithdrawal) => {
     performWithdrawal(newWithdrawal, {
       auditAction: "STOCK_OUT_ISSUANCE",
@@ -540,12 +571,6 @@ export default function App() {
 
   // ============================================================================
   // WORKFLOW 3A — Portal / staff-entry REQUEST (queued, NOT issued)
-  // This is what runs when:
-  //   • outlet-portal.html is submitted (self-service)
-  //   • OutletRequisitionPortal inside the app is submitted by Jade/Romeo/Grace
-  //     on behalf of a phone-in / texted request
-  // No inventory change, no withdrawal record, no WITHDRAWAL_SAVED event.
-  // Only a queued request + informational sync event.
   // ============================================================================
   const handleSubmitWithdrawalRequest = (portalReq) => {
     const now = new Date();
@@ -607,7 +632,6 @@ export default function App() {
       `Request ${requestId} from ${newRequest.requestingEntity} by ${newRequest.requestedBy} queued for Jade's Issuance review (${normalizedItems.length} materials, est. ₱${totalEstimatedCost.toLocaleString()}).`
     );
 
-    // Informational sync event — NOT balance-affecting, NOT projected into withdrawals.
     postSyncEvent(
       'WITHDRAWAL_REQUEST_SUBMITTED',
       `REQ_${requestId}_${Date.now()}`,
@@ -638,9 +662,6 @@ export default function App() {
 
   // ============================================================================
   // WORKFLOW 3B — Jade ISSUES a pending request.
-  // This is the ONLY path that converts a portal request into a deduction.
-  // Material physically handed over → Jade clicks "Issue" → withdrawal created
-  // + inventory deducted + WITHDRAWAL_SAVED posted.
   // ============================================================================
   const handleIssuePendingRequest = (requestId, overrides = {}) => {
     const req = pendingRequests.find(r => r.requestId === requestId);
@@ -656,7 +677,6 @@ export default function App() {
     const now = new Date();
     const slipNo = `WS-PORTAL-${now.getTime().toString().slice(-8)}`;
 
-    // FEFO lots are resolved at issue time against live inventory
     const resolvedItems = req.items.map(it => {
       const mat = inventory.find(m => m.code === it.materialCode);
       const activeLots = Array.isArray(mat?.lots)
@@ -716,7 +736,7 @@ export default function App() {
   };
 
   // ============================================================================
-  // WORKFLOW 3C — Jade CANCELS a pending request (materials not available, etc.)
+  // WORKFLOW 3C — Jade CANCELS a pending request
   // ============================================================================
   const handleCancelPendingRequest = (requestId, reason = '') => {
     const req = pendingRequests.find(r => r.requestId === requestId);
@@ -786,8 +806,7 @@ export default function App() {
   };
 
   // ============================================================================
-  // WORKFLOW 5 — Romeo requests bulk materials (unchanged — stays a queue item
-  // on the batch order, Jade later approves via handleApprovePendingWithdrawal)
+  // WORKFLOW 5 — Romeo requests bulk materials
   // ============================================================================
   const handleRequestBulkMaterials = (orderId) => {
     const nowStr = new Date().toISOString().slice(0, 19).replace('T', ' ');
@@ -826,8 +845,7 @@ export default function App() {
   };
 
   // ============================================================================
-  // WORKFLOW 6 — Jade approves Romeo's bulk requisition (unchanged pattern —
-  // Jade trigger is the only path that deducts)
+  // WORKFLOW 6 — Jade approves Romeo's bulk requisition
   // ============================================================================
   const handleApprovePendingWithdrawal = (orderId) => {
     const order = batchOrders.find(o => o.orderId === orderId);
@@ -1176,6 +1194,7 @@ export default function App() {
       setQuarantineList(INITIAL_QUARANTINE);
       setAuditLogs(INITIAL_AUDIT_LOGS);
       setPendingRequests([]);
+      setIsTestMode(false);
       showToast("Data restored to factory seeds!");
     }
   };
@@ -1246,6 +1265,9 @@ export default function App() {
         onOpenImportModal={() => setIsImportModalOpen(true)}
         onOpenLoginModal={() => setIsLoginModalOpen(true)}
         onLogout={handleLogout}
+        onOpenAdminModal={() => setIsAdminModalOpen(true)}
+        isTestMode={isTestMode}
+        setIsTestMode={setIsTestMode}
       />
 
       <main className="flex-1 p-4 md:p-6 max-w-7xl mx-auto w-full">
@@ -1369,7 +1391,7 @@ export default function App() {
             currentRole={currentRole}
             batchOrders={batchOrders}
             withdrawals={withdrawals}
-            pendingRequests={pendingRequests}  
+            pendingRequests={pendingRequests}
             onUpdateOrderStatus={handleUpdateOrderStatus}
           />
         )}
@@ -1390,6 +1412,15 @@ export default function App() {
         onApplyImport={handleApplyInventoryImport}
         onZeroOutAll={handleZeroOutAll}
         actorName={currentRole}
+      />
+
+      <AdminDatabaseModal
+        isOpen={isAdminModalOpen}
+        onClose={() => setIsAdminModalOpen(false)}
+        authUser={authUser}
+        isTestMode={isTestMode}
+        setIsTestMode={setIsTestMode}
+        onShowToast={showToast}
       />
 
       <footer className="bg-[#240e32] text-white py-4 px-6 text-center text-xs border-t border-[#C8963E]/30 mt-auto">
