@@ -1,34 +1,64 @@
 // ============================================================================
-// JJB WMS — /api/sync
+// JJB WMS — /api/sync  (Phase 1 dual-write projection)
 //
-// Phase 1 "dual-write projection" handler.
+// Handles BOTH request shapes the app has been observed to use:
+//   Shape A (structured): { event_type, idempotency_key, payload: {...} }
+//   Shape B (flat):       { idempotencyKey, eventType, ...payload fields }
 //
-//   1. Insert into sync_events (idempotency_key UNIQUE).
-//   2. Project the event payload into the normalized Group B/C tables.
-//   3. Recompute materials.current_balance from non-test material_lots
-//      (Catch 1 fix — a later test-data purge cannot corrupt live balances).
-//   4. Forward the raw event to GAS (unchanged).
-//   5. Mark synced_to_gas = 1 only when steps 2–4 all succeed.
-//
-// Retry semantics: if projection or GAS fails, synced_to_gas stays 0 and
-// projection is re-attempted on the next identical idempotency_key. Because
-// projected_at is set as soon as projection succeeds, a GAS-only retry will
-// NOT re-add lot quantities.
+// Projection semantics:
+//   - If a handler throws, projected_at IS set (no infinite retry) and
+//     projection_error IS set (visible in admin panel).
+//   - If a handler returns statements, they're applied in one D1 batch.
+//   - Balance-affecting events append a reconciliation UPDATE to the batch.
+//   - Events with no handler (HEARTBEAT_POLL, INVENTORY_ZERO_OUT,
+//     OPENING_BASELINE_CSV_IMPORT, etc.) are marked projected with no
+//     data change — their effects are already baked into current state.
 // ============================================================================
 
 // --------------------------- payload helpers ------------------------------
-const str   = v => (v === null || v === undefined ? null : String(v));
-const num   = v => { const n = Number(v); return Number.isFinite(n) ? n : null; };
-const cents = v => { const n = Number(v); return Number.isFinite(n) ? Math.round(n * 100) : null; };
+const str     = v => (v === null || v === undefined ? null : String(v));
+const num     = v => { const n = Number(v); return Number.isFinite(n) ? n : null; };
+const cents   = v => { const n = Number(v); return Number.isFinite(n) ? Math.round(n * 100) : null; };
 const isoDate = v => (v ? String(v).slice(0, 10) : null);
-const bool  = v => (v ? 1 : 0);
-const pick  = (o, ...keys) => { for (const k of keys) if (o && o[k] != null) return o[k]; return undefined; };
+const bool    = v => (v ? 1 : 0);
+const pick    = (o, ...keys) => { for (const k of keys) if (o && o[k] != null) return o[k]; return undefined; };
+
+// STRICT is_test_data — accepts true / 1 / '1' / 'true' only
+const asTest = v => (v === true || v === 1 || v === '1' || v === 'true') ? 1 : 0;
+
+// Extract PHT date/time from either ISO-8601 UTC (ends with Z) or bare
+// business timestamp (already PHT, no suffix)
+function phtDate(ts) {
+  if (!ts) return null;
+  const s = String(ts);
+  if (s.endsWith('Z')) {
+    const d = new Date(s);
+    if (isNaN(d)) return s.slice(0, 10);
+    return new Date(d.getTime() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+  }
+  return s.slice(0, 10);
+}
+function phtTime(ts) {
+  if (!ts) return null;
+  const s = String(ts);
+  if (s.endsWith('Z')) {
+    const d = new Date(s);
+    if (isNaN(d)) return null;
+    return new Date(d.getTime() + 8 * 3600 * 1000).toISOString().slice(11, 19);
+  }
+  const m = s.match(/[\sT](\d{2}:\d{2}(?::\d{2})?)/);
+  return m ? m[1] : null;
+}
 
 // --------------------------- projection handlers --------------------------
+
 function projectReceiving(env, p, isTest) {
   const stmts = [];
   const reportNo = pick(p, 'reportNo', 'report_no');
-  if (!reportNo) return stmts;
+  if (!reportNo) throw new Error('MISSING_REPORT_NO');
+
+  const items = p.items || p.lines || [];
+  if (items.length === 0) throw new Error('NO_LINE_ITEMS');
 
   stmts.push(env.DB.prepare(`
     INSERT INTO receiving_reports
@@ -36,30 +66,23 @@ function projectReceiving(env, p, isTest) {
        received_date, received_time, is_test_data)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(report_no) DO UPDATE SET
-      po_no                = excluded.po_no,
-      supplier             = excluded.supplier,
-      total_paid_centavos  = excluded.total_paid_centavos,
-      received_by          = excluded.received_by,
-      received_date        = excluded.received_date,
-      received_time        = excluded.received_time,
-      is_test_data         = excluded.is_test_data,
-      updated_at           = datetime('now')
+      po_no=excluded.po_no, supplier=excluded.supplier,
+      total_paid_centavos=excluded.total_paid_centavos,
+      received_by=excluded.received_by, received_date=excluded.received_date,
+      received_time=excluded.received_time, is_test_data=excluded.is_test_data,
+      updated_at=datetime('now')
   `).bind(
-    reportNo,
-    str(pick(p, 'poNo', 'po_no')),
-    str(p.supplier),
+    reportNo, str(pick(p, 'poNo', 'po_no')), str(p.supplier),
     cents(pick(p, 'totalPaid', 'total_paid')),
     str(pick(p, 'receivedBy', 'received_by')),
-    isoDate(pick(p, 'date', 'receivedDate', 'received_date')),
-    str(pick(p, 'time', 'receivedTime', 'received_time')),
+    isoDate(pick(p, 'date', 'receivedDate', 'received_date')) || phtDate(p.timestamp),
+    str(pick(p, 'time', 'receivedTime', 'received_time')) || phtTime(p.timestamp),
     isTest
   ));
 
-  // Safe re-projection: clear the line items before re-inserting. Lot qty is
-  // not touched here — see projected_at guard in the outer handler.
   stmts.push(env.DB.prepare(`DELETE FROM receiving_items WHERE report_no = ?`).bind(reportNo));
 
-  for (const item of p.items || p.lines || []) {
+  for (const item of items) {
     const materialCode = pick(item, 'materialCode', 'material_code', 'code');
     if (!materialCode) continue;
 
@@ -69,15 +92,12 @@ function projectReceiving(env, p, isTest) {
          secondary_qty, bin_location, unit_cost_centavos, is_test_data)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
-      reportNo,
-      materialCode,
-      str(pick(item, 'name', 'materialName')),
+      reportNo, materialCode, str(pick(item, 'name', 'materialName')),
       str(pick(item, 'lotNumber', 'lot_number')),
       isoDate(pick(item, 'expiryDate', 'expiry_date')),
       num(pick(item, 'secondaryQty', 'qty')),
       str(pick(item, 'binLocation', 'bin_location')),
-      cents(pick(item, 'unitCost', 'unit_cost')),
-      isTest
+      cents(pick(item, 'unitCost', 'unit_cost')), isTest
     ));
 
     const lotNo = pick(item, 'lotNumber', 'lot_number');
@@ -87,14 +107,10 @@ function projectReceiving(env, p, isTest) {
         INSERT INTO material_lots (material_code, lot_number, expiry_date, qty_sec, location, is_test_data)
         VALUES (?, ?, ?, ?, ?, ?)
         ON CONFLICT(material_code, lot_number) DO UPDATE SET
-          qty_sec    = qty_sec + excluded.qty_sec,
-          updated_at = datetime('now')
+          qty_sec = qty_sec + excluded.qty_sec, updated_at = datetime('now')
       `).bind(
-        materialCode, lotNo,
-        isoDate(pick(item, 'expiryDate', 'expiry_date')),
-        qty,
-        str(pick(item, 'binLocation', 'bin_location')),
-        isTest
+        materialCode, lotNo, isoDate(pick(item, 'expiryDate', 'expiry_date')),
+        qty, str(pick(item, 'binLocation', 'bin_location')), isTest
       ));
     }
   }
@@ -103,8 +119,16 @@ function projectReceiving(env, p, isTest) {
 
 function projectWithdrawal(env, p, isTest) {
   const stmts = [];
-  const slipNo = pick(p, 'slipNo', 'slip_no');
-  if (!slipNo) return stmts;
+  const slipNo = pick(p, 'slipNo', 'slip_no', 'issuanceSlipNumber', 'issuance_slip_number');
+  if (!slipNo) throw new Error('MISSING_SLIP_NO');
+
+  const items = p.items || p.lines || [];
+  if (items.length === 0) {
+    // Observed in production: some withdrawal events contain only header
+    // data (slipNo, requestingEntity, purpose) with no items array.
+    // Projecting would insert an empty header — worse than nothing.
+    throw new Error('NO_LINE_ITEMS');
+  }
 
   stmts.push(env.DB.prepare(`
     INSERT INTO withdrawals
@@ -113,69 +137,54 @@ function projectWithdrawal(env, p, isTest) {
        status, notes, source_channel, is_test_data)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(slip_no) DO UPDATE SET
-      withdrawal_date    = excluded.withdrawal_date,
-      withdrawal_time    = excluded.withdrawal_time,
-      requesting_entity  = excluded.requesting_entity,
-      department         = excluded.department,
-      purpose            = excluded.purpose,
-      requested_by       = excluded.requested_by,
-      issued_by          = excluded.issued_by,
-      received_by        = excluded.received_by,
-      total_cost_centavos= excluded.total_cost_centavos,
-      status             = excluded.status,
-      notes              = excluded.notes,
-      source_channel     = excluded.source_channel,
-      is_test_data       = excluded.is_test_data,
-      updated_at         = datetime('now')
+      withdrawal_date=excluded.withdrawal_date, withdrawal_time=excluded.withdrawal_time,
+      requesting_entity=excluded.requesting_entity, department=excluded.department,
+      purpose=excluded.purpose, requested_by=excluded.requested_by,
+      issued_by=excluded.issued_by, received_by=excluded.received_by,
+      total_cost_centavos=excluded.total_cost_centavos, status=excluded.status,
+      notes=excluded.notes, source_channel=excluded.source_channel,
+      is_test_data=excluded.is_test_data, updated_at=datetime('now')
   `).bind(
     slipNo,
-    isoDate(pick(p, 'date', 'withdrawalDate', 'withdrawal_date')),
-    str(pick(p, 'time', 'withdrawalTime', 'withdrawal_time')),
+    isoDate(pick(p, 'date', 'withdrawalDate', 'withdrawal_date')) || phtDate(p.timestamp),
+    str(pick(p, 'time', 'withdrawalTime', 'withdrawal_time')) || phtTime(p.timestamp),
     str(pick(p, 'requestingEntity', 'requesting_entity')),
-    str(p.department),
-    str(p.purpose),
+    str(p.department), str(p.purpose),
     str(pick(p, 'requestedBy', 'requested_by')),
     str(pick(p, 'issuedBy', 'issued_by')),
     str(pick(p, 'receivedBy', 'received_by')),
     cents(pick(p, 'totalCost', 'total_cost')),
-    str(p.status),
-    str(p.notes),
-    str(pick(p, 'sourceChannel', 'source_channel')),
-    isTest
+    str(p.status), str(p.notes),
+    str(pick(p, 'sourceChannel', 'source_channel')), isTest
   ));
 
   stmts.push(env.DB.prepare(`DELETE FROM withdrawal_items WHERE slip_no = ?`).bind(slipNo));
 
-  for (const item of p.items || p.lines || []) {
+  for (const item of items) {
     const materialCode = pick(item, 'materialCode', 'material_code', 'code');
     if (!materialCode) continue;
 
     stmts.push(env.DB.prepare(`
       INSERT INTO withdrawal_items
         (slip_no, material_code, name_snapshot, qty_requested_sec, qty_issued_sec,
-         secondary_uom, lot_number, storage_room, estimated_cost_centavos, remarks,
-         is_test_data)
+         secondary_uom, lot_number, storage_room, estimated_cost_centavos, remarks, is_test_data)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
-      slipNo,
-      materialCode,
-      str(pick(item, 'name', 'materialName')),
-      num(pick(item, 'qtyRequestedSec', 'qty_requested_sec')),
-      num(pick(item, 'qtyIssuedSec', 'qty_issued_sec')),
+      slipNo, materialCode, str(pick(item, 'name', 'materialName')),
+      num(pick(item, 'qtyRequestedSec', 'qty_requested_sec', 'qtyRequested')),
+      num(pick(item, 'qtyIssuedSec', 'qty_issued_sec', 'qtyIssued')),
       str(pick(item, 'secondaryUom', 'secondary_uom')),
       str(pick(item, 'lotNumber', 'lot_number')),
       str(pick(item, 'storageRoom', 'storage_room')),
       cents(pick(item, 'estimatedCost', 'estimated_cost')),
-      str(item.remarks),
-      isTest
+      str(item.remarks), isTest
     ));
 
     const lotNo = pick(item, 'lotNumber', 'lot_number');
-    const qty   = num(pick(item, 'qtyIssuedSec', 'qty_issued_sec')) || 0;
+    const qty   = num(pick(item, 'qtyIssuedSec', 'qty_issued_sec', 'qtyIssued')) || 0;
     if (lotNo && qty) {
       stmts.push(env.DB.prepare(`
-        UPDATE material_lots
-        SET qty_sec = qty_sec - ?, updated_at = datetime('now')
+        UPDATE material_lots SET qty_sec = qty_sec - ?, updated_at = datetime('now')
         WHERE material_code = ? AND lot_number = ? AND is_test_data = ?
       `).bind(qty, materialCode, lotNo, isTest));
     }
@@ -186,11 +195,11 @@ function projectWithdrawal(env, p, isTest) {
 function projectAdjustment(env, p, isTest) {
   const stmts = [];
   const materialCode = pick(p, 'materialCode', 'material_code');
-  if (!materialCode) return stmts;
+  if (!materialCode) throw new Error('MISSING_MATERIAL_CODE');
 
-  const type    = String(p.type || p.adjustmentType || '').toUpperCase();
-  const qty     = num(pick(p, 'qtySec', 'qty_sec')) || 0;
-  const signed  = type === 'OUT' ? -qty : qty;
+  const type   = String(p.type || p.adjustmentType || '').toUpperCase();
+  const qty    = num(pick(p, 'qtySec', 'qty_sec')) || 0;
+  const signed = type === 'OUT' ? -qty : qty;
 
   stmts.push(env.DB.prepare(`
     INSERT INTO adjustments
@@ -198,16 +207,11 @@ function projectAdjustment(env, p, isTest) {
        reason, adjusted_by, adjusted_at, notes, is_test_data)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
-    materialCode,
-    str(pick(p, 'materialName', 'name')),
-    type || null,
-    qty,
-    str(p.uom),
-    str(p.reason),
+    materialCode, str(pick(p, 'materialName', 'name')), type || null, qty,
+    str(p.uom), str(p.reason),
     str(pick(p, 'adjustedBy', 'adjusted_by')),
-    str(pick(p, 'adjustedAt', 'adjusted_at')),
-    str(p.notes),
-    isTest
+    str(pick(p, 'adjustedAt', 'adjusted_at')) || str(p.timestamp),
+    str(p.notes), isTest
   ));
 
   if (signed !== 0) {
@@ -216,8 +220,7 @@ function projectAdjustment(env, p, isTest) {
       INSERT INTO material_lots (material_code, lot_number, expiry_date, qty_sec, location, is_test_data)
       VALUES (?, ?, NULL, ?, 'ADJUSTMENT', ?)
       ON CONFLICT(material_code, lot_number) DO UPDATE SET
-        qty_sec    = qty_sec + excluded.qty_sec,
-        updated_at = datetime('now')
+        qty_sec = qty_sec + excluded.qty_sec, updated_at = datetime('now')
     `).bind(materialCode, syntheticLot, signed, isTest));
   }
   return stmts;
@@ -226,8 +229,11 @@ function projectAdjustment(env, p, isTest) {
 function projectBatchOrder(env, p, isTest) {
   const stmts = [];
   const orderId = pick(p, 'orderId', 'order_id');
-  if (!orderId) return stmts;
+  if (!orderId) throw new Error('MISSING_ORDER_ID');
 
+  // Portal orders often arrive without recipeSku and requestedQtyPcs.
+  // We project the header (which is useful for tracking) but set a
+  // projection_error below via the caller when we detect the gap.
   stmts.push(env.DB.prepare(`
     INSERT INTO batch_orders
       (order_id, outlet_name, recipe_sku, recipe_name_snapshot, requested_qty_pcs,
@@ -283,13 +289,23 @@ function projectBatchOrder(env, p, isTest) {
     str(pick(p, 'releasedTo', 'released_to')),
     isTest
   ));
+
+  // Flag incomplete portal orders — header is preserved but marked
+  const hasSku = pick(p, 'recipeSku', 'recipe_sku');
+  const hasQty = pick(p, 'requestedQtyPcs', 'requested_qty_pcs');
+  if (!hasSku || !hasQty) {
+    stmts._softWarning = 'PARTIAL_PORTAL_ORDER_NO_SKU_OR_QTY';
+  }
   return stmts;
 }
 
 function projectOrder(env, p, isTest) {
   const stmts = [];
   const orderId = pick(p, 'orderId', 'order_id');
-  if (!orderId) return stmts;
+  if (!orderId) throw new Error('MISSING_ORDER_ID');
+
+  const items = p.items || p.lines || [];
+  if (items.length === 0) throw new Error('NO_LINE_ITEMS');
 
   stmts.push(env.DB.prepare(`
     INSERT INTO orders
@@ -297,40 +313,30 @@ function projectOrder(env, p, isTest) {
        order_date, total_cost_centavos, is_test_data)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(order_id) DO UPDATE SET
-      customer_or_outlet = excluded.customer_or_outlet,
-      contact_person     = excluded.contact_person,
-      channel            = excluded.channel,
-      status             = excluded.status,
-      order_date         = excluded.order_date,
-      total_cost_centavos= excluded.total_cost_centavos,
-      is_test_data       = excluded.is_test_data,
-      updated_at         = datetime('now')
+      customer_or_outlet=excluded.customer_or_outlet,
+      contact_person=excluded.contact_person, channel=excluded.channel,
+      status=excluded.status, order_date=excluded.order_date,
+      total_cost_centavos=excluded.total_cost_centavos,
+      is_test_data=excluded.is_test_data, updated_at=datetime('now')
   `).bind(
-    orderId,
-    str(pick(p, 'customerOrOutlet', 'customer_or_outlet')),
-    str(pick(p, 'contactPerson', 'contact_person')),
-    str(p.channel),
+    orderId, str(pick(p, 'customerOrOutlet', 'customer_or_outlet')),
+    str(pick(p, 'contactPerson', 'contact_person')), str(p.channel),
     str(p.status),
-    isoDate(pick(p, 'orderDate', 'order_date')),
-    cents(pick(p, 'totalCost', 'total_cost')),
-    isTest
+    isoDate(pick(p, 'orderDate', 'order_date')) || phtDate(p.timestamp),
+    cents(pick(p, 'totalCost', 'total_cost')), isTest
   ));
 
   stmts.push(env.DB.prepare(`DELETE FROM order_items WHERE order_id = ?`).bind(orderId));
 
-  for (const item of p.items || p.lines || []) {
+  for (const item of items) {
     stmts.push(env.DB.prepare(`
       INSERT INTO order_items
         (order_id, name, sku, qty, unit_cost_centavos, line_total_centavos, is_test_data)
       VALUES (?, ?, ?, ?, ?, ?, ?)
     `).bind(
-      orderId,
-      str(item.name),
-      str(item.sku),
-      num(item.qty),
+      orderId, str(item.name), str(item.sku), num(item.qty),
       cents(pick(item, 'unitCost', 'unit_cost')),
-      cents(pick(item, 'lineTotal', 'line_total')),
-      isTest
+      cents(pick(item, 'lineTotal', 'line_total')), isTest
     ));
   }
   return stmts;
@@ -343,64 +349,49 @@ function projectAudit(env, p, isTest) {
     VALUES (?, ?, ?, ?, ?, ?)
   `).bind(
     str(p.timestamp) || new Date().toISOString(),
-    str(p.actor),
-    str(p.role),
+    str(p.actor), str(p.role),
     str(p.action) || 'UNKNOWN',
-    str(p.details),
-    isTest
+    str(p.details), isTest
   ));
   return stmts;
 }
 
 function projectQuarantine(env, p, isTest) {
-  const stmts = [];
   const ncrNo = pick(p, 'ncrNo', 'ncr_no');
-  if (!ncrNo) return stmts;
+  if (!ncrNo) throw new Error('MISSING_NCR_NO');
 
-  stmts.push(env.DB.prepare(`
+  return [env.DB.prepare(`
     INSERT INTO quarantine_ncr
       (ncr_no, item_description, lot_number, material_code, material_name_snapshot,
        qty_sec, reason, status, filed_by, filed_at, disposition, disposition_by,
        disposition_at, is_test_data)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(ncr_no) DO UPDATE SET
-      item_description       = excluded.item_description,
-      lot_number             = excluded.lot_number,
-      material_code          = excluded.material_code,
-      material_name_snapshot = excluded.material_name_snapshot,
-      qty_sec                = excluded.qty_sec,
-      reason                 = excluded.reason,
-      status                 = excluded.status,
-      filed_by               = excluded.filed_by,
-      filed_at               = excluded.filed_at,
-      disposition            = excluded.disposition,
-      disposition_by         = excluded.disposition_by,
-      disposition_at         = excluded.disposition_at,
-      is_test_data           = excluded.is_test_data,
-      updated_at             = datetime('now')
+      item_description=excluded.item_description,
+      lot_number=excluded.lot_number, material_code=excluded.material_code,
+      material_name_snapshot=excluded.material_name_snapshot,
+      qty_sec=excluded.qty_sec, reason=excluded.reason, status=excluded.status,
+      filed_by=excluded.filed_by, filed_at=excluded.filed_at,
+      disposition=excluded.disposition, disposition_by=excluded.disposition_by,
+      disposition_at=excluded.disposition_at, is_test_data=excluded.is_test_data,
+      updated_at=datetime('now')
   `).bind(
-    ncrNo,
-    str(pick(p, 'itemDescription', 'item_description')),
+    ncrNo, str(pick(p, 'itemDescription', 'item_description')),
     str(pick(p, 'lotNumber', 'lot_number')),
     str(pick(p, 'materialCode', 'material_code')),
     str(pick(p, 'materialName', 'name')),
-    num(pick(p, 'qtySec', 'qty_sec')),
-    str(p.reason),
-    str(p.status),
+    num(pick(p, 'qtySec', 'qty_sec')), str(p.reason), str(p.status),
     str(pick(p, 'filedBy', 'filed_by')),
-    str(pick(p, 'filedAt', 'filed_at')),
-    str(p.disposition),
-    str(pick(p, 'dispositionBy', 'disposition_by')),
-    str(pick(p, 'dispositionAt', 'disposition_at')),
-    isTest
-  ));
-  return stmts;
+    str(pick(p, 'filedAt', 'filed_at')) || str(p.timestamp),
+    str(p.disposition), str(pick(p, 'dispositionBy', 'disposition_by')),
+    str(pick(p, 'dispositionAt', 'disposition_at')), isTest
+  )];
 }
 
 function projectSpecialty(env, p, isTest) {
   const stmts = [];
   const proposalId = pick(p, 'proposalId', 'proposal_id');
-  if (!proposalId) return stmts;
+  if (!proposalId) throw new Error('MISSING_PROPOSAL_ID');
 
   stmts.push(env.DB.prepare(`
     INSERT INTO specialty_recipe_proposals
@@ -412,36 +403,24 @@ function projectSpecialty(env, p, isTest) {
        approved_at, approved_by, is_test_data)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(proposal_id) DO UPDATE SET
-      sku                              = excluded.sku,
-      title                            = excluded.title,
-      name                             = excluded.name,
-      category                         = excluded.category,
-      target_facility                  = excluded.target_facility,
-      requesting_location              = excluded.requesting_location,
-      baker_name                       = excluded.baker_name,
-      standard_batch_flour_kg          = excluded.standard_batch_flour_kg,
-      unit_piece_yield                 = excluded.unit_piece_yield,
-      piece_weight_grams               = excluded.piece_weight_grams,
-      dough_exit_temp_target           = excluded.dough_exit_temp_target,
-      ccp1_lethality_target            = excluded.ccp1_lethality_target,
-      water_activity_limit             = excluded.water_activity_limit,
-      unit_production_cost_centavos    = excluded.unit_production_cost_centavos,
-      wholesale_transfer_price_centavos= excluded.wholesale_transfer_price_centavos,
-      srp_centavos                     = excluded.srp_centavos,
-      gross_margin_pct                 = excluded.gross_margin_pct,
-      mixing_notes                     = excluded.mixing_notes,
-      status                           = excluded.status,
-      submitted_at                     = excluded.submitted_at,
-      approved_at                      = excluded.approved_at,
-      approved_by                      = excluded.approved_by,
-      is_test_data                     = excluded.is_test_data,
-      updated_at                       = datetime('now')
+      sku=excluded.sku, title=excluded.title, name=excluded.name,
+      category=excluded.category, target_facility=excluded.target_facility,
+      requesting_location=excluded.requesting_location, baker_name=excluded.baker_name,
+      standard_batch_flour_kg=excluded.standard_batch_flour_kg,
+      unit_piece_yield=excluded.unit_piece_yield,
+      piece_weight_grams=excluded.piece_weight_grams,
+      dough_exit_temp_target=excluded.dough_exit_temp_target,
+      ccp1_lethality_target=excluded.ccp1_lethality_target,
+      water_activity_limit=excluded.water_activity_limit,
+      unit_production_cost_centavos=excluded.unit_production_cost_centavos,
+      wholesale_transfer_price_centavos=excluded.wholesale_transfer_price_centavos,
+      srp_centavos=excluded.srp_centavos, gross_margin_pct=excluded.gross_margin_pct,
+      mixing_notes=excluded.mixing_notes, status=excluded.status,
+      submitted_at=excluded.submitted_at, approved_at=excluded.approved_at,
+      approved_by=excluded.approved_by, is_test_data=excluded.is_test_data,
+      updated_at=datetime('now')
   `).bind(
-    proposalId,
-    str(p.sku),
-    str(p.title),
-    str(p.name),
-    str(p.category),
+    proposalId, str(p.sku), str(p.title), str(p.name), str(p.category),
     str(pick(p, 'targetFacility', 'target_facility')),
     str(pick(p, 'requestingLocation', 'requesting_location')),
     str(pick(p, 'bakerName', 'baker_name')),
@@ -453,14 +432,12 @@ function projectSpecialty(env, p, isTest) {
     str(pick(p, 'waterActivityLimit', 'water_activity_limit')),
     cents(pick(p, 'unitProductionCost', 'unit_production_cost')),
     cents(pick(p, 'wholesaleTransferPrice', 'wholesale_transfer_price')),
-    cents(p.srp),
-    num(pick(p, 'grossMarginPct', 'gross_margin_pct')),
+    cents(p.srp), num(pick(p, 'grossMarginPct', 'gross_margin_pct')),
     str(pick(p, 'mixingNotes', 'mixing_notes')),
     str(p.status) || 'PENDING_APPROVAL',
-    str(pick(p, 'submittedAt', 'submitted_at')),
+    str(pick(p, 'submittedAt', 'submitted_at')) || str(p.timestamp),
     str(pick(p, 'approvedAt', 'approved_at')),
-    str(pick(p, 'approvedBy', 'approved_by')),
-    isTest
+    str(pick(p, 'approvedBy', 'approved_by')), isTest
   ));
 
   stmts.push(env.DB.prepare(`DELETE FROM specialty_recipe_ingredients WHERE proposal_id = ?`).bind(proposalId));
@@ -472,55 +449,81 @@ function projectSpecialty(env, p, isTest) {
          is_water, is_as_needed, is_packaging, sort_order, is_test_data)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
-      proposalId,
-      str(pick(ing, 'code', 'materialCode')),
-      str(ing.name),
-      num(ing.pct),
-      num(pick(ing, 'gramsPerBatch', 'grams_per_batch')),
-      bool(ing.isWater),
-      bool(ing.isAsNeeded),
-      bool(ing.isPackaging),
-      num(ing.sortOrder) || 0,
-      isTest
+      proposalId, str(pick(ing, 'code', 'materialCode')), str(ing.name),
+      num(ing.pct), num(pick(ing, 'gramsPerBatch', 'grams_per_batch')),
+      bool(ing.isWater), bool(ing.isAsNeeded), bool(ing.isPackaging),
+      num(ing.sortOrder) || 0, isTest
     ));
   }
   return stmts;
 }
 
 // --------------------------- dispatcher -----------------------------------
+// Every event_type the floor app has been observed to emit. Types not in
+// this map are informational only (heartbeats, health checks, historical
+// state resets) and are marked projected with no data change.
 const HANDLERS = {
-  RECEIVING_SAVED:            projectReceiving,
-  RECEIVING_CREATED:          projectReceiving,
-  WITHDRAWAL_SAVED:           projectWithdrawal,
-  WITHDRAWAL_ISSUED:          projectWithdrawal,
-  ADJUSTMENT_SAVED:           projectAdjustment,
-  BATCH_ORDER_SAVED:          projectBatchOrder,
-  BATCH_ORDER_UPDATED:        projectBatchOrder,
-  BATCH_CREATED:              projectBatchOrder,
-  BATCH_BULK_APPROVED:        projectBatchOrder,
-  BATCH_COMPLETED:            projectBatchOrder,
-  BATCH_RELEASED:             projectBatchOrder,
-  ORDER_SAVED:                projectOrder,
-  ORDER_CREATED:              projectOrder,
-  AUDIT_LOG:                  projectAudit,
-  AUDIT_LOG_ENTRY:            projectAudit,
-  QUARANTINE_SAVED:           projectQuarantine,
-  QUARANTINE_FILED:           projectQuarantine,
-  SPECIALTY_PROPOSAL_SAVED:   projectSpecialty,
-  SPECIALTY_PROPOSAL_CREATED: projectSpecialty,
-  SPECIALTY_PROPOSAL_APPROVED:projectSpecialty,
+  // Receiving
+  'RECEIVING_SAVED':              projectReceiving,
+  'RECEIVING_CREATED':            projectReceiving,
+
+  // Withdrawal (material issuance)
+  'WITHDRAWAL_SAVED':             projectWithdrawal,
+  'WITHDRAWAL_ISSUED':            projectWithdrawal,
+  'MATERIAL_WITHDRAWAL':          projectWithdrawal,       // observed in production
+
+  // Adjustments
+  'ADJUSTMENT_SAVED':             projectAdjustment,
+
+  // Batch orders (kitting)
+  'BATCH_ORDER_SAVED':            projectBatchOrder,
+  'BATCH_ORDER_UPDATED':          projectBatchOrder,
+  'BATCH_CREATED':                projectBatchOrder,
+  'BATCH_BULK_APPROVED':          projectBatchOrder,
+  'BATCH_COMPLETED':              projectBatchOrder,
+  'BATCH_RELEASED':               projectBatchOrder,
+  'OUTLET_BATCH_ORDER':           projectBatchOrder,       // observed in production
+
+  // Wholesale orders
+  'ORDER_SAVED':                  projectOrder,
+  'ORDER_CREATED':                projectOrder,
+
+  // Audit log (includes historical INVENTORY_ZERO_OUT as an `action` field)
+  'AUDIT_LOG':                    projectAudit,
+  'AUDIT_LOG_ENTRY':              projectAudit,
+  'WMS_AUDIT_EVENT':              projectAudit,            // observed in production
+
+  // Quarantine / NCR
+  'QUARANTINE_SAVED':             projectQuarantine,
+  'QUARANTINE_FILED':             projectQuarantine,
+
+  // Specialty recipe proposals
+  'SPECIALTY_PROPOSAL_SAVED':     projectSpecialty,
+  'SPECIALTY_PROPOSAL_CREATED':   projectSpecialty,
+  'SPECIALTY_PROPOSAL_APPROVED':  projectSpecialty,
+
+  // NOTE — Deliberately OMITTED (no handler = marked projected, no data change):
+  //   HEARTBEAT_POLL              — liveness signal, no data side-effect
+  //   INVENTORY_CHECK             — read-only check, no data side-effect
+  //   INVENTORY_ZERO_OUT          — mass reset; effect already baked into
+  //                                 current state via CSV import. Projecting
+  //                                 retroactively would double-zero lots.
+  //   OPENING_BASELINE_CSV_IMPORT — historical import event; effect already
+  //                                 baked into current state. Same reasoning.
+  //   AUTOMATED_EOD_2345_DISPATCH — cron liveness marker, no data side-effect
 };
 
-// Events that mutate material_lots or current_balance — trigger reconciliation
+// Events whose projection mutates material_lots or current_balance —
+// requires the reconciliation UPDATE to run in the same batch
 const BALANCE_AFFECTING = new Set([
   'RECEIVING_SAVED','RECEIVING_CREATED',
-  'WITHDRAWAL_SAVED','WITHDRAWAL_ISSUED',
+  'WITHDRAWAL_SAVED','WITHDRAWAL_ISSUED','MATERIAL_WITHDRAWAL',
   'ADJUSTMENT_SAVED',
 ]);
 
 function buildReconciliationStatement(env) {
-  // Idempotent, bounded (75 materials max). Runs inside the same batch as
-  // the projection so a failure rolls everything back atomically.
+  // Bounded (75 materials max). Idempotent. Runs inside the same batch as
+  // the projection so a partial failure rolls everything back.
   return env.DB.prepare(`
     UPDATE materials
     SET current_balance = COALESCE((
@@ -540,13 +543,25 @@ export async function onRequestPost({ request, env }) {
   try { body = await request.json(); }
   catch { return json({ status: 'error', error: 'invalid_json' }, 400); }
 
-  const event     = body.event || body;
-  const type      = String(event.event_type || event.type || '').toUpperCase();
-  const payload   = event.payload || event.data || {};
-  const key       = String(event.idempotency_key || event.id || crypto.randomUUID());
-  const isTest    = payload.is_test_data ? 1 : 0;
+  // ---- Detect request shape ------------------------------------------------
+  //   Shape A (structured):  { event_type, idempotency_key, payload: {...} }
+  //   Shape B (flat):        { idempotencyKey, eventType, ...payload fields }
+  let type, key, payload;
+  if (body.event_type || body.type || body.payload || body.data) {
+    // Shape A
+    type    = String(body.event_type || body.type || '').toUpperCase();
+    key     = String(body.idempotency_key || body.id || crypto.randomUUID());
+    payload = body.payload || body.data || {};
+  } else {
+    // Shape B — the body IS the payload
+    payload = body;
+    type    = String(body.eventType || body.event_type || body.type || '').toUpperCase();
+    key     = String(body.idempotencyKey || body.idempotency_key || body.id || crypto.randomUUID());
+  }
 
-  // 1. Idempotency row
+  const isTest = asTest(payload.is_test_data);
+
+  // ---- Idempotency row -----------------------------------------------------
   const existing = await env.DB.prepare(
     `SELECT id, projected_at, synced_to_gas FROM sync_events WHERE idempotency_key = ?`
   ).bind(key).first();
@@ -557,8 +572,6 @@ export async function onRequestPost({ request, env }) {
         `INSERT INTO sync_events (idempotency_key, event_type, payload) VALUES (?, ?, ?)`
       ).bind(key, type, JSON.stringify(payload)).run();
     } catch (e) {
-      // Race: another concurrent request won the INSERT. Fall through to
-      // re-read the row.
       console.warn('sync_events insert race', e.message);
     }
   }
@@ -567,28 +580,33 @@ export async function onRequestPost({ request, env }) {
     `SELECT id, projected_at, synced_to_gas FROM sync_events WHERE idempotency_key = ?`
   ).bind(key).first();
 
-  // 2. Projection (skip if already projected)
-  let projectionOk = !!state?.projected_at;
+  // ---- Projection ----------------------------------------------------------
+  let projectionOk  = !!state?.projected_at;
+  let softWarning   = null;
+
   if (!projectionOk) {
     const handler = HANDLERS[type];
     if (handler) {
       try {
         const stmts = handler(env, payload, isTest);
+        // Handler may attach a non-fatal warning (e.g. partial portal order)
+        if (stmts && stmts._softWarning) softWarning = stmts._softWarning;
         if (BALANCE_AFFECTING.has(type)) stmts.push(buildReconciliationStatement(env));
         if (stmts.length > 0) await env.DB.batch(stmts);
         await env.DB.prepare(
-          `UPDATE sync_events SET projected_at = datetime('now'), projection_error = NULL WHERE idempotency_key = ?`
-        ).bind(key).run();
+          `UPDATE sync_events SET projected_at = datetime('now'), projection_error = ? WHERE idempotency_key = ?`
+        ).bind(softWarning, key).run();
         projectionOk = true;
       } catch (e) {
-        console.error('projection failed', type, e);
+        // Structural failure (e.g. NO_LINE_ITEMS) — mark projected so we
+        // don't retry forever, but record the reason for the admin panel.
         await env.DB.prepare(
-          `UPDATE sync_events SET projection_error = ? WHERE idempotency_key = ?`
+          `UPDATE sync_events SET projected_at = datetime('now'), projection_error = ? WHERE idempotency_key = ?`
         ).bind(String(e.message || e), key).run();
+        projectionOk = true;
       }
     } else {
-      // No projection handler for this event type — mark projected to prevent
-      // infinite retries.
+      // No handler — mark projected with no data change
       await env.DB.prepare(
         `UPDATE sync_events SET projected_at = datetime('now') WHERE idempotency_key = ?`
       ).bind(key).run();
@@ -596,7 +614,7 @@ export async function onRequestPost({ request, env }) {
     }
   }
 
-  // 3. GAS forward (existing behavior)
+  // ---- GAS forward (existing behavior, unchanged) --------------------------
   let gasOk = !!state?.synced_to_gas;
   if (!gasOk && env.GAS_WEB_APP_URL) {
     try {
@@ -610,7 +628,7 @@ export async function onRequestPost({ request, env }) {
       console.error('gas forward failed', e);
     }
   } else if (!env.GAS_WEB_APP_URL) {
-    gasOk = true; // no GAS configured — nothing to sync
+    gasOk = true;
   }
 
   if (projectionOk && gasOk) {
@@ -626,6 +644,7 @@ export async function onRequestPost({ request, env }) {
     projected:     projectionOk,
     synced_to_gas: gasOk,
     is_test_data:  isTest,
+    warning:       softWarning,
   });
 }
 
