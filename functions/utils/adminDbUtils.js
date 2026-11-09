@@ -1,9 +1,11 @@
 // ============================================================================
 // JJB WMS — WebCrypto PBKDF2 verifier + FK-safe test-data purge engine
 // Runtime: Cloudflare Pages Functions (Workers)
+//
 // NOTE: This file MUST NOT reference process.argv or process.env.
 //       Workers only expose env via the `env` parameter of onRequest*.
 // ============================================================================
+
 export const ALLOWED_ADMIN_TABLES = new Set([
   'users','roles','materials','storage_rooms','material_lots',
   'recipes','recipe_ingredients','outlets','suppliers',

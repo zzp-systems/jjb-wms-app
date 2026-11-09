@@ -17,8 +17,7 @@ import {
   ALLOWED_ADMIN_TABLES,
   verifyPbkdf2Secret,
   executePurgeTestDataBatch
-} from '../../utils/adminDbUtils.js';
-
+} from '../utils/adminDbUtils.js';
 /**
  * Metadata map for all 24 tables in schema.sql:
  *   pk: Primary key column name
