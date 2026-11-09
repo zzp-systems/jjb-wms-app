@@ -123,7 +123,7 @@ export const MASTER_MATERIALS = [
     ]
   },
   {
-    "code": "RM-FAT-001",
+    "code": "RM-FAT-007",
     "category": "Fats & Oils",
     "brand": "Buttercup",
     "name": "Refrigerated Margarine (Buttercup)",
@@ -137,7 +137,7 @@ export const MASTER_MATERIALS = [
     "currentBalance": 370,
     "lots": [
       {
-        "lotNumber": "LOT-RMFAT001-INIT",
+        "lotNumber": "LOT-RMFAT007-INIT",
         "expiryDate": "2027-06-30",
         "qtySec": 370,
         "location": "Pallet A1"
@@ -145,7 +145,13 @@ export const MASTER_MATERIALS = [
     ]
   },
   {
-    "code": "RM-FAT-001-BUTTER",
+    // FIX: code renamed from "RM-FAT-001-BUTTER" → "RM-FAT-001"
+    // Reason: CSV (row 8) still uses RM-FAT-001 for this item.
+    // The original RM-FAT-001 (Buttercup) has been renamed to RM-FAT-007 above,
+    // so this slot is now free. Aligning with CSV prevents a duplicate
+    // "Magnolia Unsalted Butter" record (one from seed as RM-FAT-001-BUTTER,
+    // one from CSV as RM-FAT-001).
+    "code": "RM-FAT-001",
     "category": "Fats & Oils",
     "brand": "Magnolia Gold",
     "name": "Unsalted Butter (Magnolia Gold)",
@@ -380,6 +386,12 @@ export const MASTER_MATERIALS = [
     ]
   },
   {
+    // FIX: currentBalance and lots[0].qtySec changed from 445.84 → 418.84
+    // Reason: 1,132 cans × 0.37 L = 418.84 L. The 445.84 value was a
+    // transcription error (1132 × 0.37 ≠ 445.84). CSV has already been
+    // corrected to 418.84. Because seed's INSERT OR IGNORE runs first,
+    // this value wins in the DB — aligning it here prevents a
+    // "0 variance but wrong quantity" silent failure.
     "code": "RM-DRY-003",
     "category": "Dairy & Eggs",
     "brand": "Jersey",
@@ -391,12 +403,12 @@ export const MASTER_MATERIALS = [
     "conversionFactor": 0.37,
     "threshold": 20,
     "unitCost": 28,
-    "currentBalance": 445.84,
+    "currentBalance": 418.84,
     "lots": [
       {
         "lotNumber": "LOT-RMDRY003-INIT",
         "expiryDate": "2027-06-30",
-        "qtySec": 445.84,
+        "qtySec": 418.84,
         "location": "Pallet A1"
       }
     ]
@@ -869,13 +881,21 @@ export const MASTER_MATERIALS = [
     "lots": []
   },
   {
+    // FIX: primaryUom changed from "Box" → "Tin Can"
+    // Reason: with conversionFactor 0.39 and currentBalance 276.51,
+    // "709 × 0.39 = 276.51" is only physically coherent if the primary
+    // unit is the individual tin can (390g each), not the 48-can box.
+    // CSV has already been corrected to Tin Can. Without this fix, seed
+    // would write "Box / 0.39 / 276.51" — an impossible triple that the
+    // reconciliation view would miss (both current_balance and lot sum
+    // share the same wrong numbers → variance = 0).
     "code": "RM-DRY-007",
     "category": "Dairy & Eggs",
     "brand": "Jersey",
     "name": "Condensed Creamer (Jersey -  390g Tin Can / 48 Cans ina  Box)",
     "supplier": "Lucky Roma Trading / JCT Wheat",
     "room": "Wet Room",
-    "primaryUom": "Box",
+    "primaryUom": "Tin Can",
     "secondaryUom": "kg",
     "conversionFactor": 0.39,
     "threshold": 20,

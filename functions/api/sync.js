@@ -1,150 +1,516 @@
-// Cloudflare Pages Function: /api/sync
-// Handles Edge persistence via Cloudflare D1 (SQLite) with Idempotency Keys
-// and relays WMS synchronization events to Google Apps Script (GAS) Web App.
+// ============================================================================
+// JJB WMS — /api/sync  (Phase 1 dual-write projection)
+//   - Idempotent via sync_events.idempotency_key
+//   - Projects into Group B/C tables
+//   - Reconciles materials.current_balance from non-test lots (Catch 1)
+//   - Forwards to GAS; marks synced_to_gas only when both succeed
+// ============================================================================
 
-const GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbwBll5ZKuiBO0wX9WSXGRd-Tua4QpxbfKAcrnWhVmdkjkU_3mnwgI7bX-iiRgjHlkYa/exec';
+const str   = v => (v === null || v === undefined ? null : String(v));
+const num   = v => { const n = Number(v); return Number.isFinite(n) ? n : null; };
+const cents = v => { const n = Number(v); return Number.isFinite(n) ? Math.round(n * 100) : null; };
+const isoDate = v => (v ? String(v).slice(0, 10) : null);
+const bool  = v => (v ? 1 : 0);
+const pick  = (o, ...keys) => { for (const k of keys) if (o && o[k] != null) return o[k]; return undefined; };
 
-export async function onRequestPost({ request, env }) {
-  try {
-    const payload = await request.json();
+// STRICT is_test_data coercion — accepts true / 1 / '1' only (not '0', not 'false')
+const asTest = v => (v === true || v === 1 || v === '1' || v === 'true') ? 1 : 0;
 
-    // 1. Generate or extract Idempotency Key
-    const idempotencyKey = payload.idempotencyKey ||
-      request.headers.get('x-idempotency-key') ||
-      `SYNC_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+// --------------------------- projection handlers --------------------------
+function projectReceiving(env, p, isTest) {
+  const stmts = [];
+  const reportNo = pick(p, 'reportNo', 'report_no');
+  if (!reportNo) return stmts;
 
-    const eventType = payload.eventType || payload.type || 'WMS_STATE_SYNC';
-    const payloadStr = JSON.stringify(payload);
+  stmts.push(env.DB.prepare(`
+    INSERT INTO receiving_reports
+      (report_no, po_no, supplier, total_paid_centavos, received_by,
+       received_date, received_time, is_test_data)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(report_no) DO UPDATE SET
+      po_no=excluded.po_no, supplier=excluded.supplier,
+      total_paid_centavos=excluded.total_paid_centavos,
+      received_by=excluded.received_by, received_date=excluded.received_date,
+      received_time=excluded.received_time, is_test_data=excluded.is_test_data,
+      updated_at=datetime('now')
+  `).bind(
+    reportNo, str(pick(p, 'poNo', 'po_no')), str(p.supplier),
+    cents(pick(p, 'totalPaid', 'total_paid')),
+    str(pick(p, 'receivedBy', 'received_by')),
+    isoDate(pick(p, 'date', 'receivedDate', 'received_date')),
+    str(pick(p, 'time', 'receivedTime', 'received_time')),
+    isTest
+  ));
 
-    let d1Status = 'SKIPPED_NO_DB_BINDING';
-    let isDuplicate = false;
+  stmts.push(env.DB.prepare(`DELETE FROM receiving_items WHERE report_no = ?`).bind(reportNo));
 
-    // 2. Persist to Cloudflare D1 SQLite if bound
-    if (env && env.DB) {
-      try {
-        // Ensure table exists defensively
-        await env.DB.prepare(`
-          CREATE TABLE IF NOT EXISTS sync_events (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            idempotency_key TEXT UNIQUE NOT NULL,
-            event_type TEXT NOT NULL,
-            payload TEXT NOT NULL,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            synced_to_gas INTEGER DEFAULT 0
-          )
-        `).run();
+  for (const item of p.items || p.lines || []) {
+    const materialCode = pick(item, 'materialCode', 'material_code', 'code');
+    if (!materialCode) continue;
 
-        // Check if event already exists
-        const existing = await env.DB.prepare(
-          'SELECT id, created_at, synced_to_gas FROM sync_events WHERE idempotency_key = ?'
-        ).bind(idempotencyKey).first();
+    stmts.push(env.DB.prepare(`
+      INSERT INTO receiving_items
+        (report_no, material_code, material_name_snapshot, lot_number, expiry_date,
+         secondary_qty, bin_location, unit_cost_centavos, is_test_data)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      reportNo, materialCode, str(pick(item, 'name', 'materialName')),
+      str(pick(item, 'lotNumber', 'lot_number')),
+      isoDate(pick(item, 'expiryDate', 'expiry_date')),
+      num(pick(item, 'secondaryQty', 'qty')),
+      str(pick(item, 'binLocation', 'bin_location')),
+      cents(pick(item, 'unitCost', 'unit_cost')), isTest
+    ));
 
-        if (existing) {
-          isDuplicate = true;
-          d1Status = 'DUPLICATE_IDEMPOTENT_IGNORED';
-        } else {
-          await env.DB.prepare(
-            'INSERT INTO sync_events (idempotency_key, event_type, payload, synced_to_gas) VALUES (?, ?, ?, 0)'
-          ).bind(idempotencyKey, eventType, payloadStr).run();
-          d1Status = 'PERSISTED_TO_D1';
-        }
-      } catch (dbErr) {
-        console.error('D1 execution warning:', dbErr);
-        d1Status = `D1_ERROR: ${dbErr.message}`;
-      }
+    const lotNo = pick(item, 'lotNumber', 'lot_number');
+    const qty   = num(pick(item, 'secondaryQty', 'qty')) || 0;
+    if (lotNo && qty) {
+      stmts.push(env.DB.prepare(`
+        INSERT INTO material_lots (material_code, lot_number, expiry_date, qty_sec, location, is_test_data)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(material_code, lot_number) DO UPDATE SET
+          qty_sec = qty_sec + excluded.qty_sec, updated_at = datetime('now')
+      `).bind(
+        materialCode, lotNo, isoDate(pick(item, 'expiryDate', 'expiry_date')),
+        qty, str(pick(item, 'binLocation', 'bin_location')), isTest
+      ));
     }
-
-    // 3. Relay to Google Apps Script Web App (unless already a recorded duplicate)
-    let gasResponse = null;
-    let gasRelayed = false;
-    if (!isDuplicate) {
-      try {
-        const gasFetch = await fetch(GAS_WEB_APP_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            ...payload,
-            idempotencyKey,
-            edgeServer: 'Cloudflare Pages Indangan Bodega Edge',
-            edgeTimestamp: new Date().toISOString()
-          })
-        });
-        if (gasFetch.ok) {
-          gasResponse = await gasFetch.json().catch(() => ({ status: 'OK' }));
-          gasRelayed = true;
-
-          // Update D1 record with synced_to_gas = 1
-          if (env && env.DB) {
-            await env.DB.prepare(
-              'UPDATE sync_events SET synced_to_gas = 1 WHERE idempotency_key = ?'
-            ).bind(idempotencyKey).run().catch(() => {});
-          }
-        }
-      } catch (gasErr) {
-        console.warn('GAS Web App relay warning (offline/relay fallback):', gasErr.message);
-      }
-    }
-
-    return new Response(JSON.stringify({
-      success: true,
-      idempotencyKey,
-      isDuplicate,
-      d1Status,
-      gasStatus: gasRelayed ? 'RELAYED' : (isDuplicate ? 'IDEMPOTENT_SKIPPED' : 'LOCAL_QUEUED'),
-      syncedAt: new Date().toISOString(),
-      server: 'Cloudflare Pages Worker (JJB Indangan Bodega Edge)'
-    }), {
-      headers: {
-        'Content-Type': 'application/json',
-        'Cache-Control': 'no-cache',
-        'Access-Control-Allow-Origin': '*'
-      }
-    });
-  } catch (err) {
-    return new Response(JSON.stringify({
-      success: false,
-      error: err.message,
-      timestamp: new Date().toISOString()
-    }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' }
-    });
   }
+  return stmts;
 }
 
-export async function onRequestGet({ env }) {
-  let eventStats = { totalEvents: 0, unsyncedToGas: 0 };
-  if (env && env.DB) {
+function projectWithdrawal(env, p, isTest) {
+  const stmts = [];
+  const slipNo = pick(p, 'slipNo', 'slip_no');
+  if (!slipNo) return stmts;
+
+  stmts.push(env.DB.prepare(`
+    INSERT INTO withdrawals
+      (slip_no, withdrawal_date, withdrawal_time, requesting_entity, department,
+       purpose, requested_by, issued_by, received_by, total_cost_centavos,
+       status, notes, source_channel, is_test_data)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(slip_no) DO UPDATE SET
+      withdrawal_date=excluded.withdrawal_date, withdrawal_time=excluded.withdrawal_time,
+      requesting_entity=excluded.requesting_entity, department=excluded.department,
+      purpose=excluded.purpose, requested_by=excluded.requested_by,
+      issued_by=excluded.issued_by, received_by=excluded.received_by,
+      total_cost_centavos=excluded.total_cost_centavos, status=excluded.status,
+      notes=excluded.notes, source_channel=excluded.source_channel,
+      is_test_data=excluded.is_test_data, updated_at=datetime('now')
+  `).bind(
+    slipNo, isoDate(pick(p, 'date', 'withdrawalDate', 'withdrawal_date')),
+    str(pick(p, 'time', 'withdrawalTime', 'withdrawal_time')),
+    str(pick(p, 'requestingEntity', 'requesting_entity')), str(p.department),
+    str(p.purpose), str(pick(p, 'requestedBy', 'requested_by')),
+    str(pick(p, 'issuedBy', 'issued_by')), str(pick(p, 'receivedBy', 'received_by')),
+    cents(pick(p, 'totalCost', 'total_cost')), str(p.status), str(p.notes),
+    str(pick(p, 'sourceChannel', 'source_channel')), isTest
+  ));
+
+  stmts.push(env.DB.prepare(`DELETE FROM withdrawal_items WHERE slip_no = ?`).bind(slipNo));
+
+  for (const item of p.items || p.lines || []) {
+    const materialCode = pick(item, 'materialCode', 'material_code', 'code');
+    if (!materialCode) continue;
+
+    stmts.push(env.DB.prepare(`
+      INSERT INTO withdrawal_items
+        (slip_no, material_code, name_snapshot, qty_requested_sec, qty_issued_sec,
+         secondary_uom, lot_number, storage_room, estimated_cost_centavos, remarks, is_test_data)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      slipNo, materialCode, str(pick(item, 'name', 'materialName')),
+      num(pick(item, 'qtyRequestedSec', 'qty_requested_sec')),
+      num(pick(item, 'qtyIssuedSec', 'qty_issued_sec')),
+      str(pick(item, 'secondaryUom', 'secondary_uom')),
+      str(pick(item, 'lotNumber', 'lot_number')),
+      str(pick(item, 'storageRoom', 'storage_room')),
+      cents(pick(item, 'estimatedCost', 'estimated_cost')), str(item.remarks), isTest
+    ));
+
+    const lotNo = pick(item, 'lotNumber', 'lot_number');
+    const qty   = num(pick(item, 'qtyIssuedSec', 'qty_issued_sec')) || 0;
+    if (lotNo && qty) {
+      stmts.push(env.DB.prepare(`
+        UPDATE material_lots SET qty_sec = qty_sec - ?, updated_at = datetime('now')
+        WHERE material_code = ? AND lot_number = ? AND is_test_data = ?
+      `).bind(qty, materialCode, lotNo, isTest));
+    }
+  }
+  return stmts;
+}
+
+function projectAdjustment(env, p, isTest) {
+  const stmts = [];
+  const materialCode = pick(p, 'materialCode', 'material_code');
+  if (!materialCode) return stmts;
+
+  const type   = String(p.type || p.adjustmentType || '').toUpperCase();
+  const qty    = num(pick(p, 'qtySec', 'qty_sec')) || 0;
+  const signed = type === 'OUT' ? -qty : qty;
+
+  stmts.push(env.DB.prepare(`
+    INSERT INTO adjustments
+      (material_code, material_name_snapshot, adjustment_type, qty_sec, uom,
+       reason, adjusted_by, adjusted_at, notes, is_test_data)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).bind(
+    materialCode, str(pick(p, 'materialName', 'name')), type || null, qty,
+    str(p.uom), str(p.reason), str(pick(p, 'adjustedBy', 'adjusted_by')),
+    str(pick(p, 'adjustedAt', 'adjusted_at')), str(p.notes), isTest
+  ));
+
+  if (signed !== 0) {
+    const syntheticLot = `ADJ-${p.id || p.adjustmentId || Date.now()}`;
+    stmts.push(env.DB.prepare(`
+      INSERT INTO material_lots (material_code, lot_number, expiry_date, qty_sec, location, is_test_data)
+      VALUES (?, ?, NULL, ?, 'ADJUSTMENT', ?)
+      ON CONFLICT(material_code, lot_number) DO UPDATE SET
+        qty_sec = qty_sec + excluded.qty_sec, updated_at = datetime('now')
+    `).bind(materialCode, syntheticLot, signed, isTest));
+  }
+  return stmts;
+}
+
+function projectBatchOrder(env, p, isTest) {
+  const orderId = pick(p, 'orderId', 'order_id');
+  if (!orderId) return [];
+  return [env.DB.prepare(`
+    INSERT INTO batch_orders
+      (order_id, outlet_name, recipe_sku, recipe_name_snapshot, requested_qty_pcs,
+       batch_multiplier, status, bulk_request_status, bulk_requisition_slip_no,
+       bulk_requested_at, bulk_approved_at, bulk_approved_by, batch_tag_id,
+       actual_batched_kg, actual_batched_units, batched_at, batched_by,
+       scale_used, sifter_40mesh_checked, released_at, released_to, is_test_data)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(order_id) DO UPDATE SET
+      outlet_name              = COALESCE(excluded.outlet_name,              batch_orders.outlet_name),
+      recipe_sku               = COALESCE(excluded.recipe_sku,               batch_orders.recipe_sku),
+      recipe_name_snapshot     = COALESCE(excluded.recipe_name_snapshot,     batch_orders.recipe_name_snapshot),
+      requested_qty_pcs        = COALESCE(excluded.requested_qty_pcs,        batch_orders.requested_qty_pcs),
+      batch_multiplier         = COALESCE(excluded.batch_multiplier,         batch_orders.batch_multiplier),
+      status                   = COALESCE(excluded.status,                   batch_orders.status),
+      bulk_request_status      = COALESCE(excluded.bulk_request_status,      batch_orders.bulk_request_status),
+      bulk_requisition_slip_no = COALESCE(excluded.bulk_requisition_slip_no, batch_orders.bulk_requisition_slip_no),
+      bulk_requested_at        = COALESCE(excluded.bulk_requested_at,        batch_orders.bulk_requested_at),
+      bulk_approved_at         = COALESCE(excluded.bulk_approved_at,         batch_orders.bulk_approved_at),
+      bulk_approved_by         = COALESCE(excluded.bulk_approved_by,         batch_orders.bulk_approved_by),
+      batch_tag_id             = COALESCE(excluded.batch_tag_id,             batch_orders.batch_tag_id),
+      actual_batched_kg        = COALESCE(excluded.actual_batched_kg,        batch_orders.actual_batched_kg),
+      actual_batched_units     = COALESCE(excluded.actual_batched_units,     batch_orders.actual_batched_units),
+      batched_at               = COALESCE(excluded.batched_at,               batch_orders.batched_at),
+      batched_by               = COALESCE(excluded.batched_by,               batch_orders.batched_by),
+      scale_used               = COALESCE(excluded.scale_used,               batch_orders.scale_used),
+      sifter_40mesh_checked    = COALESCE(excluded.sifter_40mesh_checked,    batch_orders.sifter_40mesh_checked),
+      released_at              = COALESCE(excluded.released_at,              batch_orders.released_at),
+      released_to              = COALESCE(excluded.released_to,              batch_orders.released_to),
+      is_test_data             = excluded.is_test_data,
+      updated_at               = datetime('now')
+  `).bind(
+    orderId,
+    str(pick(p, 'outletName', 'outlet_name')),
+    str(pick(p, 'recipeSku', 'recipe_sku')),
+    str(pick(p, 'recipeName', 'recipe_name')),
+    num(pick(p, 'requestedQtyPcs', 'requested_qty_pcs')),
+    num(pick(p, 'batchMultiplier', 'batch_multiplier')),
+    str(p.status),
+    str(pick(p, 'bulkRequestStatus', 'bulk_request_status')),
+    str(pick(p, 'bulkRequisitionSlipNo', 'bulk_requisition_slip_no')),
+    str(pick(p, 'bulkRequestedAt', 'bulk_requested_at')),
+    str(pick(p, 'bulkApprovedAt', 'bulk_approved_at')),
+    str(pick(p, 'bulkApprovedBy', 'bulk_approved_by')),
+    str(pick(p, 'batchTagId', 'batch_tag_id')),
+    num(pick(p, 'actualBatchedKg', 'actual_batched_kg')),
+    num(pick(p, 'actualBatchedUnits', 'actual_batched_units')),
+    str(pick(p, 'batchedAt', 'batched_at')),
+    str(pick(p, 'batchedBy', 'batched_by')),
+    str(pick(p, 'scaleUsed', 'scale_used')),
+    p.sifter40MeshChecked != null ? bool(p.sifter40MeshChecked) : null,
+    str(pick(p, 'releasedAt', 'released_at')),
+    str(pick(p, 'releasedTo', 'released_to')),
+    isTest
+  ))];
+}
+
+function projectOrder(env, p, isTest) {
+  const stmts = [];
+  const orderId = pick(p, 'orderId', 'order_id');
+  if (!orderId) return stmts;
+
+  stmts.push(env.DB.prepare(`
+    INSERT INTO orders
+      (order_id, customer_or_outlet, contact_person, channel, status,
+       order_date, total_cost_centavos, is_test_data)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(order_id) DO UPDATE SET
+      customer_or_outlet=excluded.customer_or_outlet,
+      contact_person=excluded.contact_person, channel=excluded.channel,
+      status=excluded.status, order_date=excluded.order_date,
+      total_cost_centavos=excluded.total_cost_centavos,
+      is_test_data=excluded.is_test_data, updated_at=datetime('now')
+  `).bind(
+    orderId, str(pick(p, 'customerOrOutlet', 'customer_or_outlet')),
+    str(pick(p, 'contactPerson', 'contact_person')), str(p.channel),
+    str(p.status), isoDate(pick(p, 'orderDate', 'order_date')),
+    cents(pick(p, 'totalCost', 'total_cost')), isTest
+  ));
+
+  stmts.push(env.DB.prepare(`DELETE FROM order_items WHERE order_id = ?`).bind(orderId));
+
+  for (const item of p.items || p.lines || []) {
+    stmts.push(env.DB.prepare(`
+      INSERT INTO order_items
+        (order_id, name, sku, qty, unit_cost_centavos, line_total_centavos, is_test_data)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      orderId, str(item.name), str(item.sku), num(item.qty),
+      cents(pick(item, 'unitCost', 'unit_cost')),
+      cents(pick(item, 'lineTotal', 'line_total')), isTest
+    ));
+  }
+  return stmts;
+}
+
+function projectAudit(env, p, isTest) {
+  return [env.DB.prepare(`
+    INSERT INTO audit_log (timestamp, actor, role, action, details, is_test_data)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).bind(
+    str(p.timestamp) || new Date().toISOString(),
+    str(p.actor), str(p.role), str(p.action) || 'UNKNOWN', str(p.details), isTest
+  )];
+}
+
+function projectQuarantine(env, p, isTest) {
+  const ncrNo = pick(p, 'ncrNo', 'ncr_no');
+  if (!ncrNo) return [];
+  return [env.DB.prepare(`
+    INSERT INTO quarantine_ncr
+      (ncr_no, item_description, lot_number, material_code, material_name_snapshot,
+       qty_sec, reason, status, filed_by, filed_at, disposition, disposition_by,
+       disposition_at, is_test_data)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(ncr_no) DO UPDATE SET
+      item_description=excluded.item_description,
+      lot_number=excluded.lot_number, material_code=excluded.material_code,
+      material_name_snapshot=excluded.material_name_snapshot,
+      qty_sec=excluded.qty_sec, reason=excluded.reason, status=excluded.status,
+      filed_by=excluded.filed_by, filed_at=excluded.filed_at,
+      disposition=excluded.disposition, disposition_by=excluded.disposition_by,
+      disposition_at=excluded.disposition_at, is_test_data=excluded.is_test_data,
+      updated_at=datetime('now')
+  `).bind(
+    ncrNo, str(pick(p, 'itemDescription', 'item_description')),
+    str(pick(p, 'lotNumber', 'lot_number')),
+    str(pick(p, 'materialCode', 'material_code')),
+    str(pick(p, 'materialName', 'name')),
+    num(pick(p, 'qtySec', 'qty_sec')), str(p.reason), str(p.status),
+    str(pick(p, 'filedBy', 'filed_by')), str(pick(p, 'filedAt', 'filed_at')),
+    str(p.disposition), str(pick(p, 'dispositionBy', 'disposition_by')),
+    str(pick(p, 'dispositionAt', 'disposition_at')), isTest
+  )];
+}
+
+function projectSpecialty(env, p, isTest) {
+  const stmts = [];
+  const proposalId = pick(p, 'proposalId', 'proposal_id');
+  if (!proposalId) return stmts;
+
+  stmts.push(env.DB.prepare(`
+    INSERT INTO specialty_recipe_proposals
+      (proposal_id, sku, title, name, category, target_facility, requesting_location,
+       baker_name, standard_batch_flour_kg, unit_piece_yield, piece_weight_grams,
+       dough_exit_temp_target, ccp1_lethality_target, water_activity_limit,
+       unit_production_cost_centavos, wholesale_transfer_price_centavos,
+       srp_centavos, gross_margin_pct, mixing_notes, status, submitted_at,
+       approved_at, approved_by, is_test_data)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(proposal_id) DO UPDATE SET
+      sku=excluded.sku, title=excluded.title, name=excluded.name,
+      category=excluded.category, target_facility=excluded.target_facility,
+      requesting_location=excluded.requesting_location, baker_name=excluded.baker_name,
+      standard_batch_flour_kg=excluded.standard_batch_flour_kg,
+      unit_piece_yield=excluded.unit_piece_yield,
+      piece_weight_grams=excluded.piece_weight_grams,
+      dough_exit_temp_target=excluded.dough_exit_temp_target,
+      ccp1_lethality_target=excluded.ccp1_lethality_target,
+      water_activity_limit=excluded.water_activity_limit,
+      unit_production_cost_centavos=excluded.unit_production_cost_centavos,
+      wholesale_transfer_price_centavos=excluded.wholesale_transfer_price_centavos,
+      srp_centavos=excluded.srp_centavos, gross_margin_pct=excluded.gross_margin_pct,
+      mixing_notes=excluded.mixing_notes, status=excluded.status,
+      submitted_at=excluded.submitted_at, approved_at=excluded.approved_at,
+      approved_by=excluded.approved_by, is_test_data=excluded.is_test_data,
+      updated_at=datetime('now')
+  `).bind(
+    proposalId, str(p.sku), str(p.title), str(p.name), str(p.category),
+    str(pick(p, 'targetFacility', 'target_facility')),
+    str(pick(p, 'requestingLocation', 'requesting_location')),
+    str(pick(p, 'bakerName', 'baker_name')),
+    num(pick(p, 'standardBatchFlourKg', 'standard_batch_flour_kg')),
+    num(pick(p, 'unitPieceYield', 'unit_piece_yield')),
+    num(pick(p, 'pieceWeightGrams', 'piece_weight_grams')),
+    str(pick(p, 'doughExitTempTarget', 'dough_exit_temp_target')),
+    str(pick(p, 'ccp1LethalityTarget', 'ccp1_lethality_target')),
+    str(pick(p, 'waterActivityLimit', 'water_activity_limit')),
+    cents(pick(p, 'unitProductionCost', 'unit_production_cost')),
+    cents(pick(p, 'wholesaleTransferPrice', 'wholesale_transfer_price')),
+    cents(p.srp), num(pick(p, 'grossMarginPct', 'gross_margin_pct')),
+    str(pick(p, 'mixingNotes', 'mixing_notes')),
+    str(p.status) || 'PENDING_APPROVAL',
+    str(pick(p, 'submittedAt', 'submitted_at')),
+    str(pick(p, 'approvedAt', 'approved_at')),
+    str(pick(p, 'approvedBy', 'approved_by')), isTest
+  ));
+
+  stmts.push(env.DB.prepare(`DELETE FROM specialty_recipe_ingredients WHERE proposal_id = ?`).bind(proposalId));
+
+  for (const ing of p.ingredients || []) {
+    stmts.push(env.DB.prepare(`
+      INSERT INTO specialty_recipe_ingredients
+        (proposal_id, material_code, ingredient_name_snapshot, pct, grams_per_batch,
+         is_water, is_as_needed, is_packaging, sort_order, is_test_data)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      proposalId, str(pick(ing, 'code', 'materialCode')), str(ing.name),
+      num(ing.pct), num(pick(ing, 'gramsPerBatch', 'grams_per_batch')),
+      bool(ing.isWater), bool(ing.isAsNeeded), bool(ing.isPackaging),
+      num(ing.sortOrder) || 0, isTest
+    ));
+  }
+  return stmts;
+}
+
+const HANDLERS = {
+  RECEIVING_SAVED:            projectReceiving,
+  RECEIVING_CREATED:          projectReceiving,
+  WITHDRAWAL_SAVED:           projectWithdrawal,
+  WITHDRAWAL_ISSUED:          projectWithdrawal,
+  ADJUSTMENT_SAVED:           projectAdjustment,
+  BATCH_ORDER_SAVED:          projectBatchOrder,
+  BATCH_ORDER_UPDATED:        projectBatchOrder,
+  BATCH_CREATED:              projectBatchOrder,
+  BATCH_BULK_APPROVED:        projectBatchOrder,
+  BATCH_COMPLETED:            projectBatchOrder,
+  BATCH_RELEASED:             projectBatchOrder,
+  ORDER_SAVED:                projectOrder,
+  ORDER_CREATED:              projectOrder,
+  AUDIT_LOG:                  projectAudit,
+  AUDIT_LOG_ENTRY:            projectAudit,
+  QUARANTINE_SAVED:           projectQuarantine,
+  QUARANTINE_FILED:           projectQuarantine,
+  SPECIALTY_PROPOSAL_SAVED:   projectSpecialty,
+  SPECIALTY_PROPOSAL_CREATED: projectSpecialty,
+  SPECIALTY_PROPOSAL_APPROVED:projectSpecialty,
+};
+
+const BALANCE_AFFECTING = new Set([
+  'RECEIVING_SAVED','RECEIVING_CREATED',
+  'WITHDRAWAL_SAVED','WITHDRAWAL_ISSUED',
+  'ADJUSTMENT_SAVED',
+]);
+
+function buildReconciliationStatement(env) {
+  return env.DB.prepare(`
+    UPDATE materials
+    SET current_balance = COALESCE((
+          SELECT ROUND(SUM(qty_sec), 4)
+          FROM material_lots
+          WHERE material_lots.material_code = materials.code
+            AND material_lots.is_test_data = 0
+        ), 0),
+        updated_at = datetime('now')
+    WHERE is_test_data = 0
+  `);
+}
+
+export async function onRequestPost({ request, env }) {
+  let body;
+  try { body = await request.json(); }
+  catch { return json({ status: 'error', error: 'invalid_json' }, 400); }
+
+  const event   = body.event || body;
+  const type    = String(event.event_type || event.type || '').toUpperCase();
+  const payload = event.payload || event.data || {};
+  const key     = String(event.idempotency_key || event.id || crypto.randomUUID());
+  const isTest  = asTest(payload.is_test_data);
+
+  const existing = await env.DB.prepare(
+    `SELECT id, projected_at, synced_to_gas FROM sync_events WHERE idempotency_key = ?`
+  ).bind(key).first();
+
+  if (!existing) {
     try {
-      const stats = await env.DB.prepare(`
-        SELECT 
-          COUNT(*) as total,
-          SUM(CASE WHEN synced_to_gas = 0 THEN 1 ELSE 0 END) as pending
-        FROM sync_events
-      `).first();
-      if (stats) {
-        eventStats = {
-          totalEvents: stats.total || 0,
-          unsyncedToGas: stats.pending || 0
-        };
+      await env.DB.prepare(
+        `INSERT INTO sync_events (idempotency_key, event_type, payload) VALUES (?, ?, ?)`
+      ).bind(key, type, JSON.stringify(payload)).run();
+    } catch (e) { console.warn('sync_events insert race', e.message); }
+  }
+
+  const state = existing || await env.DB.prepare(
+    `SELECT id, projected_at, synced_to_gas FROM sync_events WHERE idempotency_key = ?`
+  ).bind(key).first();
+
+  let projectionOk = !!state?.projected_at;
+  if (!projectionOk) {
+    const handler = HANDLERS[type];
+    if (handler) {
+      try {
+        const stmts = handler(env, payload, isTest);
+        if (BALANCE_AFFECTING.has(type)) stmts.push(buildReconciliationStatement(env));
+        if (stmts.length > 0) await env.DB.batch(stmts);
+        await env.DB.prepare(
+          `UPDATE sync_events SET projected_at = datetime('now'), projection_error = NULL WHERE idempotency_key = ?`
+        ).bind(key).run();
+        projectionOk = true;
+      } catch (e) {
+        console.error('projection failed', type, e);
+        await env.DB.prepare(
+          `UPDATE sync_events SET projection_error = ? WHERE idempotency_key = ?`
+        ).bind(String(e.message || e), key).run();
       }
-    } catch {
-      // Return default stats if table not yet populated
+    } else {
+      await env.DB.prepare(
+        `UPDATE sync_events SET projected_at = datetime('now') WHERE idempotency_key = ?`
+      ).bind(key).run();
+      projectionOk = true;
     }
   }
 
-  return new Response(JSON.stringify({
-    status: 'ONLINE',
-    version: 'JJB WMS v4.6 (Cloudflare Edge)',
-    facility: 'Indangan Central Plant LTO #3000013388488 & Sasa LTO #3000002291335',
-    serverTime: new Date().toISOString(),
-    eodCutoff: '23:45 PHT',
-    d1Database: env && env.DB ? 'CONNECTED' : 'STANDALONE_LOCAL',
-    eventStats
-  }), {
-    headers: {
-      'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': '*'
-    }
+  let gasOk = !!state?.synced_to_gas;
+  if (!gasOk && env.GAS_WEB_APP_URL) {
+    try {
+      const res = await fetch(env.GAS_WEB_APP_URL, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ event_type: type, payload }),
+      });
+      gasOk = res.ok;
+    } catch (e) { console.error('gas forward failed', e); }
+  } else if (!env.GAS_WEB_APP_URL) {
+    gasOk = true;
+  }
+
+  if (projectionOk && gasOk) {
+    await env.DB.prepare(
+      `UPDATE sync_events SET synced_to_gas = 1 WHERE idempotency_key = ?`
+    ).bind(key).run();
+  }
+
+  return json({
+    status:        'ok',
+    event_type:    type,
+    idempotency:   key,
+    projected:     projectionOk,
+    synced_to_gas: gasOk,
+    is_test_data:  isTest,
+  });
+}
+
+function json(body, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
   });
 }

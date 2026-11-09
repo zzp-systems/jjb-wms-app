@@ -10,3 +10,5 @@ dist/
 _archives/
 bun.lock
 payload.json
+seed.sql
+opening-inventory.sql
