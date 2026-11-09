@@ -35,6 +35,9 @@ export const WORKER_SYNC_URL = '/api/sync';
 export const GAS_WEB_APP_URL =
   'https://script.google.com/macros/s/AKfycbwBll5ZKuiBO0wX9WSXGRd-Tua4QpxbfKAcrnWhVmdkjkU_3mnwgI7bX-iiRgjHlkYa/exec';
 
+const SANDBOX_STORAGE_KEY = 'JJB_WMS_SANDBOX_MODE';
+const REQUEST_POLL_STORAGE_KEY = 'JJB_WMS_REQUEST_POLL_ID';
+
 // ============================================================================
 // Phase 1.5 — Resolve users.id FK from display name or user object.
 // Returns null when no match — the four FK columns this feeds
@@ -111,13 +114,6 @@ const buildNormalizedWithdrawalItems = (rawItems, materialsList) => {
     };
   });
 };
-
-// ============================================================================
-// Phase 2 — Sandbox mode persistence key. Uses localStorage so the flag
-// survives page refresh within a browser session. Reset to false on
-// login and logout for safety (see handleLoginSuccess / handleLogout).
-// ============================================================================
-const SANDBOX_STORAGE_KEY = 'JJB_WMS_SANDBOX_MODE';
 
 export default function App() {
   // Persistence Helpers
@@ -326,7 +322,6 @@ export default function App() {
       localStorage.setItem('JJB_WMS_AUTH_USER', JSON.stringify(user));
     } catch (e) {}
     setIsLoginModalOpen(false);
-    // Phase 2: Reset sandbox on new session for safety
     setIsTestMode(false);
     recordAudit(
       "STAFF_LOGIN_AUTHENTICATED",
@@ -340,7 +335,6 @@ export default function App() {
       sessionStorage.removeItem('JJB_WMS_AUTH_SESSION');
     } catch (e) {}
     setIsAuthenticated(false);
-    // Phase 2: Reset sandbox on logout for safety
     setIsTestMode(false);
     showToast("Terminal session locked. Please sign in to proceed.");
   };
@@ -355,7 +349,7 @@ export default function App() {
   useEffect(() => { saveToStorage('audit_logs', auditLogs); }, [auditLogs]);
   useEffect(() => { saveToStorage('pending_requests', pendingRequests); }, [pendingRequests]);
 
-  // Real-Time Cross-Tab & Floor Kiosk Synchronization
+  // Real-Time Cross-Tab & Floor Kiosk Synchronization (same-browser only)
   useEffect(() => {
     const reloadExternalData = () => {
       try {
@@ -426,6 +420,112 @@ export default function App() {
       try { await fetch(WORKER_SYNC_URL, { method: 'GET' }); } catch (err) {}
     }, 5 * 60 * 1000);
     return () => clearInterval(interval);
+  }, [isOffline]);
+
+  // ============================================================================
+  // Phase 2.5 — Cross-device portal request polling (every 45 seconds).
+  //
+  // Polls GET /api/sync?since_id=N. When a new WITHDRAWAL_REQUEST_SUBMITTED
+  // event arrives from any kiosk (same browser OR a different device — doesn't
+  // matter, D1 is shared), merges it into pendingRequests state and shows a
+  // toast. Dedupe by requestId handles the case where the same-browser storage
+  // event already added it.
+  // ============================================================================
+  useEffect(() => {
+    if (isOffline) return;
+
+    let lastId = 0;
+    try {
+      lastId = parseInt(localStorage.getItem(REQUEST_POLL_STORAGE_KEY) || '0', 10) || 0;
+    } catch (e) {
+      lastId = 0;
+    }
+
+    let cancelled = false;
+
+    const poll = async () => {
+      if (document.hidden || cancelled) return;
+      try {
+        const res = await fetch(`${WORKER_SYNC_URL}?since_id=${lastId}`);
+        const data = await res.json();
+        if (!data.ok || cancelled) return;
+
+        if (data.server_max_id > lastId) {
+          lastId = data.server_max_id;
+          try {
+            localStorage.setItem(REQUEST_POLL_STORAGE_KEY, String(lastId));
+          } catch (e) {}
+        }
+
+        if (data.events && data.events.length > 0) {
+          data.events.forEach((ev) => {
+            if (ev.type === 'WITHDRAWAL_REQUEST_SUBMITTED') {
+              const p = ev.payload || {};
+              if (!p.requestId) return;
+
+              setPendingRequests((prev) => {
+                if (prev.some((r) => r.requestId === p.requestId)) return prev;
+
+                const newReq = {
+                  requestId: p.requestId,
+                  requestSlipNo: p.requestSlipNo || `WS-REQ-${p.requestId}`,
+                  sourceChannel: p.sourceChannel || 'PORTAL',
+                  dateRequested: p.date || new Date().toISOString().slice(0, 10),
+                  timeRequested: p.time || '',
+                  neededByDate: p.neededByDate || p.date,
+                  requestingEntity: p.requestingEntity || 'Unknown Requester',
+                  department: p.department || 'Production Floor',
+                  purpose: p.purpose || 'Material Requisition',
+                  requestedBy: p.requestedBy || 'Unknown',
+                  enteredBy: p.enteredBy,
+                  notes: p.notes || '',
+                  items: Array.isArray(p.items) ? p.items : [],
+                  totalEstimatedCost: Number(p.totalEstimatedCost) || 0,
+                  status: 'PENDING_ISSUANCE',
+                  createdAt: ev.created_at,
+                  issuedAt: null,
+                  issuedBy: null,
+                  withdrawalSlipNo: null,
+                  _syncedFromD1: true
+                };
+
+                showToast(
+                  `📩 New request from ${p.requestingEntity} (${p.itemCount || newReq.items.length} items)`
+                );
+                return [newReq, ...prev];
+              });
+            } else if (ev.type === 'WITHDRAWAL_REQUEST_CANCELLED') {
+              const p = ev.payload || {};
+              if (!p.requestId) return;
+              setPendingRequests((prev) =>
+                prev.map((r) =>
+                  r.requestId === p.requestId && r.status === 'PENDING_ISSUANCE'
+                    ? {
+                        ...r,
+                        status: 'CANCELLED',
+                        cancelledAt: ev.created_at,
+                        cancelledBy: p.cancelledBy,
+                        cancellationReason: p.cancellationReason
+                      }
+                    : r
+                )
+              );
+            }
+          });
+        }
+      } catch (e) {
+        // Silent — network errors during polling are expected
+      }
+    };
+
+    const initialTimer = setTimeout(poll, 3000);
+    const interval = setInterval(poll, 45 * 1000);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(initialTimer);
+      clearInterval(interval);
+    };
   }, [isOffline]);
 
   // 23:45 PHT NIGHTLY EOD WATCHER

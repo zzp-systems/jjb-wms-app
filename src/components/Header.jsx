@@ -18,7 +18,8 @@ import {
   ClipboardList,
   LogOut,
   Database,
-  FlaskConical
+  FlaskConical,
+  Bell
 } from 'lucide-react';
 
 export const ROLES = [
@@ -167,6 +168,19 @@ export default function Header({
             <Clock size={13} />
             <span>{phtTime || 'PHT (UTC+8)'}</span>
           </div>
+
+          {/* Notification Bell — action items count, click jumps to Stock Withdrawal tab */}
+          {issuanceQueueTotal > 0 && (
+            <button
+              onClick={() => setActiveTab('issuance')}
+              className="relative bg-amber-500 hover:bg-amber-400 text-black font-bold px-2.5 py-1.5 rounded-lg flex items-center gap-1 border border-amber-300 shadow transition"
+              title={`${issuanceQueueTotal} action item${issuanceQueueTotal !== 1 ? 's' : ''} pending issuance`}
+            >
+              <Bell size={14} className="animate-pulse" />
+              <span className="text-[11px]">{issuanceQueueTotal}</span>
+              <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-red-600 animate-ping" />
+            </button>
+          )}
 
           {isAdminPrivilege && (
             <div className="flex items-center gap-1.5 bg-[#38144c] px-2 py-1 rounded-xl border border-[#C8963E]/60 shadow-inner">

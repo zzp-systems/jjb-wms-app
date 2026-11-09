@@ -1,5 +1,8 @@
 // ============================================================================
-// JJB WMS — /api/sync  (Phase 1 dual-write projection)
+// JJB WMS — /api/sync  (Phase 1.5 dual-write projection + Phase 2.5 polling)
+//
+// POST  /api/sync          — inbound floor-app events (Shape A or B)
+// GET   /api/sync?since_id — outbound poll for pending requests (cross-device)
 //
 // Handles BOTH request shapes the app has been observed to use:
 //   Shape A (structured): { event_type, idempotency_key, payload: {...} }
@@ -12,7 +15,7 @@
 //   - Balance-affecting events append a reconciliation UPDATE to the batch.
 //   - Events with no handler are marked projected with no data change.
 //
-// Phase 1.5 change — DEDUCTION GATE:
+// Phase 1.5 — DEDUCTION GATE:
 //   WITHDRAWAL_SAVED / WITHDRAWAL_ISSUED are the ONLY events that decrement
 //   material_lots and write to withdrawals / withdrawal_items. They are
 //   emitted exclusively by Jade Q. Dela Cruz after she confirms physical
@@ -24,6 +27,13 @@
 //   auto-deduct stock from the self-service outlet portal. This is removed:
 //   portal submissions now POST WITHDRAWAL_REQUEST_SUBMITTED (no-op) and land
 //   in the pending_requests queue for Jade's review.
+//
+// Phase 2.5 — CROSS-DEVICE REQUEST POLLING:
+//   GET returns recent WITHDRAWAL_REQUEST_SUBMITTED / WITHDRAWAL_REQUEST_
+//   CANCELLED events from sync_events using a monotonic `id` cursor. This
+//   lets Jade's main app pick up kiosk submissions made from a DIFFERENT
+//   browser or device. localStorage + BroadcastChannel are same-origin same-
+//   browser only; D1 is the shared store that closes this gap.
 // ============================================================================
 
 const str     = v => (v === null || v === undefined ? null : String(v));
@@ -461,12 +471,12 @@ const HANDLERS = {
   'RECEIVING_SAVED':              projectReceiving,
   'RECEIVING_CREATED':            projectReceiving,
 
-  // Withdrawal (Jade-issued only — see comment below)
+  // Withdrawal (Jade-issued only — see comment block at top of file)
   'WITHDRAWAL_SAVED':             projectWithdrawal,
   'WITHDRAWAL_ISSUED':            projectWithdrawal,
   // REMOVED: 'MATERIAL_WITHDRAWAL' — was previously auto-deducted.
-  // Portal submissions are now routed through Jade's Pending Issuance
-  // queue and only reach sync as WITHDRAWAL_SAVED after she confirms.
+  // Portal submissions route through Jade's Pending Issuance queue and only
+  // reach sync as WITHDRAWAL_SAVED after she confirms physical handoff.
 
   // Adjustments
   'ADJUSTMENT_SAVED':             projectAdjustment,
@@ -502,33 +512,20 @@ const HANDLERS = {
   //   HEARTBEAT_POLL               — liveness signal, no data side-effect
   //   INVENTORY_CHECK              — read-only check, no data side-effect
   //   INVENTORY_ZERO_OUT           — mass reset; effect already baked into
-  //                                  current state via CSV import. Projecting
-  //                                  retroactively would double-zero lots.
+  //                                  current state via CSV import
   //   OPENING_BASELINE_CSV_IMPORT  — historical import event; effect already
-  //                                  baked into current state.
-  //   AUTOMATED_EOD_2345_DISPATCH  — cron liveness marker, no data side-effect
-  //
-  //   WITHDRAWAL_REQUEST_SUBMITTED — Phase 1.5: portal/direct-request
-  //                                  submissions land here for audit only.
-  //                                  They do NOT create withdrawal records
-  //                                  and do NOT decrement material_lots.
-  //                                  Stock only changes via WITHDRAWAL_SAVED
-  //                                  after Jade clicks "Issue".
-  //
-  //   MATERIAL_WITHDRAWAL          — legacy event from earlier portal build;
-  //                                  intentionally no longer projected to
-  //                                  prevent auto-deduction without Jade's
-  //                                  explicit approval. Old cached portals
-  //                                  will still no-op safely.
-  //
-  //   WITHDRAWAL_REQUEST_CANCELLED — audit-only; no stock effect.
+  //                                  baked into current state
+  //   AUTOMATED_EOD_2345_DISPATCH  — cron liveness marker, no side-effect
+  //   WITHDRAWAL_REQUEST_SUBMITTED — queue-only, no deduction
+  //   WITHDRAWAL_REQUEST_CANCELLED — audit-only, no deduction
+  //   MATERIAL_WITHDRAWAL          — legacy event, intentionally no longer
+  //                                  projected to prevent auto-deduction
 };
 
 const BALANCE_AFFECTING = new Set([
   'RECEIVING_SAVED','RECEIVING_CREATED',
   'WITHDRAWAL_SAVED','WITHDRAWAL_ISSUED',
   'ADJUSTMENT_SAVED',
-  // 'MATERIAL_WITHDRAWAL' removed — no auto-deduct path from portal.
 ]);
 
 function buildReconciliationStatement(env) {
@@ -640,6 +637,71 @@ export async function onRequestPost({ request, env }) {
     synced_to_gas: gasOk,
     is_test_data:  isTest,
     warning:       softWarning,
+  });
+}
+
+// ============================================================================
+// GET /api/sync?since_id=N
+//
+// Phase 2.5 — cross-device request polling.
+//
+// Returns recent WITHDRAWAL_REQUEST_SUBMITTED / WITHDRAWAL_REQUEST_CANCELLED
+// events from sync_events using a monotonic `id` cursor. Any browser tab or
+// device that polls gets the same data regardless of which kiosk created the
+// original event. This closes the localStorage + BroadcastChannel gap, which
+// only works same-origin same-browser.
+//
+// Response shape:
+//   { ok: true, since_id, server_max_id, count, events: [{id, key, type, payload, created_at}] }
+//
+// Client contract:
+//   - Store server_max_id in localStorage as JJB_WMS_REQUEST_POLL_ID
+//   - Next call passes it as since_id
+//   - Strictly monotonic `id` = no duplicates, no gaps, no timestamp parsing
+// ============================================================================
+export async function onRequestGet({ request, env }) {
+  if (!env.DB) {
+    return json({ ok: false, error: 'D1 not configured' }, 500);
+  }
+
+  const url = new URL(request.url);
+  const sinceId = Math.max(0, parseInt(url.searchParams.get('since_id') || '0', 10) || 0);
+
+  let results = [];
+  try {
+    const out = await env.DB.prepare(`
+      SELECT id, idempotency_key, event_type, payload, created_at
+      FROM sync_events
+      WHERE id > ?1
+        AND event_type IN ('WITHDRAWAL_REQUEST_SUBMITTED', 'WITHDRAWAL_REQUEST_CANCELLED')
+      ORDER BY id ASC
+      LIMIT 50
+    `).bind(sinceId).all();
+    results = out?.results || [];
+  } catch (e) {
+    return json({ ok: false, error: String(e.message || e) }, 500);
+  }
+
+  const serverMaxId = results.length > 0
+    ? results[results.length - 1].id
+    : sinceId;
+
+  return json({
+    ok: true,
+    since_id: sinceId,
+    server_max_id: serverMaxId,
+    count: results.length,
+    events: results.map((r) => {
+      let payload = {};
+      try { payload = JSON.parse(r.payload || '{}'); } catch (e) {}
+      return {
+        id: r.id,
+        key: r.idempotency_key,
+        type: r.event_type,
+        payload,
+        created_at: r.created_at
+      };
+    })
   });
 }
 
