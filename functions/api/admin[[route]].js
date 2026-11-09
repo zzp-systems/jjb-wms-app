@@ -1,6 +1,6 @@
 /**
  * ============================================================================
- * JJB WMS v4.6 — Phase 2 Backend Admin Panel API (functions/api/admin/[[route]].js)
+ * JJB WMS v4.6 — Phase 2 Backend Admin Panel API (functions/api/admin[[route]].js)
  * ============================================================================
  * Endpoints:
  *   GET    /api/admin/tables               -> All 24 tables + total/test row counts + balance variance check
@@ -18,16 +18,8 @@ import {
   verifyPbkdf2Secret,
   executePurgeTestDataBatch
 } from '../utils/adminDbUtils.js';
-/**
- * Metadata map for all 24 tables in schema.sql:
- *   pk: Primary key column name
- *   group: Catalog group (A = Master, B = Tx Header, C = Line Item, D = Audit/Log, E = Config)
- *   hasTestFlag: Whether the table carries the `is_test_data` column
- *   immutable: Whether single-row deletes/edits are blocked by design
- *   balanceAffecting: Whether deleting/restoring a row requires recalculating materials.current_balance
- */
+
 const TABLE_META = {
-  // Group A — Master / Reference
   users:                        { pk: 'id',          group: 'A', hasTestFlag: true,  immutable: false, searchCol: 'name' },
   roles:                        { pk: 'role_key',    group: 'A', hasTestFlag: false, immutable: true,  searchCol: 'role_name' },
   materials:                    { pk: 'code',        group: 'A', hasTestFlag: true,  immutable: false, searchCol: 'name' },
@@ -38,7 +30,6 @@ const TABLE_META = {
   outlets:                      { pk: 'id',          group: 'A', hasTestFlag: true,  immutable: false, searchCol: 'name' },
   suppliers:                    { pk: 'id',          group: 'A', hasTestFlag: true,  immutable: false, searchCol: 'name' },
 
-  // Group B — Transaction Headers
   receiving_reports:            { pk: 'report_no',   group: 'B', hasTestFlag: true,  immutable: false, searchCol: 'report_no', balanceAffecting: true },
   withdrawals:                  { pk: 'slip_no',     group: 'B', hasTestFlag: true,  immutable: false, searchCol: 'slip_no',   balanceAffecting: true },
   batch_orders:                 { pk: 'order_id',    group: 'B', hasTestFlag: true,  immutable: false, searchCol: 'order_id' },
@@ -47,18 +38,15 @@ const TABLE_META = {
   orders:                       { pk: 'order_id',    group: 'B', hasTestFlag: true,  immutable: false, searchCol: 'order_id' },
   specialty_recipe_proposals:   { pk: 'proposal_id', group: 'B', hasTestFlag: true,  immutable: false, searchCol: 'title' },
 
-  // Group C — Line Items / Junctions
   receiving_items:              { pk: 'id',          group: 'C', hasTestFlag: true,  immutable: false, searchCol: 'report_no', balanceAffecting: true },
   withdrawal_items:             { pk: 'id',          group: 'C', hasTestFlag: true,  immutable: false, searchCol: 'slip_no',   balanceAffecting: true },
   order_items:                  { pk: 'id',          group: 'C', hasTestFlag: true,  immutable: false, searchCol: 'order_id' },
   specialty_recipe_ingredients: { pk: 'id',          group: 'C', hasTestFlag: true,  immutable: false, searchCol: 'proposal_id' },
 
-  // Group D — Audit & Infrastructure Logs
   audit_log:                    { pk: 'id',          group: 'D', hasTestFlag: true,  immutable: false, searchCol: 'action' },
   sync_events:                  { pk: 'id',          group: 'D', hasTestFlag: false, immutable: false, searchCol: 'event_type' },
   admin_action_log:             { pk: 'id',          group: 'D', hasTestFlag: false, immutable: true,  searchCol: 'table_name' },
 
-  // Group E — System Config
   system_config:                { pk: 'config_key',  group: 'E', hasTestFlag: false, immutable: false, searchCol: 'config_key' }
 };
 
@@ -69,10 +57,6 @@ function json(body, status = 200) {
   });
 }
 
-/**
- * Verifies that the caller is an active admin user whose role has `can_delete_test_data = 1`
- * (SYSTEMS_DIRECTOR or ADMIN_COA).
- */
 async function authorizeAdminRequest(request, env, bodyPayload = null) {
   const adminUserId =
     request.headers.get('X-JJB-Admin-User') ||
@@ -142,17 +126,12 @@ export async function onRequest(context) {
     }
   }
 
-  // 1. Permission Gate: Every /api/admin/* route requires can_delete_test_data = 1
   const auth = await authorizeAdminRequest(request, env, parsedBody);
   if (!auth.ok) {
     return json({ ok: false, error: auth.error }, auth.status);
   }
 
   try {
-    // ========================================================================
-    // ROUTE 1: GET /api/admin/tables
-    // Returns row counts (total vs. test) across all 24 tables + reconciliation status
-    // ========================================================================
     if (method === 'GET' && routeParts.length === 1 && routeParts[0] === 'tables') {
       const tableNames = Object.keys(TABLE_META);
       const countStatements = tableNames.map((t) => {
@@ -173,7 +152,6 @@ export async function onRequest(context) {
         `);
       });
 
-      // Also check v_material_balance_reconciliation for any book-vs-lot variances
       countStatements.push(
         env.DB.prepare(`
           SELECT COUNT(*) AS unbalanced_count
@@ -182,7 +160,6 @@ export async function onRequest(context) {
         `)
       );
 
-      // Also check sync_events projection errors
       countStatements.push(
         env.DB.prepare(`
           SELECT COUNT(*) AS error_count
@@ -227,10 +204,6 @@ export async function onRequest(context) {
       });
     }
 
-    // ========================================================================
-    // ROUTE 2: GET /api/admin/audit
-    // Returns recent admin_action_log entries (with snapshot JSON for undo/restore)
-    // ========================================================================
     if (method === 'GET' && routeParts.length === 1 && routeParts[0] === 'audit') {
       const url = new URL(request.url);
       const limit = Math.min(200, Math.max(1, parseInt(url.searchParams.get('limit') || '100', 10)));
@@ -244,10 +217,6 @@ export async function onRequest(context) {
       return json({ ok: true, logs: results || [] });
     }
 
-    // ========================================================================
-    // ROUTE 3: GET /api/admin/:table
-    // Paginated table browser with ?filter=all|test|prod & search ?q=
-    // ========================================================================
     if (method === 'GET' && routeParts.length === 1) {
       const tableName = routeParts[0];
       if (!ALLOWED_ADMIN_TABLES.has(tableName) || !TABLE_META[tableName]) {
@@ -298,10 +267,6 @@ export async function onRequest(context) {
       });
     }
 
-    // ========================================================================
-    // ROUTE 4: DELETE /api/admin/:table/:id
-    // Single-row delete with pre-delete JSON snapshot saved to admin_action_log
-    // ========================================================================
     if (method === 'DELETE' && routeParts.length === 2) {
       const [tableName, rawId] = routeParts;
       const recordId = decodeURIComponent(rawId);
@@ -326,7 +291,6 @@ export async function onRequest(context) {
       const reason = parsedBody?.reason || `Single-row delete from Admin Panel by ${auth.user.name}`;
       const stmts = [];
 
-      // If deleting a receiving_report or withdrawal header, also snapshot its child items
       let childSnapshot = null;
       if (tableName === 'receiving_reports') {
         const children = await env.DB.prepare(`SELECT * FROM receiving_items WHERE report_no = ?1`).bind(recordId).all();
@@ -346,7 +310,6 @@ export async function onRequest(context) {
         children: childSnapshot
       });
 
-      // 1. Write snapshot to admin_action_log first
       stmts.push(
         env.DB.prepare(`
           INSERT INTO admin_action_log (admin_user_id, action, table_name, record_id, record_snapshot, reason)
@@ -354,12 +317,10 @@ export async function onRequest(context) {
         `).bind(auth.user.id, tableName, String(recordId), snapshotPayload, reason)
       );
 
-      // 2. Delete the target row
       stmts.push(
         env.DB.prepare(`DELETE FROM ${tableName} WHERE ${meta.pk} = ?1`).bind(recordId)
       );
 
-      // 3. Reconcile materials.current_balance if a lot/transaction table was modified
       if (meta.balanceAffecting) {
         stmts.push(buildReconciliationStatement(env));
       }
@@ -373,10 +334,6 @@ export async function onRequest(context) {
       });
     }
 
-    // ========================================================================
-    // ROUTE 5: POST /api/admin/toggle-test-flag
-    // Toggles is_test_data (0 <-> 1) on a specific row (and child items if header)
-    // ========================================================================
     if (method === 'POST' && routeParts.length === 1 && routeParts[0] === 'toggle-test-flag') {
       const { table: tableName, id: recordId, isTestData } = parsedBody || {};
       if (!ALLOWED_ADMIN_TABLES.has(tableName) || !TABLE_META[tableName]?.hasTestFlag) {
@@ -391,7 +348,6 @@ export async function onRequest(context) {
         ).bind(newFlag, recordId)
       ];
 
-      // Cascade test flag to child line items so they stay in sync
       if (tableName === 'receiving_reports') {
         stmts.push(env.DB.prepare(`UPDATE receiving_items SET is_test_data = ?1 WHERE report_no = ?2`).bind(newFlag, recordId));
       } else if (tableName === 'withdrawals') {
@@ -419,10 +375,6 @@ export async function onRequest(context) {
       return json({ ok: true, table: tableName, id: recordId, is_test_data: newFlag });
     }
 
-    // ========================================================================
-    // ROUTE 6: POST /api/admin/purge-test-data
-    // Verifies Admin password/PIN via WebCrypto PBKDF2, then runs 18-step purge
-    // ========================================================================
     if (method === 'POST' && routeParts.length === 1 && routeParts[0] === 'purge-test-data') {
       const password = String(parsedBody?.password || '').trim();
       const reason = String(parsedBody?.reason || 'Bulk Purge of Test Data (is_test_data = 1)').trim();
@@ -454,10 +406,6 @@ export async function onRequest(context) {
       });
     }
 
-    // ========================================================================
-    // ROUTE 7: POST /api/admin/restore/:actionId
-    // Re-inserts a deleted row (and any child line items) from admin_action_log
-    // ========================================================================
     if (method === 'POST' && routeParts.length === 2 && routeParts[0] === 'restore') {
       const actionId = parseInt(routeParts[1], 10);
       const logEntry = await env.DB.prepare(
@@ -486,7 +434,6 @@ export async function onRequest(context) {
         ).bind(...values)
       ];
 
-      // Restore child line items if present
       if (parsedSnap.children && ALLOWED_ADMIN_TABLES.has(parsedSnap.children.childTable)) {
         const cTable = parsedSnap.children.childTable;
         for (const cRow of parsedSnap.children.rows || []) {
