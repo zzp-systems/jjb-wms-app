@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Header from './components/Header';
 import ExecutiveDashboard from './components/ExecutiveDashboard';
 import ReceivingModule from './components/ReceivingModule';
@@ -28,50 +28,38 @@ import {
 } from './data/initialData';
 
 import { deductFefoLots, calculateRecipeIngredients } from './utils/wmsLogic';
-import { CheckCircle2, AlertTriangle, RefreshCw } from 'lucide-react';
+import { CheckCircle2, Bell } from 'lucide-react';
 
 export const STORAGE_KEY = 'JJB_WMS_LIVE_V4_6_STATE';
 export const WORKER_SYNC_URL = '/api/sync';
-export const GAS_WEB_APP_URL =
-  'https://script.google.com/macros/s/AKfycbwBll5ZKuiBO0wX9WSXGRd-Tua4QpxbfKAcrnWhVmdkjkU_3mnwgI7bX-iiRgjHlkYa/exec';
-
-const SANDBOX_STORAGE_KEY = 'JJB_WMS_SANDBOX_MODE';
-const REQUEST_POLL_STORAGE_KEY = 'JJB_WMS_REQUEST_POLL_ID';
+export const GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbwBll5ZKuiBO0wX9WSXGRd-Tua4QpxbfKAcrnWhVmdkjkU_3mnwgI7bX-iiRgjHlkYa/exec';
 
 // ============================================================================
-// Phase 1.5 — Resolve users.id FK from display name or user object.
-// Returns null when no match — the four FK columns this feeds
-// (received_by, issued_by, adjusted_by, filed_by) are nullable by schema
-// design, so NULL is safe. Do NOT fall back to a hardcoded id like 'jade',
-// because that would attribute the action to the wrong person if the login
-// session is Grace, Mariejohn, Zaphyr, etc.
+// Helper: Resolve D1 users.id FK from display name or user object
 // ============================================================================
 const resolveUserId = (nameOrId, authUserObj = null) => {
   if (authUserObj?.id) {
-    const byAuth = AUTH_USERS.find(
-      (u) => u.id === authUserObj.id || u.username === authUserObj.username
-    );
+    const byAuth = AUTH_USERS.find((u) => u.id === authUserObj.id || u.username === authUserObj.username);
     if (byAuth?.id) return byAuth.id;
   }
   const raw = String(nameOrId || '').trim();
-  if (!raw) return null;
+  if (!raw) return 'jade';
   const matched = AUTH_USERS.find(
     (u) =>
       u.id === raw ||
       u.username === raw ||
-      u.name.toLowerCase() === raw.toLowerCase()
+      u.name.toLowerCase() === raw.toLowerCase() ||
+      raw.toLowerCase().includes(u.name.split(' ')[0].toLowerCase())
   );
-  return matched?.id || null;
+  return matched?.id || 'jade';
 };
 
 // ============================================================================
-// Phase 1.5 — Withdrawal item normalizer.
-// Ensures every withdrawal line item posted to /api/sync carries the six
-// fields sync.js projectWithdrawal expects. Resolves FEFO lots on the fly.
+// Helper: Withdrawal item normalizer
 // ============================================================================
 const buildNormalizedWithdrawalItems = (rawItems, materialsList) => {
   return (rawItems || []).map((item) => {
-    const code = item.materialCode || item.material_code || item.code || item.itemCode;
+    const code = item.materialCode || item.material_code || item.itemCode || item.code;
     const mat = (materialsList || []).find((m) => m.code === code) || {};
     const qtyIssued = Number(
       item.qtyIssuedSec ?? item.qty_issued_sec ?? item.qtyRequestedSec ?? item.requestedQtySec ?? item.qty ?? 0
@@ -99,7 +87,7 @@ const buildNormalizedWithdrawalItems = (rawItems, materialsList) => {
     const resolvedLotNo =
       item.lotNumber && item.lotNumber !== 'FEFO-AUTO' && item.lotNumber !== 'DEFAULT-LOT'
         ? item.lotNumber
-        : activeLots[0]?.lotNumber || `OPEN-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${code}`;
+        : activeLots[0]?.lotNumber || `OPEN-20261108-${code}`;
 
     return {
       materialCode: code,
@@ -136,15 +124,18 @@ export default function App() {
             const existingList = JSON.parse(existingRaw);
             if (Array.isArray(existingList)) {
               const idField =
-                key === 'batch_orders' ? 'orderId' :
-                key === 'withdrawals' ? 'slipNo' : 'requestId';
+                key === 'batch_orders'
+                  ? 'orderId'
+                  : key === 'pending_requests'
+                  ? 'requestId'
+                  : 'slipNo';
               const map = new Map();
-              existingList.forEach(item => {
-                const id = item[idField] || item.withdrawalNo;
+              existingList.forEach((item) => {
+                const id = item[idField] || item.withdrawalNo || item.orderId;
                 if (id) map.set(id, item);
               });
-              value.forEach(item => {
-                const id = item[idField] || item.withdrawalNo;
+              value.forEach((item) => {
+                const id = item[idField] || item.withdrawalNo || item.orderId;
                 if (id) map.set(id, item);
               });
               const merged = Array.from(map.values());
@@ -156,7 +147,7 @@ export default function App() {
       }
       localStorage.setItem(fullKey, JSON.stringify(value));
     } catch (e) {
-      console.error("Storage error:", e);
+      console.error('Storage error:', e);
     }
   };
 
@@ -164,11 +155,11 @@ export default function App() {
   const [inventory, setInventory] = useState(() => getSaved('inventory', MASTER_MATERIALS));
   const [receivingReports, setReceivingReports] = useState(() => getSaved('receiving', INITIAL_RECEIVING_REPORTS));
   const [withdrawals, setWithdrawals] = useState(() => getSaved('withdrawals', INITIAL_WITHDRAWALS));
+  const [pendingRequests, setPendingRequests] = useState(() => getSaved('pending_requests', []));
   const [batchOrders, setBatchOrders] = useState(() => getSaved('batch_orders', INITIAL_BATCHING_ORDERS));
   const [adjustments, setAdjustments] = useState(() => getSaved('adjustments', INITIAL_ADJUSTMENTS));
   const [quarantineList, setQuarantineList] = useState(() => getSaved('quarantine', INITIAL_QUARANTINE));
   const [auditLogs, setAuditLogs] = useState(() => getSaved('audit_logs', INITIAL_AUDIT_LOGS));
-  const [pendingRequests, setPendingRequests] = useState(() => getSaved('pending_requests', []));
 
   // Operational & Authentication State
   const [authUser, setAuthUser] = useState(() => {
@@ -185,8 +176,24 @@ export default function App() {
       return false;
     }
   });
-  const [currentRole, setCurrentRole] = useState(() => authUser?.name || "Jade Q. Dela Cruz");
+  const [currentRole, setCurrentRole] = useState(() => authUser?.name || 'Jade Q. Dela Cruz');
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+  const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
+  const [isTestMode, setIsTestMode] = useState(() => {
+    try {
+      return sessionStorage.getItem('JJB_WMS_SANDBOX_MODE') === '1';
+    } catch {
+      return false;
+    }
+  });
+
+  const toggleTestMode = (val) => {
+    setIsTestMode(val);
+    try {
+      sessionStorage.setItem('JJB_WMS_SANDBOX_MODE', val ? '1' : '0');
+    } catch {}
+  };
+
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isMobileMode, setIsMobileMode] = useState(false);
   const [isOffline, setIsOffline] = useState(false);
@@ -196,30 +203,26 @@ export default function App() {
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [recipes, setRecipes] = useState(() => getAllMasterRecipes());
 
-  // Phase 2 — Admin modal + Sandbox Mode state
-  const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
-  const [isTestMode, setIsTestMode] = useState(() => {
-    try {
-      return localStorage.getItem(SANDBOX_STORAGE_KEY) === 'true';
-    } catch (e) {
-      return false;
-    }
-  });
+  // Cross-Device Notification Bell State
+  const [unreadNotifications, setUnreadNotifications] = useState([]);
+  const lastSeenSyncIdRef = useRef(
+    Number(localStorage.getItem(`${STORAGE_KEY}_last_sync_id`) || 0)
+  );
+  const initialPollDoneRef = useRef(false);
 
-  // Phase 2 — Persist sandbox mode so page refresh keeps the current setting
-  useEffect(() => {
-    try {
-      localStorage.setItem(SANDBOX_STORAGE_KEY, String(isTestMode));
-    } catch (e) {}
-  }, [isTestMode]);
+  const showToast = useCallback((message) => {
+    setToastMessage(message);
+    setTimeout(() => setToastMessage(null), 4500);
+  }, []);
 
-  // Unified Edge Sync Dispatcher — Phase 2 injects is_test_data into every payload
-  // so sync.js asTest() correctly tags rows when Sandbox Mode is active.
-  const postSyncEvent = (eventType, idempotencyKey, payloadData = {}) => {
+  // ============================================================================
+  // Unified Edge Sync Dispatcher
+  // ============================================================================
+  const postSyncEvent = useCallback((eventType, idempotencyKey, payloadData = {}) => {
     if (isOffline) return;
     const enrichedPayload = {
       ...payloadData,
-      is_test_data: isTestMode ? 1 : 0
+      is_test_data: payloadData.is_test_data ?? (isTestMode ? 1 : 0)
     };
     fetch(WORKER_SYNC_URL, {
       method: 'POST',
@@ -233,47 +236,212 @@ export default function App() {
         ...enrichedPayload
       })
     }).catch((err) => console.warn('Background sync error:', err));
-  };
+  }, [isOffline, isTestMode]);
 
-  const showToast = (message) => {
-    setToastMessage(message);
-    setTimeout(() => setToastMessage(null), 4000);
-  };
+  // ============================================================================
+  // Phase 2.5 — Cross-Device D1 Poller
+  // Pulls mobile /outlet-portal.html submissions from Cloudflare D1 every 12s
+  // and merges them into React state + triggers desktop notification bell.
+  // ============================================================================
+  const pollCrossDeviceEvents = useCallback(async () => {
+    if (isOffline) return;
+    try {
+      const sinceId = lastSeenSyncIdRef.current || 0;
+      const res = await fetch(`${WORKER_SYNC_URL}?since_id=${sinceId}`, {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' }
+      });
+      const text = await res.text();
+      if (!res.ok || text.trim().startsWith('<')) return;
 
-  const recordAudit = (action, details) => {
-    const newLog = {
-      id: Date.now(),
-      timestamp: new Date().toISOString().slice(0, 19).replace('T', ' '),
-      actor: currentRole,
-      role: currentRole.includes('Jade') ? 'Warehouse Supervisor' :
-            currentRole.includes('Romeo') ? 'Ingredient Batching Preparer' :
-            currentRole.includes('Mariejohn') ? 'Inventory & Purchasing Manager' :
-            currentRole.includes('Grace') ? 'FSCO & QA Director' :
-            currentRole.includes('Zaphyr') ? 'Systems Director & Architect' : 'Chief Operating Authority',
-      action,
-      details
-    };
-    setAuditLogs(prev => [newLog, ...prev]);
+      const data = JSON.parse(text);
+      const incomingEvents = Array.isArray(data.events) ? data.events : [];
+      const remoteBatchOrders = Array.isArray(data.batch_orders) ? data.batch_orders : [];
 
-    postSyncEvent(
-      'AUDIT_LOG',
-      `AUDIT_${newLog.id}_${Math.random().toString(36).substring(2, 7)}`,
-      {
-        action,
-        actor: newLog.actor,
-        role: newLog.role,
-        details,
-        timestamp: newLog.timestamp
+      // 1. Hydrate any batch_orders present in D1 table that aren't in local state yet
+      if (remoteBatchOrders.length > 0) {
+        setBatchOrders((prev) => {
+          const map = new Map(prev.map((o) => [o.orderId, o]));
+          let changed = false;
+          remoteBatchOrders.forEach((ro) => {
+            const oid = ro.order_id || ro.orderId;
+            if (!oid) return;
+            if (!map.has(oid)) {
+              changed = true;
+              map.set(oid, {
+                orderId: oid,
+                outletName: ro.outlet_name || ro.outletName || 'Outlet Portal',
+                recipeSku: ro.recipe_sku || ro.recipeSku || 'BRD-PAN-001',
+                recipeName: ro.recipe_name_snapshot || ro.recipeName || 'Commercial Formulation',
+                requestedQtyPcs: Number(ro.requested_qty_pcs ?? ro.requestedQtyPcs ?? 0),
+                batchMultiplier: Number(ro.batch_multiplier ?? ro.batchMultiplier ?? 1),
+                status: ro.status || 'PENDING_BATCHING',
+                bulkRequestStatus: ro.bulk_request_status || null,
+                bulkRequisitionSlipNo: ro.bulk_requisition_slip_no || null,
+                bulkRequestedAt: ro.bulk_requested_at || null,
+                bulkApprovedAt: ro.bulk_approved_at || null,
+                bulkApprovedBy: ro.bulk_approved_by || null,
+                batchTagId: ro.batch_tag_id || null,
+                actualBatchedKg: ro.actual_batched_kg ? Number(ro.actual_batched_kg) : undefined,
+                actualBatchedUnits: ro.actual_batched_units ? Number(ro.actual_batched_units) : undefined,
+                batchedAt: ro.batched_at || null,
+                batchedBy: ro.batched_by || null,
+                releasedAt: ro.released_at || null,
+                releasedTo: ro.released_to || null
+              });
+            }
+          });
+          return changed ? Array.from(map.values()) : prev;
+        });
       }
-    );
-  };
+
+      if (incomingEvents.length === 0) {
+        initialPollDoneRef.current = true;
+        return;
+      }
+
+      const newNotifs = [];
+
+      incomingEvents.forEach((ev) => {
+        const evType = String(ev.event_type || '').toUpperCase();
+        const p = ev.payload || {};
+
+        // A. Mobile Material / Mess Hall Request -> Queue in Jade's Pending Requests
+        if (evType === 'WITHDRAWAL_REQUEST_SUBMITTED') {
+          const reqId = p.requestId || p.withdrawalNo || p.slipNo;
+          if (!reqId) return;
+
+          setPendingRequests((prev) => {
+            if (prev.some((r) => (r.requestId || r.withdrawalNo) === reqId)) return prev;
+            const newReq = {
+              requestId: reqId,
+              withdrawalNo: p.withdrawalNo || reqId,
+              withdrawalDate: p.withdrawalDate || p.date || new Date().toISOString().slice(0, 10),
+              submittedAt: p.submittedAt || ev.created_at || new Date().toISOString(),
+              requestingLine: p.requestingLine || p.requestingEntity || 'Outlet Portal',
+              requisitionedBy: p.requisitionedBy || p.requestedBy || 'Outlet Staff',
+              department: p.department || 'Production Floor',
+              purpose: p.purpose || 'Material Requisition',
+              notes: p.notes || '',
+              totalCost: Number(p.totalCost || 0),
+              status: p.status || 'PENDING_ISSUANCE',
+              items: Array.isArray(p.items) ? p.items : []
+            };
+            if (initialPollDoneRef.current) {
+              newNotifs.push({
+                id: `NOTIF_${reqId}`,
+                type: 'MATERIAL_REQUEST',
+                title: `New Material Request (${reqId})`,
+                subtitle: `${newReq.requestingLine} · By ${newReq.requisitionedBy}`,
+                targetTab: 'issuance',
+                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+              });
+            }
+            return [newReq, ...prev];
+          });
+        }
+
+        // B. Cancelled Request or Issued Withdrawal -> Remove from Pending Queue
+        if (evType === 'WITHDRAWAL_REQUEST_CANCELLED' || evType === 'WITHDRAWAL_SAVED') {
+          const targetId = p.requestId || p.sourceRequestId || p.withdrawalNo || p.slipNo;
+          if (targetId) {
+            setPendingRequests((prev) =>
+              prev.filter((r) => r.requestId !== targetId && r.withdrawalNo !== targetId)
+            );
+          }
+        }
+
+        // C. Mobile Batch Order (Form-ORD-001) -> Queue in Romeo's Workbench
+        if (evType === 'BATCH_ORDER_SAVED' || evType === 'OUTLET_BATCH_ORDER') {
+          const orderId = p.orderId || p.order_id;
+          if (!orderId) return;
+
+          setBatchOrders((prev) => {
+            if (prev.some((o) => o.orderId === orderId)) return prev;
+            const newOrder = {
+              orderId,
+              outletName: p.outletName || p.outlet_name || 'Retail Outlet',
+              recipeSku: p.recipeSku || p.recipe_sku || 'BRD-PAN-001',
+              recipeName: p.recipeName || p.recipe_name || 'Commercial Batch',
+              requestedQtyPcs: Number(p.requestedQtyPcs || p.requested_qty_pcs || 0),
+              batchMultiplier: Number(p.batchMultiplier || p.batch_multiplier || 1),
+              targetDelivery: p.targetDelivery || '05:30 AM Pull-Out',
+              requisitionedBy: p.requisitionedBy || 'Outlet Staff',
+              status: p.status || 'PENDING_BATCHING'
+            };
+            if (initialPollDoneRef.current) {
+              newNotifs.push({
+                id: `NOTIF_${orderId}`,
+                type: 'BATCH_ORDER',
+                title: `New Batch Order (${orderId})`,
+                subtitle: `${newOrder.outletName}: ${newOrder.requestedQtyPcs} pcs ${newOrder.recipeName}`,
+                targetTab: 'batching',
+                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+              });
+            }
+            return [newOrder, ...prev];
+          });
+        }
+
+        // D. Mobile Specialty R&D Proposal (Form-RND-001) -> Save to localStorage & notify Romeo
+        if (evType === 'SPECIALTY_PROPOSAL_SAVED' || evType === 'SPECIALTY_PROPOSAL_CREATED') {
+          const propId = p.proposalId || p.proposal_id;
+          if (!propId) return;
+          try {
+            const raw = localStorage.getItem('JJB_WMS_LIVE_V4_6_SPECIALTY_RECIPES');
+            const list = raw ? JSON.parse(raw) : [];
+            if (!list.some((x) => x.proposalId === propId)) {
+              list.unshift(p);
+              localStorage.setItem('JJB_WMS_LIVE_V4_6_SPECIALTY_RECIPES', JSON.stringify(list));
+              setRecipes(getAllMasterRecipes());
+              if (initialPollDoneRef.current) {
+                newNotifs.push({
+                  id: `NOTIF_${propId}`,
+                  type: 'SPECIALTY_PROPOSAL',
+                  title: `New R&D Recipe Proposal (${propId})`,
+                  subtitle: `${p.title || p.name} · By ${p.bakerName || 'Baker'}`,
+                  targetTab: 'batching',
+                  timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                });
+              }
+            }
+          } catch {}
+        }
+      });
+
+      if (data.last_event_id && Number(data.last_event_id) > lastSeenSyncIdRef.current) {
+        lastSeenSyncIdRef.current = Number(data.last_event_id);
+        try {
+          localStorage.setItem(`${STORAGE_KEY}_last_sync_id`, String(data.last_event_id));
+        } catch {}
+      }
+
+      if (newNotifs.length > 0) {
+        setUnreadNotifications((prev) => [...newNotifs, ...prev].slice(0, 25));
+        showToast(`🔔 ${newNotifs[0].title} — ${newNotifs[0].subtitle}`);
+      }
+
+      initialPollDoneRef.current = true;
+    } catch (err) {
+      // Silent retry on next interval
+    }
+  }, [isOffline, showToast]);
+
+  // Poll D1 every 12 seconds + immediately on mount & window focus
+  useEffect(() => {
+    pollCrossDeviceEvents();
+    const interval = setInterval(() => {
+      if (!document.hidden) pollCrossDeviceEvents();
+    }, 12000);
+    return () => clearInterval(interval);
+  }, [pollCrossDeviceEvents]);
 
   // Specialty Recipe Approval Handler
   const handleApproveSpecialtyRecipe = (proposalId) => {
     try {
       const raw = localStorage.getItem('JJB_WMS_LIVE_V4_6_SPECIALTY_RECIPES');
       let proposals = raw ? JSON.parse(raw) : [];
-      const proposal = proposals.find(p => p.proposalId === proposalId);
+      const proposal = proposals.find((p) => p.proposalId === proposalId);
       if (proposal) {
         proposal.status = 'APPROVED';
         proposal.approvedAt = new Date().toISOString();
@@ -284,7 +452,7 @@ export default function App() {
         setRecipes(updatedRecipes);
 
         recordAudit(
-          "SPECIALTY_RECIPE_APPROVED",
+          'SPECIALTY_RECIPE_APPROVED',
           `Romeo Malusay / ${currentRole} approved specialty formulation "${proposal.name}" into Master Formulations register.`
         );
         showToast(`Specialty recipe "${proposal.title}" approved and active in Master Formulations!`);
@@ -309,7 +477,7 @@ export default function App() {
 
   const handleRoleChange = (newRoleName) => {
     setCurrentRole(newRoleName);
-    const matched = AUTH_USERS.find(u => u.name === newRoleName);
+    const matched = AUTH_USERS.find((u) => u.name === newRoleName);
     if (matched) setAuthUser(matched);
   };
 
@@ -322,9 +490,8 @@ export default function App() {
       localStorage.setItem('JJB_WMS_AUTH_USER', JSON.stringify(user));
     } catch (e) {}
     setIsLoginModalOpen(false);
-    setIsTestMode(false);
     recordAudit(
-      "STAFF_LOGIN_AUTHENTICATED",
+      'STAFF_LOGIN_AUTHENTICATED',
       `${user.name} (${user.title}) successfully authenticated session at ${user.station}.`
     );
     showToast(`Welcome back, ${user.name}! Terminal authenticated.`);
@@ -335,21 +502,20 @@ export default function App() {
       sessionStorage.removeItem('JJB_WMS_AUTH_SESSION');
     } catch (e) {}
     setIsAuthenticated(false);
-    setIsTestMode(false);
-    showToast("Terminal session locked. Please sign in to proceed.");
+    showToast('Terminal session locked. Please sign in to proceed.');
   };
 
   // Sync state to LocalStorage
   useEffect(() => { saveToStorage('inventory', inventory); }, [inventory]);
   useEffect(() => { saveToStorage('receiving', receivingReports); }, [receivingReports]);
   useEffect(() => { saveToStorage('withdrawals', withdrawals); }, [withdrawals]);
+  useEffect(() => { saveToStorage('pending_requests', pendingRequests); }, [pendingRequests]);
   useEffect(() => { saveToStorage('batch_orders', batchOrders); }, [batchOrders]);
   useEffect(() => { saveToStorage('adjustments', adjustments); }, [adjustments]);
   useEffect(() => { saveToStorage('quarantine', quarantineList); }, [quarantineList]);
   useEffect(() => { saveToStorage('audit_logs', auditLogs); }, [auditLogs]);
-  useEffect(() => { saveToStorage('pending_requests', pendingRequests); }, [pendingRequests]);
 
-  // Real-Time Cross-Tab & Floor Kiosk Synchronization (same-browser only)
+  // Real-Time Cross-Tab & Floor Kiosk Synchronization
   useEffect(() => {
     const reloadExternalData = () => {
       try {
@@ -359,24 +525,25 @@ export default function App() {
         const rawWithdrawals = localStorage.getItem(`${STORAGE_KEY}_withdrawals`);
         if (rawWithdrawals) setWithdrawals(JSON.parse(rawWithdrawals));
 
-        const rawInv = localStorage.getItem(`${STORAGE_KEY}_inventory`);
-        if (rawInv) setInventory(JSON.parse(rawInv));
-
         const rawPending = localStorage.getItem(`${STORAGE_KEY}_pending_requests`);
         if (rawPending) setPendingRequests(JSON.parse(rawPending));
 
+        const rawInv = localStorage.getItem(`${STORAGE_KEY}_inventory`);
+        if (rawInv) setInventory(JSON.parse(rawInv));
+
         setRecipes(getAllMasterRecipes());
       } catch (err) {
-        console.warn("Real-time sync parse error:", err);
+        console.warn('Real-time sync parse error:', err);
       }
+      pollCrossDeviceEvents();
     };
 
     const handleStorageEvent = (e) => {
       if (
         e.key === `${STORAGE_KEY}_batch_orders` ||
         e.key === `${STORAGE_KEY}_withdrawals` ||
-        e.key === `${STORAGE_KEY}_inventory` ||
         e.key === `${STORAGE_KEY}_pending_requests` ||
+        e.key === `${STORAGE_KEY}_inventory` ||
         e.key === 'JJB_WMS_LIVE_V4_6_SPECIALTY_RECIPES'
       ) {
         reloadExternalData();
@@ -410,123 +577,35 @@ export default function App() {
       document.removeEventListener('visibilitychange', handleVisibility);
       if (bc) bc.close();
     };
-  }, []);
+  }, [pollCrossDeviceEvents, showToast]);
 
-  // 5-MINUTE SYNC POLLING LOOP (GET health-check to preserve D1 write quota)
-  useEffect(() => {
-    if (isOffline) return;
-    const interval = setInterval(async () => {
-      if (document.hidden) return;
-      try { await fetch(WORKER_SYNC_URL, { method: 'GET' }); } catch (err) {}
-    }, 5 * 60 * 1000);
-    return () => clearInterval(interval);
-  }, [isOffline]);
+  const recordAudit = (action, details) => {
+    const newLog = {
+      id: Date.now(),
+      timestamp: new Date().toISOString().slice(0, 19).replace('T', ' '),
+      actor: currentRole,
+      role: currentRole.includes('Jade') ? 'Warehouse Supervisor' :
+            currentRole.includes('Romeo') ? 'Ingredient Batching Preparer' :
+            currentRole.includes('Mariejohn') ? 'Inventory & Purchasing Manager' :
+            currentRole.includes('Grace') ? 'FSCO & QA Director' :
+            currentRole.includes('Zaphyr') ? 'Systems Director & Architect' : 'Chief Operating Authority',
+      action,
+      details
+    };
+    setAuditLogs((prev) => [newLog, ...prev]);
 
-  // ============================================================================
-  // Phase 2.5 — Cross-device portal request polling (every 45 seconds).
-  //
-  // Polls GET /api/sync?since_id=N. When a new WITHDRAWAL_REQUEST_SUBMITTED
-  // event arrives from any kiosk (same browser OR a different device — doesn't
-  // matter, D1 is shared), merges it into pendingRequests state and shows a
-  // toast. Dedupe by requestId handles the case where the same-browser storage
-  // event already added it.
-  // ============================================================================
-  useEffect(() => {
-    if (isOffline) return;
-
-    let lastId = 0;
-    try {
-      lastId = parseInt(localStorage.getItem(REQUEST_POLL_STORAGE_KEY) || '0', 10) || 0;
-    } catch (e) {
-      lastId = 0;
-    }
-
-    let cancelled = false;
-
-    const poll = async () => {
-      if (document.hidden || cancelled) return;
-      try {
-        const res = await fetch(`${WORKER_SYNC_URL}?since_id=${lastId}`);
-        const data = await res.json();
-        if (!data.ok || cancelled) return;
-
-        if (data.server_max_id > lastId) {
-          lastId = data.server_max_id;
-          try {
-            localStorage.setItem(REQUEST_POLL_STORAGE_KEY, String(lastId));
-          } catch (e) {}
-        }
-
-        if (data.events && data.events.length > 0) {
-          data.events.forEach((ev) => {
-            if (ev.type === 'WITHDRAWAL_REQUEST_SUBMITTED') {
-              const p = ev.payload || {};
-              if (!p.requestId) return;
-
-              setPendingRequests((prev) => {
-                if (prev.some((r) => r.requestId === p.requestId)) return prev;
-
-                const newReq = {
-                  requestId: p.requestId,
-                  requestSlipNo: p.requestSlipNo || `WS-REQ-${p.requestId}`,
-                  sourceChannel: p.sourceChannel || 'PORTAL',
-                  dateRequested: p.date || new Date().toISOString().slice(0, 10),
-                  timeRequested: p.time || '',
-                  neededByDate: p.neededByDate || p.date,
-                  requestingEntity: p.requestingEntity || 'Unknown Requester',
-                  department: p.department || 'Production Floor',
-                  purpose: p.purpose || 'Material Requisition',
-                  requestedBy: p.requestedBy || 'Unknown',
-                  enteredBy: p.enteredBy,
-                  notes: p.notes || '',
-                  items: Array.isArray(p.items) ? p.items : [],
-                  totalEstimatedCost: Number(p.totalEstimatedCost) || 0,
-                  status: 'PENDING_ISSUANCE',
-                  createdAt: ev.created_at,
-                  issuedAt: null,
-                  issuedBy: null,
-                  withdrawalSlipNo: null,
-                  _syncedFromD1: true
-                };
-
-                showToast(
-                  `📩 New request from ${p.requestingEntity} (${p.itemCount || newReq.items.length} items)`
-                );
-                return [newReq, ...prev];
-              });
-            } else if (ev.type === 'WITHDRAWAL_REQUEST_CANCELLED') {
-              const p = ev.payload || {};
-              if (!p.requestId) return;
-              setPendingRequests((prev) =>
-                prev.map((r) =>
-                  r.requestId === p.requestId && r.status === 'PENDING_ISSUANCE'
-                    ? {
-                        ...r,
-                        status: 'CANCELLED',
-                        cancelledAt: ev.created_at,
-                        cancelledBy: p.cancelledBy,
-                        cancellationReason: p.cancellationReason
-                      }
-                    : r
-                )
-              );
-            }
-          });
-        }
-      } catch (e) {
-        // Silent — network errors during polling are expected
+    postSyncEvent(
+      'AUDIT_LOG',
+      `AUDIT_${newLog.id}_${Math.random().toString(36).substring(2, 7)}`,
+      {
+        action,
+        actor: newLog.actor,
+        role: newLog.role,
+        details,
+        timestamp: newLog.timestamp
       }
-    };
-
-    const initialTimer = setTimeout(poll, 3000);
-    const interval = setInterval(poll, 45 * 1000);
-
-    return () => {
-      cancelled = true;
-      clearTimeout(initialTimer);
-      clearInterval(interval);
-    };
-  }, [isOffline]);
+    );
+  };
 
   // 23:45 PHT NIGHTLY EOD WATCHER
   useEffect(() => {
@@ -540,42 +619,47 @@ export default function App() {
         if (hours === 23 && minutes >= 45 && lastEodTriggerDate !== todayStr) {
           setLastEodTriggerDate(todayStr);
           recordAudit(
-            "AUTOMATED_EOD_2345_WATCHER_TRIGGER",
+            'AUTOMATED_EOD_2345_WATCHER_TRIGGER',
             `23:45 PHT cutoff reached. Automated nightly operations dossier queued for ${EOD_EMAIL_RECIPIENTS.join(', ')}`
           );
-          showToast("23:45 PHT Nightly EOD Watcher: Ledger balanced & queued for distribution.");
+          showToast('23:45 PHT Nightly EOD Watcher: Ledger balanced & queued for distribution.');
         }
       } catch (e) {}
     };
+
     const timer = setInterval(checkEodTime, 30000);
     return () => clearInterval(timer);
   }, [lastEodTriggerDate]);
 
-  // ============================================================================
-  // WORKFLOW 1 — Inbound Receiving Save
-  // ============================================================================
+  // WORKFLOW 1: Inbound Receiving Save
   const handleSaveReceiving = (newReport) => {
-    setReceivingReports(prev => [newReport, ...prev]);
+    setReceivingReports((prev) => [newReport, ...prev]);
 
-    setInventory(prevInv => prevInv.map(mat => {
-      const receivedItem = newReport.items.find(it => it.materialCode === mat.code);
-      if (!receivedItem) return mat;
-      const addedSec = receivedItem.secondaryQty || 0;
-      const newLot = {
-        lotNumber: receivedItem.lotNumber,
-        expiryDate: receivedItem.expiryDate,
-        qtySec: addedSec,
-        location: receivedItem.binLocation || 'Pallet Staging'
-      };
-      return {
-        ...mat,
-        currentBalance: mat.currentBalance + addedSec,
-        lots: [newLot, ...(mat.lots || [])]
-      };
-    }));
+    setInventory((prevInv) => {
+      return prevInv.map((mat) => {
+        const receivedItem = newReport.items.find((it) => it.materialCode === mat.code);
+        if (!receivedItem) return mat;
+
+        const addedSec = receivedItem.secondaryQty || 0;
+        const newBalance = mat.currentBalance + addedSec;
+
+        const newLot = {
+          lotNumber: receivedItem.lotNumber,
+          expiryDate: receivedItem.expiryDate,
+          qtySec: addedSec,
+          location: receivedItem.binLocation || 'Pallet Staging'
+        };
+
+        return {
+          ...mat,
+          currentBalance: newBalance,
+          lots: [newLot, ...(mat.lots || [])]
+        };
+      });
+    });
 
     recordAudit(
-      "INBOUND_RECEIVING",
+      'INBOUND_RECEIVING',
       `Received PO/DR ${newReport.poNo} from ${newReport.supplier} (Report: ${newReport.reportNo}, Amount: ₱${newReport.totalPaid.toLocaleString()})`
     );
 
@@ -590,7 +674,7 @@ export default function App() {
         receivedBy: resolveUserId(newReport.receivedBy || currentRole, authUser),
         date: newReport.date || new Date().toISOString().slice(0, 10),
         time: newReport.time || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        items: (newReport.items || []).map(it => ({
+        items: (newReport.items || []).map((it) => ({
           materialCode: it.materialCode,
           name: it.name,
           lotNumber: it.lotNumber,
@@ -608,282 +692,197 @@ export default function App() {
   };
 
   // ============================================================================
-  // Shared issuance core — used by handleSaveWithdrawal (Jade direct),
-  // handleIssuePendingRequest (Jade approves a queued request), and
-  // handleApprovePendingWithdrawal (Jade approves Romeo's bulk requisition).
+  // Phase 1.5 DEDUCTION GATE — Shared Withdrawal Executor
+  // Only called when Jade explicitly issues a manual slip, approves a portal
+  // request (handleIssuePendingRequest), or approves Romeo's bulk requisition.
   // ============================================================================
   const performWithdrawal = (newWithdrawal, opts = {}) => {
     const normalizedItems = buildNormalizedWithdrawalItems(newWithdrawal.items, inventory);
-    const enrichedWithdrawal = { ...newWithdrawal, items: normalizedItems };
+    const computedCost =
+      Number(newWithdrawal.totalCost) > 0
+        ? Number(newWithdrawal.totalCost)
+        : +normalizedItems.reduce((sum, it) => sum + (Number(it.estimatedCost) || 0), 0).toFixed(2);
 
-    setWithdrawals(prev => [enrichedWithdrawal, ...prev]);
+    const enrichedWithdrawal = {
+      ...newWithdrawal,
+      items: normalizedItems,
+      totalCost: computedCost,
+      sourceChannel: opts.sourceChannel || newWithdrawal.sourceChannel || 'MANUAL'
+    };
 
-    setInventory(prevInv => prevInv.map(mat => {
-      const issuedItem = normalizedItems.find(it => it.materialCode === mat.code);
-      if (!issuedItem) return mat;
-      const deductedSec = issuedItem.qtyIssuedSec || 0;
-      const newBalance = Math.max(0, mat.currentBalance - deductedSec);
-      const { updatedLots } = deductFefoLots(mat.lots || [], deductedSec);
-      return { ...mat, currentBalance: newBalance, lots: updatedLots };
-    }));
+    setWithdrawals((prev) => [enrichedWithdrawal, ...prev]);
+
+    setInventory((prevInv) => {
+      return prevInv.map((mat) => {
+        const issuedItem = normalizedItems.find((it) => it.materialCode === mat.code);
+        if (!issuedItem) return mat;
+
+        const deductedSec = issuedItem.qtyIssuedSec || 0;
+        const newBalance = Math.max(0, mat.currentBalance - deductedSec);
+        const { updatedLots } = deductFefoLots(mat.lots || [], deductedSec);
+
+        return {
+          ...mat,
+          currentBalance: newBalance,
+          lots: updatedLots
+        };
+      });
+    });
 
     recordAudit(
-      opts.auditAction || "STOCK_OUT_ISSUANCE",
+      opts.auditAction || 'STOCK_OUT_ISSUANCE',
       opts.auditDetails ||
-        `Issued Slip ${newWithdrawal.slipNo} to ${newWithdrawal.requestingEntity} (${normalizedItems.length} materials)`
+        `Issued Slip ${enrichedWithdrawal.slipNo} to ${enrichedWithdrawal.requestingEntity} (${normalizedItems.length} materials)`
     );
 
     postSyncEvent(
       'WITHDRAWAL_SAVED',
-      `WD_${newWithdrawal.slipNo}_${Date.now()}`,
+      `WD_${enrichedWithdrawal.slipNo}_${Date.now()}`,
       {
-        slipNo: newWithdrawal.slipNo,
-        date: newWithdrawal.date,
-        time: newWithdrawal.time,
-        requestingEntity: newWithdrawal.requestingEntity,
-        department: newWithdrawal.department,
-        purpose: newWithdrawal.purpose,
-        requestedBy: newWithdrawal.requestedBy,
-        issuedBy: resolveUserId(newWithdrawal.issuedBy || currentRole, authUser),
-        receivedBy: newWithdrawal.receivedBy,
-        totalCost: newWithdrawal.totalCost,
-        status: newWithdrawal.status || 'ISSUED & RECONCILED',
-        notes: newWithdrawal.notes || '',
-        sourceChannel: newWithdrawal.sourceChannel || 'MANUAL',
-        linkedRequestId: newWithdrawal.linkedRequestId || null,
+        slipNo: enrichedWithdrawal.slipNo,
+        sourceRequestId: opts.sourceRequestId || undefined,
+        date: enrichedWithdrawal.date,
+        time: enrichedWithdrawal.time,
+        requestingEntity: enrichedWithdrawal.requestingEntity,
+        department: enrichedWithdrawal.department,
+        purpose: enrichedWithdrawal.purpose,
+        requestedBy: enrichedWithdrawal.requestedBy,
+        issuedBy: resolveUserId(enrichedWithdrawal.issuedBy || currentRole, authUser),
+        receivedBy: enrichedWithdrawal.receivedBy,
+        totalCost: enrichedWithdrawal.totalCost,
+        status: enrichedWithdrawal.status || 'ISSUED & RECONCILED',
+        notes: enrichedWithdrawal.notes || '',
+        sourceChannel: enrichedWithdrawal.sourceChannel,
         itemCount: normalizedItems.length,
         items: normalizedItems,
         timestamp: new Date().toISOString()
       }
     );
-
-    return enrichedWithdrawal;
   };
 
+  // WORKFLOW 2A: Direct Warehouse Stock Withdrawal Save (Jade in Tab 4)
   const handleSaveWithdrawal = (newWithdrawal) => {
     performWithdrawal(newWithdrawal, {
-      auditAction: "STOCK_OUT_ISSUANCE",
-      auditDetails: `Issued Slip ${newWithdrawal.slipNo} to ${newWithdrawal.requestingEntity} (${newWithdrawal.items.length} materials)`
+      sourceChannel: 'MANUAL',
+      auditAction: 'STOCK_OUT_ISSUANCE'
     });
     showToast(`Withdrawal Slip ${newWithdrawal.slipNo} authorized & stock deducted!`);
     setActiveTab('dashboard');
   };
 
-  // ============================================================================
-  // WORKFLOW 3A — Portal / staff-entry REQUEST (queued, NOT issued)
-  // ============================================================================
+  // WORKFLOW 2B: Portal Requisition Intake (Queues for Jade — No premature stock deduction)
   const handleSubmitWithdrawalRequest = (portalReq) => {
-    const now = new Date();
-    const requestId = `REQ-${now.getTime()}`;
-    const requestSlipNo = portalReq.withdrawalNo || `WS-REQ-${now.getTime().toString().slice(-8)}`;
+    const requestId = portalReq.requestId || portalReq.withdrawalNo || `REQ-${Date.now().toString().slice(-6)}`;
+    const normalizedItems = buildNormalizedWithdrawalItems(
+      (portalReq.items || []).map((row) => ({
+        materialCode: row.itemCode || row.materialCode,
+        name: row.description || row.name,
+        qtyRequestedSec: row.requestedQtySec ?? row.qtyRequestedSec,
+        qtyIssuedSec: row.requestedQtySec ?? row.qtyIssuedSec,
+        secondaryUom: row.secondaryUom || 'kg',
+        lotNumber: 'FEFO-AUTO',
+        estimatedCost: row.estimatedCost || 0,
+        remarks: `Portal req: ${portalReq.purpose || 'Operation'}`
+      })),
+      inventory
+    );
 
-    const normalizedItems = (portalReq.items || []).map(row => {
-      const code = row.materialCode || row.material_code || row.itemCode || row.code;
-      const mat = inventory.find(m => m.code === code) || {};
-      const qty = Number(
-        row.qtyRequestedSec ?? row.qty_requested_sec ?? row.requestedQtySec ?? row.qty ?? 0
-      );
-      return {
-        materialCode: code,
-        name: row.name || row.description || row.materialName || mat.name || code,
-        qtyRequestedSec: qty,
-        secondaryUom: row.secondaryUom || row.uom || mat.secondaryUom || 'kg',
-        storageRoom: row.storageRoom || mat.room || 'Dry Room 1',
-        estimatedCost: Number(row.estimatedCost ?? row.estimated_cost ?? 0),
-        remarks: row.remarks || ''
-      };
-    });
+    const computedTotalCost =
+      portalReq.totalCost ||
+      +normalizedItems.reduce((sum, it) => sum + (Number(it.estimatedCost) || 0), 0).toFixed(2);
 
-    const totalEstimatedCost = portalReq.totalCost != null
-      ? Number(portalReq.totalCost)
-      : +normalizedItems.reduce((s, it) => s + (it.estimatedCost || 0), 0).toFixed(2);
-
-    const newRequest = {
+    const queuedRequest = {
       requestId,
-      requestSlipNo,
-      sourceChannel: portalReq.sourceChannel || 'IN_APP_STAFF_ENTRY',
-      dateRequested: portalReq.withdrawalDate || now.toISOString().slice(0, 10),
-      timeRequested: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      neededByDate: portalReq.neededByDate || portalReq.withdrawalDate || now.toISOString().slice(0, 10),
-      requestingEntity: portalReq.requestingLine || portalReq.requestingEntity || 'Unspecified',
-      department: portalReq.department ||
-        (portalReq.purpose?.includes('Mess Hall')
-          ? 'Indangan Facility Mess Hall (Staff Meals & Snacks)'
-          : 'Production Floor'),
+      withdrawalNo: requestId,
+      withdrawalDate: portalReq.withdrawalDate || new Date().toISOString().slice(0, 10),
+      submittedAt: new Date().toISOString(),
+      requestingLine: portalReq.requestingLine || 'Indangan Facility',
+      department: portalReq.purpose?.includes('Mess Hall')
+        ? 'Indangan Facility Mess Hall (Staff Meals & Snacks)'
+        : 'Production Floor',
       purpose: portalReq.purpose || 'Material Requisition',
-      requestedBy: portalReq.requisitionedBy || portalReq.requestedBy || 'Authorized Staff',
-      enteredBy: portalReq.enteredBy || (portalReq.sourceChannel === 'PORTAL'
-        ? `${portalReq.requisitionedBy || 'Staff'} (Portal)`
-        : currentRole),
+      requisitionedBy: portalReq.requisitionedBy || 'Authorized Staff',
       notes: portalReq.notes || '',
-      items: normalizedItems,
-      totalEstimatedCost,
+      totalCost: computedTotalCost,
       status: 'PENDING_ISSUANCE',
-      createdAt: now.toISOString(),
-      issuedAt: null,
-      issuedBy: null,
-      withdrawalSlipNo: null
+      items: normalizedItems
     };
 
-    setPendingRequests(prev => [newRequest, ...prev]);
+    setPendingRequests((prev) => [queuedRequest, ...prev]);
 
     recordAudit(
-      'WITHDRAWAL_REQUEST_QUEUED',
-      `Request ${requestId} from ${newRequest.requestingEntity} by ${newRequest.requestedBy} queued for Jade's Issuance review (${normalizedItems.length} materials, est. ₱${totalEstimatedCost.toLocaleString()}).`
+      'WITHDRAWAL_REQUEST_SUBMITTED',
+      `Queued material requisition ${requestId} from ${queuedRequest.requestingLine} by ${queuedRequest.requisitionedBy} (awaiting Jade's release).`
     );
 
     postSyncEvent(
       'WITHDRAWAL_REQUEST_SUBMITTED',
-      `REQ_${requestId}_${Date.now()}`,
-      {
-        requestId,
-        requestSlipNo,
-        sourceChannel: newRequest.sourceChannel,
-        requestingEntity: newRequest.requestingEntity,
-        department: newRequest.department,
-        requestedBy: newRequest.requestedBy,
-        enteredBy: newRequest.enteredBy,
-        purpose: newRequest.purpose,
-        neededByDate: newRequest.neededByDate,
-        date: newRequest.dateRequested,
-        time: newRequest.timeRequested,
-        totalEstimatedCost,
-        itemCount: normalizedItems.length,
-        items: normalizedItems,
-        status: 'PENDING_ISSUANCE',
-        notes: newRequest.notes,
-        timestamp: now.toISOString()
-      }
+      `REQ_SUB_${requestId}_${Date.now()}`,
+      queuedRequest
     );
 
-    showToast(`Request ${requestId} queued for Jade's Pending Issuance.`);
-    return newRequest;
+    showToast(`Requisition ${requestId} queued for Jade Dela Cruz's release!`);
   };
 
-  // ============================================================================
-  // WORKFLOW 3B — Jade ISSUES a pending request.
-  // ============================================================================
+  // WORKFLOW 2C: Jade Approves & Issues a Queued Portal Request
   const handleIssuePendingRequest = (requestId, overrides = {}) => {
-    const req = pendingRequests.find(r => r.requestId === requestId);
-    if (!req) {
-      showToast(`Request ${requestId} not found — it may already be issued.`);
-      return;
-    }
-    if (req.status !== 'PENDING_ISSUANCE') {
-      showToast(`Request ${requestId} is already ${req.status.toLowerCase()}.`);
-      return;
-    }
+    const req = pendingRequests.find(
+      (r) => r.requestId === requestId || r.withdrawalNo === requestId
+    );
+    if (!req) return;
 
-    const now = new Date();
-    const slipNo = `WS-PORTAL-${now.getTime().toString().slice(-8)}`;
-
-    const resolvedItems = req.items.map(it => {
-      const mat = inventory.find(m => m.code === it.materialCode);
-      const activeLots = Array.isArray(mat?.lots)
-        ? [...mat.lots].filter(l => Number(l.qtySec) > 0)
-            .sort((a, b) => String(a.expiryDate || '9999').localeCompare(String(b.expiryDate || '9999')))
-        : [];
-      const lotNo = activeLots[0]?.lotNumber ||
-        `OPEN-${now.toISOString().slice(0, 10).replace(/-/g, '')}-${it.materialCode}`;
-      return {
-        materialCode: it.materialCode,
-        name: it.name,
-        qtyRequestedSec: it.qtyRequestedSec,
-        qtyIssuedSec: it.qtyRequestedSec,
-        secondaryUom: it.secondaryUom,
-        lotNumber: lotNo,
-        storageRoom: it.storageRoom,
-        estimatedCost: it.estimatedCost,
-        remarks: it.remarks || `Issued against request ${req.requestId}`
-      };
-    });
-
+    const slipNo = overrides.slipNo || `WS-PORTAL-${Date.now().toString().slice(-6)}`;
     const newWithdrawal = {
       slipNo,
-      date: now.toISOString().slice(0, 10),
-      time: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      requestingEntity: req.requestingEntity,
-      department: req.department,
-      purpose: req.purpose,
-      requestedBy: req.requestedBy,
+      date: new Date().toISOString().slice(0, 10),
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      requestingEntity: req.requestingLine || 'Indangan Facility',
+      department: req.department || 'Production Floor',
+      purpose: req.purpose || 'Material Requisition',
+      requestedBy: req.requisitionedBy || 'Authorized Staff',
       issuedBy: `${currentRole} (Warehouse Custodian)`,
-      receivedBy: overrides.receivedBy || req.requestedBy,
-      items: resolvedItems,
-      totalCost: req.totalEstimatedCost,
+      receivedBy: overrides.receivedBy || req.requisitionedBy || 'Floor Staff',
+      items: overrides.items || req.items || [],
+      totalCost: req.totalCost || 0,
       status: 'ISSUED & RECONCILED',
-      notes: req.notes || '',
-      sourceChannel: req.sourceChannel,
-      linkedRequestId: req.requestId
+      notes: req.notes || ''
     };
 
     performWithdrawal(newWithdrawal, {
-      auditAction: 'PENDING_REQUEST_ISSUED',
-      auditDetails: `Jade issued request ${req.requestId} as slip ${slipNo} for ${req.requestingEntity} (${resolvedItems.length} materials, ₱${req.totalEstimatedCost.toLocaleString()}).`
+      sourceChannel: 'PORTAL',
+      sourceRequestId: requestId,
+      auditAction: 'PORTAL_MATERIAL_REQUISITION_ISSUED',
+      auditDetails: `Jade / ${currentRole} issued Slip ${slipNo} for queued request ${requestId} (${newWithdrawal.requestingEntity})`
     });
 
-    setPendingRequests(prev => prev.map(r => {
-      if (r.requestId !== requestId) return r;
-      return {
-        ...r,
-        status: 'ISSUED',
-        issuedAt: now.toISOString(),
-        issuedBy: currentRole,
-        withdrawalSlipNo: slipNo
-      };
-    }));
-
-    showToast(`Request ${req.requestId} issued as ${slipNo} — stock deducted & synced.`);
-  };
-
-  // ============================================================================
-  // WORKFLOW 3C — Jade CANCELS a pending request
-  // ============================================================================
-  const handleCancelPendingRequest = (requestId, reason = '') => {
-    const req = pendingRequests.find(r => r.requestId === requestId);
-    if (!req || req.status !== 'PENDING_ISSUANCE') return;
-
-    const now = new Date();
-    setPendingRequests(prev => prev.map(r => {
-      if (r.requestId !== requestId) return r;
-      return {
-        ...r,
-        status: 'CANCELLED',
-        cancelledAt: now.toISOString(),
-        cancelledBy: currentRole,
-        cancellationReason: reason || 'Cancelled by Jade'
-      };
-    }));
-
-    recordAudit(
-      'WITHDRAWAL_REQUEST_CANCELLED',
-      `Request ${requestId} for ${req.requestingEntity} cancelled by ${currentRole}: ${reason || 'no reason given'}`
+    setPendingRequests((prev) =>
+      prev.filter((r) => r.requestId !== requestId && r.withdrawalNo !== requestId)
     );
 
-    postSyncEvent(
-      'WITHDRAWAL_REQUEST_CANCELLED',
-      `REQ_CANCEL_${requestId}_${Date.now()}`,
-      {
-        requestId,
-        requestSlipNo: req.requestSlipNo,
-        requestingEntity: req.requestingEntity,
-        requestedBy: req.requestedBy,
-        cancelledBy: currentRole,
-        cancellationReason: reason || 'Cancelled by Jade',
-        timestamp: now.toISOString()
-      }
-    );
-
-    showToast(`Request ${requestId} cancelled.`);
+    showToast(`Request ${requestId} issued as Slip ${slipNo} & stock deducted!`);
   };
 
-  // ============================================================================
-  // WORKFLOW 4 — Batch Order Save
-  // ============================================================================
+  // WORKFLOW 2D: Cancel a Queued Portal Request
+  const handleCancelPendingRequest = (requestId, reason = 'Cancelled by Warehouse Supervisor') => {
+    setPendingRequests((prev) =>
+      prev.filter((r) => r.requestId !== requestId && r.withdrawalNo !== requestId)
+    );
+    recordAudit('WITHDRAWAL_REQUEST_CANCELLED', `Cancelled queued request ${requestId}: ${reason}`);
+    postSyncEvent('WITHDRAWAL_REQUEST_CANCELLED', `REQ_CANC_${requestId}_${Date.now()}`, {
+      requestId,
+      reason,
+      cancelledBy: currentRole,
+      timestamp: new Date().toISOString()
+    });
+    showToast(`Queued request ${requestId} cancelled.`);
+  };
+
+  // WORKFLOW 3: Batch Order Save
   const handleSaveBatchOrder = (newOrder) => {
-    setBatchOrders(prev => [newOrder, ...prev]);
+    setBatchOrders((prev) => [newOrder, ...prev]);
 
     recordAudit(
-      "OUTLET_ORDER_INTAKE",
+      'OUTLET_ORDER_INTAKE',
       `Intake batch order ${newOrder.orderId} for ${newOrder.outletName}: ${newOrder.requestedQtyPcs} pcs of ${newOrder.recipeName}`
     );
 
@@ -905,28 +904,28 @@ export default function App() {
     showToast(`Order ${newOrder.orderId} queued for Romeo Malusay!`);
   };
 
-  // ============================================================================
-  // WORKFLOW 5 — Romeo requests bulk materials
-  // ============================================================================
+  // WORKFLOW 3B: Romeo Requests Bulk Raw Materials
   const handleRequestBulkMaterials = (orderId) => {
     const nowStr = new Date().toISOString().slice(0, 19).replace('T', ' ');
-    const order = batchOrders.find(o => o.orderId === orderId);
+    const order = batchOrders.find((o) => o.orderId === orderId);
     if (!order) return;
 
     const slipNo = `BULK-REQ-${Date.now().toString().slice(-6)}`;
 
-    setBatchOrders(prev => prev.map(o => {
-      if (o.orderId !== orderId) return o;
-      return {
-        ...o,
-        bulkRequestStatus: 'PENDING_JADE_APPROVAL',
-        bulkRequisitionSlipNo: slipNo,
-        bulkRequestedAt: nowStr
-      };
-    }));
+    setBatchOrders((prev) =>
+      prev.map((o) => {
+        if (o.orderId !== orderId) return o;
+        return {
+          ...o,
+          bulkRequestStatus: 'PENDING_JADE_APPROVAL',
+          bulkRequisitionSlipNo: slipNo,
+          bulkRequestedAt: nowStr
+        };
+      })
+    );
 
     recordAudit(
-      "BULK_REQUISITION_SUBMITTED",
+      'BULK_REQUISITION_SUBMITTED',
       `Romeo Malusay submitted bulk ingredients requisition for ${order.recipeName} (${order.orderId}) to Jade Dela Cruz.`
     );
 
@@ -941,25 +940,25 @@ export default function App() {
       }
     );
 
-    showToast(`Bulk requisition for ${order.recipeName} sent to Jade Dela Cruz in Tab 3!`);
+    showToast(`Bulk requisition for ${order.recipeName} sent to Jade Dela Cruz in Tab 4!`);
   };
 
-  // ============================================================================
-  // WORKFLOW 6 — Jade approves Romeo's bulk requisition
-  // ============================================================================
+  // WORKFLOW 3C: Jade Approves Romeo's Bulk Requisition
   const handleApprovePendingWithdrawal = (orderId) => {
-    const order = batchOrders.find(o => o.orderId === orderId);
+    const order = batchOrders.find((o) => o.orderId === orderId);
     if (!order) return;
 
-    const recipe = recipes.find(r => r.sku === order.recipeSku) || MASTER_RECIPES.find(r => r.sku === order.recipeSku);
+    const recipe =
+      recipes.find((r) => r.sku === order.recipeSku) ||
+      MASTER_RECIPES.find((r) => r.sku === order.recipeSku);
     if (!recipe) return;
 
     const requiredIngredients = calculateRecipeIngredients(recipe, order.batchMultiplier);
     const nowStr = new Date().toISOString().slice(0, 19).replace('T', ' ');
     const slipNo = `WS-BULK-${Date.now().toString().slice(-6)}`;
 
-    const rawItems = requiredIngredients.map(ing => {
-      const mat = inventory.find(m => m.code === ing.code);
+    const rawWithdrawalItems = requiredIngredients.map((ing) => {
+      const mat = inventory.find((m) => m.code === ing.code);
       return {
         materialCode: ing.code,
         name: ing.name,
@@ -972,11 +971,6 @@ export default function App() {
       };
     });
 
-    const normalizedItems = buildNormalizedWithdrawalItems(rawItems, inventory);
-    const computedTotalCost = +normalizedItems
-      .reduce((sum, it) => sum + (Number(it.estimatedCost) || 0), 0)
-      .toFixed(2);
-
     const newWithdrawal = {
       slipNo,
       date: new Date().toISOString().slice(0, 10),
@@ -987,26 +981,27 @@ export default function App() {
       requestedBy: 'Romeo B. Malusay (Ingredient Batching Preparer)',
       issuedBy: `${currentRole} (Warehouse Custodian)`,
       receivedBy: 'Romeo B. Malusay',
-      items: normalizedItems,
-      totalCost: computedTotalCost,
-      status: "ISSUED & RECONCILED",
-      sourceChannel: 'BULK_BATCHING'
+      items: rawWithdrawalItems,
+      status: 'ISSUED & RECONCILED'
     };
 
     performWithdrawal(newWithdrawal, {
+      sourceChannel: 'BULK_BATCHING',
       auditAction: 'BULK_REQUISITION_APPROVED',
-      auditDetails: `Jade authorized bulk bodega release (Slip: ${slipNo}) for ${order.recipeName} (${order.orderId}). Scale & Kit unlocked for Romeo.`
+      auditDetails: `Jade Dela Cruz authorized bulk bodega release (Slip: ${slipNo}) for ${order.recipeName} (${order.orderId}). Scale & Kit unlocked for Romeo.`
     });
 
-    setBatchOrders(prev => prev.map(o => {
-      if (o.orderId !== orderId) return o;
-      return {
-        ...o,
-        bulkRequestStatus: 'BULK_ISSUED_BY_JADE',
-        bulkApprovedAt: nowStr,
-        bulkApprovedBy: currentRole
-      };
-    }));
+    setBatchOrders((prev) =>
+      prev.map((o) => {
+        if (o.orderId !== orderId) return o;
+        return {
+          ...o,
+          bulkRequestStatus: 'BULK_ISSUED_BY_JADE',
+          bulkApprovedAt: nowStr,
+          bulkApprovedBy: currentRole
+        };
+      })
+    );
 
     postSyncEvent(
       'BATCH_ORDER_UPDATED',
@@ -1022,12 +1017,10 @@ export default function App() {
     showToast(`Bulk materials authorized & deducted! Romeo's Scale & Kit is unlocked.`);
   };
 
-  // ============================================================================
-  // WORKFLOW 7 — Update Batch Order Status
-  // ============================================================================
+  // WORKFLOW 4: Update Batch Order Status
   const handleUpdateOrderStatus = (orderId, newStatus, tagId = null, batchedKg = 0) => {
     const nowStr = new Date().toISOString().slice(0, 19).replace('T', ' ');
-    const targetOrder = batchOrders.find(o => o.orderId === orderId);
+    const targetOrder = batchOrders.find((o) => o.orderId === orderId);
     const resolvedTagId =
       newStatus === 'BATCHED_KITTED'
         ? tagId || targetOrder?.batchTagId || `KIT-${Date.now().toString().slice(-6)}`
@@ -1039,37 +1032,40 @@ export default function App() {
     const resolvedReleasedTo =
       newStatus === 'RELEASED'
         ? targetOrder?.outletName?.includes('Pan de Verde')
-          ? "Othniel Tilan (Pan de Verde Driver)"
-          : "Roberto S. Blase (Laurice Driver)"
+          ? 'Othniel Tilan (Pan de Verde Driver)'
+          : 'Roberto S. Blase (Laurice Driver)'
         : undefined;
 
-    setBatchOrders(prev => prev.map(order => {
-      if (order.orderId !== orderId) return order;
-      if (newStatus === 'BATCHED_KITTED') {
-        return {
-          ...order,
-          status: 'BATCHED_KITTED',
-          batchTagId: resolvedTagId,
-          actualBatchedKg: resolvedBatchedKg,
-          actualBatchedUnits: order.requestedQtyPcs,
-          batchedAt: nowStr,
-          batchedBy: "Romeo B. Malusay",
-          scaleUsed: "Bench Scale #1 (Govt Seal #798073) Valid",
-          sifter40MeshChecked: true
-        };
-      } else if (newStatus === 'RELEASED') {
-        return {
-          ...order,
-          status: 'RELEASED',
-          releasedAt: nowStr,
-          releasedTo: resolvedReleasedTo
-        };
-      }
-      return { ...order, status: newStatus };
-    }));
+    setBatchOrders((prev) =>
+      prev.map((order) => {
+        if (order.orderId !== orderId) return order;
+
+        if (newStatus === 'BATCHED_KITTED') {
+          return {
+            ...order,
+            status: 'BATCHED_KITTED',
+            batchTagId: resolvedTagId,
+            actualBatchedKg: resolvedBatchedKg,
+            actualBatchedUnits: order.requestedQtyPcs,
+            batchedAt: nowStr,
+            batchedBy: 'Romeo B. Malusay',
+            scaleUsed: 'Bench Scale #1 (Govt Seal #798073) Valid',
+            sifter40MeshChecked: true
+          };
+        } else if (newStatus === 'RELEASED') {
+          return {
+            ...order,
+            status: 'RELEASED',
+            releasedAt: nowStr,
+            releasedTo: resolvedReleasedTo
+          };
+        }
+        return { ...order, status: newStatus };
+      })
+    );
 
     recordAudit(
-      newStatus === 'BATCHED_KITTED' ? "BATCH_KITTED" : "BATCH_RELEASED",
+      newStatus === 'BATCHED_KITTED' ? 'BATCH_KITTED' : 'BATCH_RELEASED',
       `Batch order ${orderId} marked as ${newStatus} by ${currentRole}`
     );
 
@@ -1083,8 +1079,8 @@ export default function App() {
         actualBatchedKg: resolvedBatchedKg,
         actualBatchedUnits: newStatus === 'BATCHED_KITTED' ? targetOrder?.requestedQtyPcs : undefined,
         batchedAt: newStatus === 'BATCHED_KITTED' ? nowStr : undefined,
-        batchedBy: newStatus === 'BATCHED_KITTED' ? "Romeo B. Malusay" : undefined,
-        scaleUsed: newStatus === 'BATCHED_KITTED' ? "Bench Scale #1 (Govt Seal #798073) Valid" : undefined,
+        batchedBy: newStatus === 'BATCHED_KITTED' ? 'Romeo B. Malusay' : undefined,
+        scaleUsed: newStatus === 'BATCHED_KITTED' ? 'Bench Scale #1 (Govt Seal #798073) Valid' : undefined,
         sifter40MeshChecked: newStatus === 'BATCHED_KITTED' ? true : undefined,
         releasedAt: newStatus === 'RELEASED' ? nowStr : undefined,
         releasedTo: resolvedReleasedTo,
@@ -1095,27 +1091,29 @@ export default function App() {
     showToast(`Order ${orderId} updated to ${newStatus}!`);
   };
 
-  // ============================================================================
-  // WORKFLOW 8 — Collective Release All Completed
-  // ============================================================================
+  // WORKFLOW 5: Collective Release All Completed
   const handleBulkReleaseOrders = () => {
     const nowStr = new Date().toISOString().slice(0, 19).replace('T', ' ');
-    const kittedOrders = batchOrders.filter(o => o.status === 'BATCHED_KITTED');
+    const kittedOrders = batchOrders.filter((o) => o.status === 'BATCHED_KITTED');
     if (kittedOrders.length === 0) return;
 
-    setBatchOrders(prev => prev.map(order => {
-      if (order.status === 'BATCHED_KITTED') {
-        return {
-          ...order,
-          status: 'RELEASED',
-          releasedAt: nowStr,
-          releasedTo: order.outletName.includes('Pan de Verde') ? "Othniel Tilan (Pan de Verde Driver)" : "Roberto S. Blase (Laurice Driver)"
-        };
-      }
-      return order;
-    }));
+    setBatchOrders((prev) =>
+      prev.map((order) => {
+        if (order.status === 'BATCHED_KITTED') {
+          return {
+            ...order,
+            status: 'RELEASED',
+            releasedAt: nowStr,
+            releasedTo: order.outletName.includes('Pan de Verde')
+              ? 'Othniel Tilan (Pan de Verde Driver)'
+              : 'Roberto S. Blase (Laurice Driver)'
+          };
+        }
+        return order;
+      })
+    );
 
-    kittedOrders.forEach(order => {
+    kittedOrders.forEach((order) => {
       postSyncEvent(
         'BATCH_ORDER_UPDATED',
         `BATCH_REL_${order.orderId}_${Date.now()}`,
@@ -1124,35 +1122,39 @@ export default function App() {
           status: 'RELEASED',
           releasedAt: nowStr,
           releasedTo: order.outletName.includes('Pan de Verde')
-            ? "Othniel Tilan (Pan de Verde Driver)"
-            : "Roberto S. Blase (Laurice Driver)"
+            ? 'Othniel Tilan (Pan de Verde Driver)'
+            : 'Roberto S. Blase (Laurice Driver)'
         }
       );
     });
 
     recordAudit(
-      "BULK_BATCH_RELEASE",
+      'BULK_BATCH_RELEASE',
       `Romeo Malusay collectively marked ${kittedOrders.length} recipe mix batches as RELEASED to outlet logistics.`
     );
 
     showToast(`Successfully released all ${kittedOrders.length} completed batches to outlet logistics!`);
   };
 
-  // ============================================================================
-  // WORKFLOW 9 — Physical Adjustment
-  // ============================================================================
+  // WORKFLOW 6: Physical Adjustment
   const handleSaveAdjustment = (newAdj) => {
-    setAdjustments(prev => [newAdj, ...prev]);
-    const matchedMat = inventory.find(m => m.code === newAdj.materialCode);
+    setAdjustments((prev) => [newAdj, ...prev]);
 
-    setInventory(prevInv => prevInv.map(mat => {
-      if (mat.code !== newAdj.materialCode) return mat;
-      const diff = newAdj.type.includes('OUT') ? -newAdj.qtySec : newAdj.qtySec;
-      return { ...mat, currentBalance: mat.currentBalance + diff };
-    }));
+    const matchedMat = inventory.find((m) => m.code === newAdj.materialCode);
+
+    setInventory((prevInv) => {
+      return prevInv.map((mat) => {
+        if (mat.code !== newAdj.materialCode) return mat;
+        const diff = newAdj.type.includes('OUT') ? -newAdj.qtySec : newAdj.qtySec;
+        return {
+          ...mat,
+          currentBalance: mat.currentBalance + diff
+        };
+      });
+    });
 
     recordAudit(
-      "INVENTORY_ADJUSTMENT",
+      'INVENTORY_ADJUSTMENT',
       `${newAdj.type} for ${newAdj.materialCode}: ${newAdj.qtySec} ${newAdj.uom} (${newAdj.reason})`
     );
 
@@ -1176,14 +1178,12 @@ export default function App() {
     showToast(`Adjustment ${newAdj.id} committed to book balance!`);
   };
 
-  // ============================================================================
-  // WORKFLOW 10 — Quarantine
-  // ============================================================================
+  // WORKFLOW 7: Quarantine
   const handleSaveQuarantine = (newNcr) => {
-    setQuarantineList(prev => [newNcr, ...prev]);
+    setQuarantineList((prev) => [newNcr, ...prev]);
 
     recordAudit(
-      "QUARANTINE_NCR_FILED",
+      'QUARANTINE_NCR_FILED',
       `Form-NCR-001 filed: ${newNcr.ncrNo} - ${newNcr.itemDescription} (${newNcr.reason})`
     );
 
@@ -1208,35 +1208,44 @@ export default function App() {
     showToast(`NCR ${newNcr.ncrNo} logged into exterior quarantine cabinet!`);
   };
 
-  // ============================================================================
-  // WORKFLOW 11 — CSV Inventory Import
-  // ============================================================================
+  // WORKFLOW 8: CSV Inventory Import
   const handleImportInventoryCsv = (updates = []) => {
     if (!Array.isArray(updates) || updates.length === 0) return;
-    setInventory(prevInv => prevInv.map(mat => {
-      const update = updates.find(u => u.code.toLowerCase() === mat.code.toLowerCase());
-      if (update && !isNaN(update.newBalance)) {
-        return { ...mat, currentBalance: update.newBalance };
-      }
-      return mat;
-    }));
+
+    setInventory((prevInv) => {
+      return prevInv.map((mat) => {
+        const update = updates.find((u) => u.code.toLowerCase() === mat.code.toLowerCase());
+        if (update && !isNaN(update.newBalance)) {
+          return {
+            ...mat,
+            currentBalance: update.newBalance
+          };
+        }
+        return mat;
+      });
+    });
+
     showToast(`Imported count updates for ${updates.length} inventory items!`);
   };
 
+  // One-Time Physical Count Baseline Import
   const handleApplyInventoryImport = ({ newInventory, mode, clearHistory, summary }) => {
     setInventory(newInventory);
+
     if (clearHistory) {
       setReceivingReports([]);
       setWithdrawals([]);
+      setPendingRequests([]);
       setBatchOrders([]);
       setAdjustments([]);
       setQuarantineList([]);
-      setPendingRequests([]);
     }
+
     recordAudit(
-      "OPENING_BASELINE_CSV_IMPORT",
+      'OPENING_BASELINE_CSV_IMPORT',
       `Imported fresh opening inventory for ${summary.totalItems} materials totaling ₱${summary.totalValuation.toLocaleString()} (${summary.totalWeightKg.toLocaleString()} kg). Mode: ${mode}. History cleared: ${clearHistory}`
     );
+
     postSyncEvent(
       'OPENING_BASELINE_CSV_IMPORT',
       `BASELINE_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
@@ -1248,32 +1257,46 @@ export default function App() {
         timestamp: new Date().toISOString()
       }
     );
+
     showToast(`Opening Inventory Baseline applied! ${summary.totalItems} material counts initialized.`);
   };
 
+  // Reset/Zero Out all materials
   const handleZeroOutAll = ({ actor, clearHistory }) => {
-    const zeroed = MASTER_MATERIALS.map(m => ({ ...m, currentBalance: 0, lots: [] }));
+    const zeroed = MASTER_MATERIALS.map((m) => ({
+      ...m,
+      currentBalance: 0,
+      lots: []
+    }));
     setInventory(zeroed);
+
     if (clearHistory) {
       setReceivingReports([]);
       setWithdrawals([]);
+      setPendingRequests([]);
       setBatchOrders([]);
       setAdjustments([]);
       setQuarantineList([]);
-      setPendingRequests([]);
     }
+
     recordAudit(
-      "INVENTORY_ZERO_OUT",
+      'INVENTORY_ZERO_OUT',
       `All ${MASTER_MATERIALS.length} warehouse materials reset to 0.00 quantity for fresh production start. By: ${actor}`
     );
+
     postSyncEvent(
       'INVENTORY_ZERO_OUT',
       `ZERO_OUT_${Date.now()}`,
-      { actor, timestamp: new Date().toISOString() }
+      {
+        actor,
+        timestamp: new Date().toISOString()
+      }
     );
-    showToast("Warehouse inventory zeroed out successfully! Ready for fresh inbound receiving.");
+
+    showToast('Warehouse inventory zeroed out successfully! Ready for fresh inbound receiving.');
   };
 
+  // Quick Action from Dashboard
   const handleQuickAction = (action, item = null) => {
     setPrefilledItem(item);
     if (action === 'receiving') setActiveTab('receiving');
@@ -1283,46 +1306,56 @@ export default function App() {
     if (action === 'portal') setActiveTab('portal');
   };
 
+  // Reset Demo Data
   const handleResetData = () => {
-    if (window.confirm("Reset all WMS data back to authentic initial system seeds?")) {
+    if (window.confirm('Reset all WMS data back to authentic initial system seeds?')) {
       localStorage.clear();
       setInventory(MASTER_MATERIALS);
       setReceivingReports(INITIAL_RECEIVING_REPORTS);
       setWithdrawals(INITIAL_WITHDRAWALS);
+      setPendingRequests([]);
       setBatchOrders(INITIAL_BATCHING_ORDERS);
       setAdjustments(INITIAL_ADJUSTMENTS);
       setQuarantineList(INITIAL_QUARANTINE);
       setAuditLogs(INITIAL_AUDIT_LOGS);
-      setPendingRequests([]);
-      setIsTestMode(false);
-      showToast("Data restored to factory seeds!");
+      showToast('Data restored to factory seeds!');
     }
   };
 
+  // JSON Export
   const handleExportJson = () => {
     const backup = {
-      system: "JJB Warehouse Inventory System v4.6",
-      facility: "Indangan Central Manufacturing Plant (LTO #3000013388488)",
+      system: 'JJB Warehouse Inventory System v4.6',
+      facility: 'Indangan Central Manufacturing Plant (LTO #3000013388488)',
       exportedAt: new Date().toISOString(),
-      inventory, receivingReports, withdrawals, batchOrders,
-      adjustments, quarantineList, auditLogs, pendingRequests
+      inventory,
+      receivingReports,
+      withdrawals,
+      pendingRequests,
+      batchOrders,
+      adjustments,
+      quarantineList,
+      auditLogs
     };
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backup, null, 2));
+
+    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(backup, null, 2));
     const downloadAnchor = document.createElement('a');
-    downloadAnchor.setAttribute("href", dataStr);
-    downloadAnchor.setAttribute("download", `JJB_WMS_BACKUP_${new Date().toISOString().slice(0, 10)}.json`);
+    downloadAnchor.setAttribute('href', dataStr);
+    downloadAnchor.setAttribute('download', `JJB_WMS_BACKUP_${new Date().toISOString().slice(0, 10)}.json`);
     document.body.appendChild(downloadAnchor);
     downloadAnchor.click();
     downloadAnchor.remove();
-    recordAudit("SYSTEM_BACKUP_EXPORT", "Exported JSON snapshot of all warehouse data");
-    showToast("System backup downloaded!");
+
+    recordAudit('SYSTEM_BACKUP_EXPORT', 'Exported JSON snapshot of all warehouse data');
+    showToast('System backup downloaded!');
   };
 
   // Counts
-  const lowStockCount = inventory.filter(i => i.currentBalance <= i.threshold).length;
-  const pendingBatchCount = batchOrders.filter(b => b.status === 'PENDING_BATCHING').length;
-  const pendingBulkApprovalCount = batchOrders.filter(b => b.bulkRequestStatus === 'PENDING_JADE_APPROVAL').length;
-  const pendingRequestCount = pendingRequests.filter(r => r.status === 'PENDING_ISSUANCE').length;
+  const lowStockCount = inventory.filter((i) => i.currentBalance <= i.threshold).length;
+  const pendingBatchCount = batchOrders.filter((b) => b.status === 'PENDING_BATCHING').length;
+  const pendingBulkApprovalCount = batchOrders.filter((b) => b.bulkRequestStatus === 'PENDING_JADE_APPROVAL').length;
+  const pendingRequestCount = pendingRequests.filter((r) => r.status === 'PENDING_ISSUANCE').length;
+  const totalIssuanceBadgeCount = pendingBulkApprovalCount + pendingRequestCount;
 
   if (!isAuthenticated) {
     return (
@@ -1347,6 +1380,38 @@ export default function App() {
         </div>
       )}
 
+      {/* Floating Cross-Device Notification Bell Bar when unread mobile requests arrive */}
+      {unreadNotifications.length > 0 && (
+        <div className="bg-amber-100 border-b border-amber-300 px-4 py-2 text-xs text-[#240e32] flex flex-wrap items-center justify-between gap-2 shadow-sm">
+          <div className="flex items-center gap-2 font-bold">
+            <Bell size={15} className="text-amber-700 animate-bounce" />
+            <span>
+              {unreadNotifications.length} New Cross-Device Portal Submission{unreadNotifications.length > 1 ? 's' : ''}:
+            </span>
+            <span className="font-normal text-gray-800">
+              {unreadNotifications[0].title} ({unreadNotifications[0].subtitle})
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                setActiveTab(unreadNotifications[0].targetTab || 'issuance');
+                setUnreadNotifications([]);
+              }}
+              className="px-2.5 py-1 rounded bg-[#240e32] text-[#E5C585] font-bold text-[11px] hover:bg-black"
+            >
+              Open Queue
+            </button>
+            <button
+              onClick={() => setUnreadNotifications([])}
+              className="text-gray-600 hover:text-black font-bold px-1"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
+
       <Header
         currentRole={currentRole}
         setCurrentRole={handleRoleChange}
@@ -1356,9 +1421,9 @@ export default function App() {
         setIsMobileMode={setIsMobileMode}
         isOffline={isOffline}
         setIsOffline={setIsOffline}
-        queueCount={pendingRequestCount}
+        queueCount={unreadNotifications.length}
         pendingBatchCount={pendingBatchCount}
-        pendingBulkApprovalCount={pendingBulkApprovalCount}
+        pendingBulkApprovalCount={totalIssuanceBadgeCount}
         pendingRequestCount={pendingRequestCount}
         lowStockCount={lowStockCount}
         onQuickEod={() => setActiveTab('eod')}
@@ -1367,7 +1432,7 @@ export default function App() {
         onLogout={handleLogout}
         onOpenAdminModal={() => setIsAdminModalOpen(true)}
         isTestMode={isTestMode}
-        setIsTestMode={setIsTestMode}
+        setIsTestMode={toggleTestMode}
       />
 
       <main className="flex-1 p-4 md:p-6 max-w-7xl mx-auto w-full">
@@ -1390,7 +1455,16 @@ export default function App() {
             recipes={recipes}
             onSubmitBatchOrder={handleSaveBatchOrder}
             onSubmitMaterialRequest={handleSubmitWithdrawalRequest}
-            onSpecialtyRecipeSubmitted={() => setRecipes(getAllMasterRecipes())}
+            onSpecialtyRecipeSubmitted={(newProposal) => {
+              setRecipes(getAllMasterRecipes());
+              if (newProposal) {
+                postSyncEvent(
+                  'SPECIALTY_PROPOSAL_SAVED',
+                  `SPEC_${newProposal.proposalId || Date.now()}`,
+                  newProposal
+                );
+              }
+            }}
             currentRole={currentRole}
           />
         )}
@@ -1411,11 +1485,11 @@ export default function App() {
             inventory={inventory}
             onSaveWithdrawal={handleSaveWithdrawal}
             withdrawals={withdrawals}
-            batchOrders={batchOrders}
-            onApprovePendingWithdrawal={handleApprovePendingWithdrawal}
             pendingRequests={pendingRequests}
             onIssuePendingRequest={handleIssuePendingRequest}
             onCancelPendingRequest={handleCancelPendingRequest}
+            batchOrders={batchOrders}
+            onApprovePendingWithdrawal={handleApprovePendingWithdrawal}
             currentRole={currentRole}
             isMobileMode={isMobileMode}
             prefilledItem={prefilledItem}
@@ -1457,7 +1531,6 @@ export default function App() {
             batchOrders={batchOrders}
             adjustments={adjustments}
             quarantineList={quarantineList}
-            pendingRequests={pendingRequests}
             currentRole={currentRole}
             onImportInventoryCsv={handleImportInventoryCsv}
             onRecordAudit={recordAudit}
@@ -1472,7 +1545,6 @@ export default function App() {
             batchOrders={batchOrders}
             inventory={inventory}
             quarantineList={quarantineList}
-            pendingRequests={pendingRequests}
             currentRole={currentRole}
             onRecordAudit={recordAudit}
           />
@@ -1519,20 +1591,20 @@ export default function App() {
         onClose={() => setIsAdminModalOpen(false)}
         authUser={authUser}
         isTestMode={isTestMode}
-        setIsTestMode={setIsTestMode}
+        setIsTestMode={toggleTestMode}
         onShowToast={showToast}
       />
 
       <footer className="bg-[#240e32] text-white py-4 px-6 text-center text-xs border-t border-[#C8963E]/30 mt-auto">
         <div className="max-w-4xl mx-auto space-y-1">
           <p className="font-semibold text-gray-200">
-            Jang-Jang Bakeshop & Kingdom Confectionary Business Lines · Manual of Operations Rev. 4.6 WMS Engine
+            Jang-Jang Bakeshop &amp; Kingdom Confectionary Business Lines · Manual of Operations Rev. 4.6 WMS Engine
           </p>
           <p className="text-[#E5C585] text-[11px]">
             Indangan Subject Site FDA LTO No. 3000013388488 · Sasa Site LTO No. 3000002291335 · Davao City, Philippines
           </p>
           <p className="text-gray-400 text-[10px]">
-            Designed for Jade Q. Dela Cruz (Receiving & Withdrawals) · Romeo B. Malusay (Batching & Releasing) · Mariejohn F. Tacuban (Inventory & PO Replenishment)
+            Designed for Jade Q. Dela Cruz (Receiving &amp; Withdrawals) · Romeo B. Malusay (Batching &amp; Releasing) · Mariejohn F. Tacuban (Inventory &amp; PO Replenishment)
           </p>
         </div>
       </footer>

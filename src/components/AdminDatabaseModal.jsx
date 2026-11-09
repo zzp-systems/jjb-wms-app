@@ -46,6 +46,12 @@ export default function AdminDatabaseModal({
 
   const adminId = authUser?.id || authUser?.username || 'zaphyr';
 
+  // =========================================================================
+  // adminFetch — sends the X-JJB-Admin-User header (required by server auth
+  // gate) and Content-Type: application/json. Guards against HTML error
+  // bodies by checking res.ok BEFORE res.json() — this is the fix for the
+  // "Unexpected token '<'" error when the server returns a 500.
+  // =========================================================================
   const adminFetch = useCallback(async (path, options = {}) => {
     const res = await fetch(path, {
       ...options,
@@ -55,8 +61,22 @@ export default function AdminDatabaseModal({
         ...(options.headers || {})
       }
     });
+
+    // Non-2xx responses may be HTML (Cloudflare error pages). Check first,
+    // then attempt JSON parse for a structured error message if possible.
+    if (!res.ok) {
+      let errMsg = `HTTP ${res.status}`;
+      try {
+        const errData = await res.json();
+        if (errData && errData.error) errMsg = errData.error;
+      } catch {
+        // Body wasn't JSON — use HTTP status only
+      }
+      throw new Error(errMsg);
+    }
+
     const data = await res.json();
-    if (!res.ok || !data.ok) {
+    if (!data.ok) {
       throw new Error(data.error || `HTTP ${res.status}`);
     }
     return data;

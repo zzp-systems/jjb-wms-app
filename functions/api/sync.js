@@ -639,25 +639,24 @@ export async function onRequestPost({ request, env }) {
     warning:       softWarning,
   });
 }
-
 // ============================================================================
 // GET /api/sync?since_id=N
 //
 // Phase 2.5 — cross-device request polling.
 //
-// Returns recent WITHDRAWAL_REQUEST_SUBMITTED / WITHDRAWAL_REQUEST_CANCELLED
-// events from sync_events using a monotonic `id` cursor. Any browser tab or
-// device that polls gets the same data regardless of which kiosk created the
-// original event. This closes the localStorage + BroadcastChannel gap, which
-// only works same-origin same-browser.
+// Returns recent WITHDRAWAL_REQUEST_*, BATCH_ORDER_*, OUTLET_BATCH_ORDER, and
+// SPECIALTY_PROPOSAL_* events from sync_events using a monotonic `id` cursor.
+// This lets Jade's and Romeo's desktops pick up kiosk submissions made from a
+// DIFFERENT browser or device. localStorage + BroadcastChannel are same-
+// origin same-browser only; D1 is the shared store that closes this gap.
 //
 // Response shape:
-//   { ok: true, since_id, server_max_id, count, events: [{id, key, type, payload, created_at}] }
-//
-// Client contract:
-//   - Store server_max_id in localStorage as JJB_WMS_REQUEST_POLL_ID
-//   - Next call passes it as since_id
-//   - Strictly monotonic `id` = no duplicates, no gaps, no timestamp parsing
+//   {
+//     ok: true,
+//     since_id, server_max_id, last_event_id,  // last_event_id aliases server_max_id
+//     count, events: [{id, key, type, event_type, payload, created_at}],
+//     batch_orders: [...]  // last 25 recent batch orders for hydration
+//   }
 // ============================================================================
 export async function onRequestGet({ request, env }) {
   if (!env.DB) {
@@ -667,47 +666,72 @@ export async function onRequestGet({ request, env }) {
   const url = new URL(request.url);
   const sinceId = Math.max(0, parseInt(url.searchParams.get('since_id') || '0', 10) || 0);
 
-  let results = [];
+  const POLLED_EVENT_TYPES = [
+    'WITHDRAWAL_REQUEST_SUBMITTED',
+    'WITHDRAWAL_REQUEST_CANCELLED',
+    'WITHDRAWAL_SAVED',
+    'BATCH_ORDER_SAVED',
+    'BATCH_ORDER_UPDATED',
+    'OUTLET_BATCH_ORDER',
+    'SPECIALTY_PROPOSAL_SAVED',
+    'SPECIALTY_PROPOSAL_CREATED',
+    'SPECIALTY_PROPOSAL_APPROVED'
+  ];
+
+  let events = [];
+  let recentBatchOrders = [];
+
   try {
+    const placeholders = POLLED_EVENT_TYPES.map((_, i) => `?${i + 2}`).join(', ');
     const out = await env.DB.prepare(`
       SELECT id, idempotency_key, event_type, payload, created_at
       FROM sync_events
       WHERE id > ?1
-        AND event_type IN ('WITHDRAWAL_REQUEST_SUBMITTED', 'WITHDRAWAL_REQUEST_CANCELLED')
+        AND event_type IN (${placeholders})
       ORDER BY id ASC
-      LIMIT 50
-    `).bind(sinceId).all();
-    results = out?.results || [];
+      LIMIT 100
+    `).bind(sinceId, ...POLLED_EVENT_TYPES).all();
+    events = out?.results || [];
   } catch (e) {
     return json({ ok: false, error: String(e.message || e) }, 500);
   }
 
-  const serverMaxId = results.length > 0
-    ? results[results.length - 1].id
+  // Fetch recent batch orders for hydration (mobile BATCH_ORDER_SAVED arrives
+  // with limited fields; this lets Romeo's desktop see the full row from D1)
+  try {
+    const boOut = await env.DB.prepare(`
+      SELECT * FROM batch_orders
+      WHERE is_test_data = 0
+      ORDER BY rowid DESC
+      LIMIT 25
+    `).all();
+    recentBatchOrders = boOut?.results || [];
+  } catch (e) {
+    // Non-fatal — polling still works for requests
+  }
+
+  const serverMaxId = events.length > 0
+    ? events[events.length - 1].id
     : sinceId;
 
   return json({
     ok: true,
     since_id: sinceId,
     server_max_id: serverMaxId,
-    count: results.length,
-    events: results.map((r) => {
+    last_event_id: serverMaxId,   // alias for compatibility with clients using this name
+    count: events.length,
+    events: events.map((r) => {
       let payload = {};
       try { payload = JSON.parse(r.payload || '{}'); } catch (e) {}
       return {
         id: r.id,
         key: r.idempotency_key,
         type: r.event_type,
+        event_type: r.event_type,   // alias — some clients use ev.event_type
         payload,
         created_at: r.created_at
       };
-    })
-  });
-}
-
-function json(body, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
+    }),
+    batch_orders: recentBatchOrders
   });
 }

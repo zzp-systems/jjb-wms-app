@@ -1,4 +1,4 @@
-/**
+﻿/**
  * ============================================================================
  * JJB WMS v4.6 — Phase 2 Backend Admin Panel API (functions/api/admin[[route]].js)
  * ============================================================================
@@ -17,7 +17,7 @@ import {
   ALLOWED_ADMIN_TABLES,
   verifyPbkdf2Secret,
   executePurgeTestDataBatch
-} from '../utils/adminDbUtils.js';
+} from '../../../../utils/adminDbUtils.js';
 
 const TABLE_META = {
   users:                        { pk: 'id',          group: 'A', hasTestFlag: true,  immutable: false, searchCol: 'name' },
@@ -479,3 +479,6 @@ export async function onRequest(context) {
     return json({ ok: false, error: String(err.message || err) }, 500);
   }
 }
+
+
+

@@ -75,7 +75,6 @@
       <p id="confirmDetails" class="text-xs"></p>
     </div>
 
-    <!-- FORM 1: RECIPE BATCHED INGREDIENTS -->
     <div id="recipeSection" class="bg-white p-6 rounded-2xl border border-[#E2D1B8] shadow-sm space-y-4">
       <div class="border-b border-gray-100 pb-3 flex justify-between items-center flex-wrap gap-2">
         <div>
@@ -138,7 +137,6 @@
       </form>
     </div>
 
-    <!-- FORM 2: RAW MATERIAL & PACKAGING WITHDRAWAL -->
     <div id="materialSection" class="hidden bg-white p-6 rounded-2xl border border-[#E2D1B8] shadow-sm space-y-4">
       <div class="border-b border-gray-100 pb-3 flex justify-between items-center flex-wrap gap-2">
         <div>
@@ -211,7 +209,6 @@
       </form>
     </div>
 
-    <!-- FORM 3: PROPOSE SPECIALTY RECIPE -->
     <div id="specialtySection" class="hidden bg-white p-6 rounded-2xl border border-[#E2D1B8] shadow-sm space-y-4">
       <div class="border-b border-gray-100 pb-3 flex justify-between items-center flex-wrap gap-2">
         <div>
@@ -554,7 +551,6 @@
       } catch (e) {}
     }
 
-    // ─── RECIPE ORDER SUBMIT — full payload so projectBatchOrder links correctly
     document.getElementById('recipeOrderForm').addEventListener('submit', function(e) {
       e.preventDefault();
       const outlet = document.getElementById('recipeOutletSelect').value;
@@ -616,7 +612,6 @@
       box.scrollIntoView({ behavior: 'smooth' });
     });
 
-    // ─── MATERIAL REQUEST SUBMIT — writes to Jade's pending queue, NO auto-deduct
     document.getElementById('materialOrderForm').addEventListener('submit', function(e) {
       e.preventDefault();
       const line = document.getElementById('matLineSelect').value;
@@ -679,7 +674,6 @@
         withdrawalSlipNo: null
       };
 
-      // Write to PENDING REQUESTS queue — NOT withdrawals. No stock deduction.
       try {
         const storageKey = 'JJB_WMS_LIVE_V4_6_STATE_pending_requests';
         const existing = JSON.parse(localStorage.getItem(storageKey) || '[]');
@@ -690,8 +684,6 @@
 
       broadcastSyncEvent('WITHDRAWAL_REQUEST_SUBMITTED', 'Material Request', requestId, line);
 
-      // Informational sync event — sync.js treats WITHDRAWAL_REQUEST_SUBMITTED as a
-      // no-op (no handler → projected_at set, no data change, no stock deduction).
       fetch('/api/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -749,9 +741,6 @@
       if (container.children.length > 1) btn.closest('.spec-ing-row').remove();
     }
 
-    // ─── SPECIALTY SUBMIT — routes through SPECIALTY_PROPOSAL_CREATED so
-    //     sync.js projectSpecialty actually fires (was SPECIALTY_RECIPE_SUBMITTED,
-    //     which is not in HANDLERS → silent no-op).
     document.getElementById('specialtyRecipeForm').addEventListener('submit', function(e) {
       e.preventDefault();
       const title = document.getElementById('specTitleInput').value.trim();
