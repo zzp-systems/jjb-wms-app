@@ -488,17 +488,17 @@ export async function onRequestPost({ request, env }) {
   } catch {
     return json({ status: 'error', error: 'invalid_json' }, 400);
   }
-
-  let type, key, payload;
-  if (body.event_type || body.type || body.payload || body.data) {
-    type = String(body.event_type || body.type || '').toUpperCase();
-    key = String(body.idempotency_key || body.id || crypto.randomUUID());
-    payload = body.payload || body.data || {};
-  } else {
-    payload = body;
-    type = String(body.eventType || body.event_type || body.type || '').toUpperCase();
-    key = String(body.idempotencyKey || body.idempotency_key || body.id || crypto.randomUUID());
-  }
+  // Robust shape extraction — handles Shape A, Shape B, AND the mixed
+  // shape that outlet-portal.html uses ({ idempotencyKey, eventType, payload }).
+  // The old if/else branch structure missed camelCase keys when a `payload`
+  // field was present, silently storing events as event_type=''.
+  const type = String(
+    body.event_type || body.eventType || body.type || ''
+  ).toUpperCase();
+  const key = String(
+    body.idempotency_key || body.idempotencyKey || body.id || crypto.randomUUID()
+  );
+  const payload = body.payload || body.data || body;
 
   const isTest = asTest(payload.is_test_data);
 
