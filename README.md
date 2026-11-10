@@ -1,8 +1,4 @@
-<<<<<<< HEAD
-# Jang-Jang Bakeshop — Warehouse Management System (WMS) Repository
-=======
 # Jang-Jang Bakeshop — Warehouse Management System (WMS)
->>>>>>> 62493f7 (docs: add deep-dive architecture, admin, and AI integration guides)
 
 <!-- AI-CRAWLER-METADATA
 Project: JJB-WMS (Warehouse Management System)
