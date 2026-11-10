@@ -1,5 +1,5 @@
 // ============================================================================
-// JJB WMS — /api/sync  (Phase 1.5 projection + Phase 2.5 polling)
+// JJB WMS — /api/sync  (Phase 1.5 projection + Phase 2.5/2.6 polling)
 //
 // POST /api/sync            — inbound floor-app events
 // GET  /api/sync?since_id=N — cross-device polling for pending requests
@@ -277,6 +277,40 @@ function projectBatchOrder(env, p, isTest) {
   )];
 }
 
+// Phase 2.6 — Batch order cancellation
+function projectBatchOrderCancel(env, p, isTest) {
+  const stmts = [];
+  const orderId = pick(p, 'orderId', 'order_id');
+  if (!orderId) throw new Error('MISSING_ORDER_ID');
+
+  const reason = str(p.cancellationReason || p.reason || 'Cancelled');
+  const actor = str(p.cancelledBy || p.cancelledByName || 'Warehouse Staff');
+
+  // Hard-delete from batch_orders (the row is gone from live queue)
+  stmts.push(
+    env.DB.prepare(`DELETE FROM batch_orders WHERE order_id = ?`).bind(orderId)
+  );
+
+  // Audit trail lives in audit_log — this IS the permanent record.
+  // The client-side state removes the card entirely; D1 is the source of
+  // truth for "what happened". No local persistence of the cancel state.
+  stmts.push(
+    env.DB.prepare(`
+      INSERT INTO audit_log (timestamp, actor, role, action, details, is_test_data)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).bind(
+      str(p.timestamp) || new Date().toISOString(),
+      actor,
+      str(p.cancelledByRole) || null,
+      'BATCH_ORDER_CANCELLED',
+      `Batch order ${orderId} cancelled: ${reason}`,
+      isTest
+    )
+  );
+
+  return stmts;
+}
+
 function projectOrder(env, p, isTest) {
   const stmts = [];
   const orderId = pick(p, 'orderId', 'order_id');
@@ -448,6 +482,7 @@ const HANDLERS = {
   'BATCH_COMPLETED': projectBatchOrder,
   'BATCH_RELEASED': projectBatchOrder,
   'OUTLET_BATCH_ORDER': projectBatchOrder,
+  'BATCH_ORDER_CANCELLED': projectBatchOrderCancel,
   'ORDER_SAVED': projectOrder,
   'ORDER_CREATED': projectOrder,
   'AUDIT_LOG': projectAudit,
@@ -488,10 +523,9 @@ export async function onRequestPost({ request, env }) {
   } catch {
     return json({ status: 'error', error: 'invalid_json' }, 400);
   }
-  // Robust shape extraction — handles Shape A, Shape B, AND the mixed
-  // shape that outlet-portal.html uses ({ idempotencyKey, eventType, payload }).
-  // The old if/else branch structure missed camelCase keys when a `payload`
-  // field was present, silently storing events as event_type=''.
+
+  // Robust shape extraction — handles Shape A, Shape B, AND the mixed shape
+  // ({ idempotencyKey, eventType, payload }) that outlet-portal.html uses.
   const type = String(
     body.event_type || body.eventType || body.type || ''
   ).toUpperCase();
@@ -521,7 +555,6 @@ export async function onRequestPost({ request, env }) {
   ).bind(key).first();
 
   let projectionOk = !!state?.projected_at;
-  let softWarning = null;
 
   if (!projectionOk) {
     const handler = HANDLERS[type];
@@ -576,12 +609,11 @@ export async function onRequestPost({ request, env }) {
     idempotency: key,
     projected: projectionOk,
     synced_to_gas: gasOk,
-    is_test_data: isTest,
-    warning: softWarning
+    is_test_data: isTest
   });
 }
 
-// --------------------------- GET handler (Phase 2.5) ---------------------
+// --------------------------- GET handler (Phase 2.5/2.6) -----------------
 export async function onRequestGet({ request, env }) {
   if (!env.DB) {
     return json({ ok: false, error: 'D1 not configured' }, 500);
@@ -597,6 +629,7 @@ export async function onRequestGet({ request, env }) {
     'BATCH_ORDER_SAVED',
     'BATCH_ORDER_UPDATED',
     'OUTLET_BATCH_ORDER',
+    'BATCH_ORDER_CANCELLED',
     'SPECIALTY_PROPOSAL_SAVED',
     'SPECIALTY_PROPOSAL_CREATED',
     'SPECIALTY_PROPOSAL_APPROVED'

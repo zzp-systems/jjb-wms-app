@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import Header from './components/Header';
+import Header, { SidebarNavigation } from './components/Header';
 import ExecutiveDashboard from './components/ExecutiveDashboard';
 import ReceivingModule from './components/ReceivingModule';
 import IssuanceModule from './components/IssuanceModule';
@@ -31,6 +31,7 @@ import { deductFefoLots, calculateRecipeIngredients } from './utils/wmsLogic';
 import { CheckCircle2, Bell } from 'lucide-react';
 
 export const STORAGE_KEY = 'JJB_WMS_LIVE_V4_6_STATE';
+export const UI_PREF_KEY = 'JJB_WMS_UI_PREFS';
 export const WORKER_SYNC_URL = '/api/sync';
 export const GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbwBll5ZKuiBO0wX9WSXGRd-Tua4QpxbfKAcrnWhVmdkjkU_3mnwgI7bX-iiRgjHlkYa/exec';
 
@@ -103,6 +104,17 @@ const buildNormalizedWithdrawalItems = (rawItems, materialsList) => {
   });
 };
 
+// ============================================================================
+// Helper: UI preferences (theme + nav layout) — safe, non-transactional
+// ============================================================================
+const loadUiPrefs = () => {
+  try {
+    const raw = localStorage.getItem(UI_PREF_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch (e) {}
+  return { navLayout: 'sidebar', themeId: 'jjb-gold' };
+};
+
 export default function App() {
   // Persistence Helpers
   const getSaved = (key, fallback) => {
@@ -114,37 +126,22 @@ export default function App() {
     }
   };
 
+  // ==========================================================================
+  // localStorage writer — DIRECT WRITE (no merge).
+  //
+  // Why no merge?
+  //   The previous merge pattern seeded a Map with existingList first, then
+  //   overwrote with value. Deleted items could never be evicted because they
+  //   were already in the Map before `value` was applied. Cross-tab consistency
+  //   is handled separately by:
+  //     • the `storage` event → reloadExternalData()
+  //     • the D1 poller every 12s → pollCrossDeviceEvents()
+  //     • BroadcastChannel → NEW_REQUISITION messages
+  //   So the localStorage write must simply mirror current React state.
+  // ==========================================================================
   const saveToStorage = (key, value) => {
     try {
       const fullKey = `${STORAGE_KEY}_${key}`;
-      if ((key === 'batch_orders' || key === 'withdrawals' || key === 'pending_requests') && Array.isArray(value)) {
-        const existingRaw = localStorage.getItem(fullKey);
-        if (existingRaw) {
-          try {
-            const existingList = JSON.parse(existingRaw);
-            if (Array.isArray(existingList)) {
-              const idField =
-                key === 'batch_orders'
-                  ? 'orderId'
-                  : key === 'pending_requests'
-                  ? 'requestId'
-                  : 'slipNo';
-              const map = new Map();
-              existingList.forEach((item) => {
-                const id = item[idField] || item.withdrawalNo || item.orderId;
-                if (id) map.set(id, item);
-              });
-              value.forEach((item) => {
-                const id = item[idField] || item.withdrawalNo || item.orderId;
-                if (id) map.set(id, item);
-              });
-              const merged = Array.from(map.values());
-              localStorage.setItem(fullKey, JSON.stringify(merged));
-              return;
-            }
-          } catch (e) {}
-        }
-      }
       localStorage.setItem(fullKey, JSON.stringify(value));
     } catch (e) {
       console.error('Storage error:', e);
@@ -160,6 +157,17 @@ export default function App() {
   const [adjustments, setAdjustments] = useState(() => getSaved('adjustments', INITIAL_ADJUSTMENTS));
   const [quarantineList, setQuarantineList] = useState(() => getSaved('quarantine', INITIAL_QUARANTINE));
   const [auditLogs, setAuditLogs] = useState(() => getSaved('audit_logs', INITIAL_AUDIT_LOGS));
+
+  // UI Preferences (theme + nav layout) — persisted, non-transactional
+  const initialUiPrefs = loadUiPrefs();
+  const [themeId, setThemeId] = useState(initialUiPrefs.themeId || 'jjb-gold');
+  const [navLayout, setNavLayout] = useState(initialUiPrefs.navLayout || 'sidebar');
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(UI_PREF_KEY, JSON.stringify({ navLayout, themeId }));
+    } catch (e) {}
+  }, [navLayout, themeId]);
 
   // Operational & Authentication State
   const [authUser, setAuthUser] = useState(() => {
@@ -179,20 +187,22 @@ export default function App() {
   const [currentRole, setCurrentRole] = useState(() => authUser?.name || 'Jade Q. Dela Cruz');
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
-  const [isTestMode, setIsTestMode] = useState(() => {
-    try {
-      return sessionStorage.getItem('JJB_WMS_SANDBOX_MODE') === '1';
-    } catch {
-      return false;
-    }
-  });
+// Sandbox flag is intentionally stored in localStorage (not sessionStorage) so
+// toggling it in one tab propagates to every other open tab within seconds.
+const [isTestMode, setIsTestMode] = useState(() => {
+  try {
+    return localStorage.getItem('JJB_WMS_SANDBOX_MODE') === '1';
+  } catch {
+    return false;
+  }
+});
 
-  const toggleTestMode = (val) => {
-    setIsTestMode(val);
-    try {
-      sessionStorage.setItem('JJB_WMS_SANDBOX_MODE', val ? '1' : '0');
-    } catch {}
-  };
+const toggleTestMode = (val) => {
+  setIsTestMode(val);
+  try {
+    localStorage.setItem('JJB_WMS_SANDBOX_MODE', val ? '1' : '0');
+  } catch {}
+};
 
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isMobileMode, setIsMobileMode] = useState(false);
@@ -239,9 +249,9 @@ export default function App() {
   }, [isOffline, isTestMode]);
 
   // ============================================================================
-  // Phase 2.5 — Cross-Device D1 Poller
-  // Pulls mobile /outlet-portal.html submissions from Cloudflare D1 every 12s
-  // and merges them into React state + triggers desktop notification bell.
+  // Phase 2.6 — Cross-Device D1 Poller
+  // Cancelled / issued items are filtered out (NOT persisted) — D1 sync_events
+  // and audit_log are the permanent record.
   // ============================================================================
   const pollCrossDeviceEvents = useCallback(async () => {
     if (isOffline) return;
@@ -258,7 +268,8 @@ export default function App() {
       const incomingEvents = Array.isArray(data.events) ? data.events : [];
       const remoteBatchOrders = Array.isArray(data.batch_orders) ? data.batch_orders : [];
 
-      // 1. Hydrate any batch_orders present in D1 table that aren't in local state yet
+      // 1. Hydrate NEW batch orders from D1 (updates are handled below via
+      //    the BATCH_ORDER_UPDATED event case)
       if (remoteBatchOrders.length > 0) {
         setBatchOrders((prev) => {
           const map = new Map(prev.map((o) => [o.orderId, o]));
@@ -341,8 +352,8 @@ export default function App() {
           });
         }
 
-        // B. Cancelled Request or Issued Withdrawal -> Remove from Pending Queue
-        if (evType === 'WITHDRAWAL_REQUEST_CANCELLED' || evType === 'WITHDRAWAL_SAVED') {
+        // B. Cancelled Request -> Remove from queue entirely (no local persistence)
+        if (evType === 'WITHDRAWAL_REQUEST_CANCELLED') {
           const targetId = p.requestId || p.sourceRequestId || p.withdrawalNo || p.slipNo;
           if (targetId) {
             setPendingRequests((prev) =>
@@ -351,7 +362,17 @@ export default function App() {
           }
         }
 
-        // C. Mobile Batch Order (Form-ORD-001) -> Queue in Romeo's Workbench
+        // C. Issued Withdrawal -> Remove matching pending request from queue
+        if (evType === 'WITHDRAWAL_SAVED') {
+          const targetId = p.sourceRequestId || p.requestId || p.withdrawalNo;
+          if (targetId) {
+            setPendingRequests((prev) =>
+              prev.filter((r) => r.requestId !== targetId && r.withdrawalNo !== targetId)
+            );
+          }
+        }
+
+        // D. Mobile Batch Order (Form-ORD-001) -> Queue in Romeo's Workbench
         if (evType === 'BATCH_ORDER_SAVED' || evType === 'OUTLET_BATCH_ORDER') {
           const orderId = p.orderId || p.order_id;
           if (!orderId) return;
@@ -383,7 +404,47 @@ export default function App() {
           });
         }
 
-        // D. Mobile Specialty R&D Proposal (Form-RND-001) -> Save to localStorage & notify Romeo
+        // E. Batch Order UPDATED -> Merge status/bulk fields from D1 into local state
+        if (evType === 'BATCH_ORDER_UPDATED') {
+          const orderId = p.orderId || p.order_id;
+          if (!orderId) return;
+          setBatchOrders((prev) =>
+            prev.map((o) => {
+              if (o.orderId !== orderId) return o;
+              return {
+                ...o,
+                status: p.status ?? o.status,
+                bulkRequestStatus: p.bulkRequestStatus ?? o.bulkRequestStatus,
+                bulkRequisitionSlipNo: p.bulkRequisitionSlipNo ?? o.bulkRequisitionSlipNo,
+                bulkRequestedAt: p.bulkRequestedAt ?? o.bulkRequestedAt,
+                bulkApprovedAt: p.bulkApprovedAt ?? o.bulkApprovedAt,
+                bulkApprovedBy: p.bulkApprovedBy ?? o.bulkApprovedBy,
+                bulkLastDeclinedAt: p.bulkLastDeclinedAt ?? o.bulkLastDeclinedAt,
+                bulkLastDeclinedBy: p.bulkLastDeclinedBy ?? o.bulkLastDeclinedBy,
+                bulkLastDeclinedReason: p.bulkLastDeclinedReason ?? o.bulkLastDeclinedReason,
+                batchTagId: p.batchTagId ?? o.batchTagId,
+                actualBatchedKg: p.actualBatchedKg ?? o.actualBatchedKg,
+                actualBatchedUnits: p.actualBatchedUnits ?? o.actualBatchedUnits,
+                batchedAt: p.batchedAt ?? o.batchedAt,
+                batchedBy: p.batchedBy ?? o.batchedBy,
+                scaleUsed: p.scaleUsed ?? o.scaleUsed,
+                sifter40MeshChecked: p.sifter40MeshChecked ?? o.sifter40MeshChecked,
+                releasedAt: p.releasedAt ?? o.releasedAt,
+                releasedTo: p.releasedTo ?? o.releasedTo
+              };
+            })
+          );
+        }
+
+        // F. Batch Order Cancelled -> Remove from Romeo's queue entirely
+        if (evType === 'BATCH_ORDER_CANCELLED') {
+          const orderId = p.orderId || p.order_id;
+          if (orderId) {
+            setBatchOrders((prev) => prev.filter((o) => o.orderId !== orderId));
+          }
+        }
+
+        // G. Mobile Specialty R&D Proposal (Form-RND-001) -> Save to localStorage & notify Romeo
         if (evType === 'SPECIALTY_PROPOSAL_SAVED' || evType === 'SPECIALTY_PROPOSAL_CREATED') {
           const propId = p.proposalId || p.proposal_id;
           if (!propId) return;
@@ -427,7 +488,6 @@ export default function App() {
     }
   }, [isOffline, showToast]);
 
-  // Poll D1 every 12 seconds + immediately on mount & window focus
   useEffect(() => {
     pollCrossDeviceEvents();
     const interval = setInterval(() => {
@@ -468,7 +528,6 @@ export default function App() {
     }
   };
 
-  // Sync auth user to LocalStorage
   useEffect(() => {
     try {
       localStorage.setItem('JJB_WMS_AUTH_USER', JSON.stringify(authUser));
@@ -538,17 +597,34 @@ export default function App() {
       pollCrossDeviceEvents();
     };
 
-    const handleStorageEvent = (e) => {
-      if (
-        e.key === `${STORAGE_KEY}_batch_orders` ||
-        e.key === `${STORAGE_KEY}_withdrawals` ||
-        e.key === `${STORAGE_KEY}_pending_requests` ||
-        e.key === `${STORAGE_KEY}_inventory` ||
-        e.key === 'JJB_WMS_LIVE_V4_6_SPECIALTY_RECIPES'
-      ) {
-        reloadExternalData();
-      }
-    };
+const handleStorageEvent = (e) => {
+  // ── Data-array keys → reload from disk ──────────────────────────────
+  if (
+    e.key === `${STORAGE_KEY}_batch_orders` ||
+    e.key === `${STORAGE_KEY}_withdrawals` ||
+    e.key === `${STORAGE_KEY}_pending_requests` ||
+    e.key === `${STORAGE_KEY}_inventory` ||
+    e.key === 'JJB_WMS_LIVE_V4_6_SPECIALTY_RECIPES'
+  ) {
+    reloadExternalData();
+    return;
+  }
+
+  // ── Sandbox flag → reflect toggle from any other tab ────────────────
+  if (e.key === 'JJB_WMS_SANDBOX_MODE') {
+    setIsTestMode(e.newValue === '1');
+    return;
+  }
+
+  // ── UI prefs (theme + nav layout) → reflect changes live ────────────
+  if (e.key === UI_PREF_KEY) {
+    try {
+      const prefs = JSON.parse(e.newValue || '{}');
+      if (prefs.themeId) setThemeId(prefs.themeId);
+      if (prefs.navLayout) setNavLayout(prefs.navLayout);
+    } catch {}
+  }
+};
     window.addEventListener('storage', handleStorageEvent);
 
     const handleFocus = () => reloadExternalData();
@@ -693,8 +769,6 @@ export default function App() {
 
   // ============================================================================
   // Phase 1.5 DEDUCTION GATE — Shared Withdrawal Executor
-  // Only called when Jade explicitly issues a manual slip, approves a portal
-  // request (handleIssuePendingRequest), or approves Romeo's bulk requisition.
   // ============================================================================
   const performWithdrawal = (newWithdrawal, opts = {}) => {
     const normalizedItems = buildNormalizedWithdrawalItems(newWithdrawal.items, inventory);
@@ -760,7 +834,6 @@ export default function App() {
     );
   };
 
-  // WORKFLOW 2A: Direct Warehouse Stock Withdrawal Save (Jade in Tab 4)
   const handleSaveWithdrawal = (newWithdrawal) => {
     performWithdrawal(newWithdrawal, {
       sourceChannel: 'MANUAL',
@@ -770,7 +843,6 @@ export default function App() {
     setActiveTab('dashboard');
   };
 
-  // WORKFLOW 2B: Portal Requisition Intake (Queues for Jade — No premature stock deduction)
   const handleSubmitWithdrawalRequest = (portalReq) => {
     const requestId = portalReq.requestId || portalReq.withdrawalNo || `REQ-${Date.now().toString().slice(-6)}`;
     const normalizedItems = buildNormalizedWithdrawalItems(
@@ -824,7 +896,6 @@ export default function App() {
     showToast(`Requisition ${requestId} queued for Jade Dela Cruz's release!`);
   };
 
-  // WORKFLOW 2C: Jade Approves & Issues a Queued Portal Request
   const handleIssuePendingRequest = (requestId, overrides = {}) => {
     const req = pendingRequests.find(
       (r) => r.requestId === requestId || r.withdrawalNo === requestId
@@ -862,7 +933,6 @@ export default function App() {
     showToast(`Request ${requestId} issued as Slip ${slipNo} & stock deducted!`);
   };
 
-  // WORKFLOW 2D: Cancel a Queued Portal Request
   const handleCancelPendingRequest = (requestId, reason = 'Cancelled by Warehouse Supervisor') => {
     setPendingRequests((prev) =>
       prev.filter((r) => r.requestId !== requestId && r.withdrawalNo !== requestId)
@@ -877,7 +947,6 @@ export default function App() {
     showToast(`Queued request ${requestId} cancelled.`);
   };
 
-  // WORKFLOW 3: Batch Order Save
   const handleSaveBatchOrder = (newOrder) => {
     setBatchOrders((prev) => [newOrder, ...prev]);
 
@@ -904,7 +973,6 @@ export default function App() {
     showToast(`Order ${newOrder.orderId} queued for Romeo Malusay!`);
   };
 
-  // WORKFLOW 3B: Romeo Requests Bulk Raw Materials
   const handleRequestBulkMaterials = (orderId) => {
     const nowStr = new Date().toISOString().slice(0, 19).replace('T', ' ');
     const order = batchOrders.find((o) => o.orderId === orderId);
@@ -943,7 +1011,7 @@ export default function App() {
     showToast(`Bulk requisition for ${order.recipeName} sent to Jade Dela Cruz in Tab 4!`);
   };
 
-  // WORKFLOW 3C: Jade Approves Romeo's Bulk Requisition
+  // WORKFLOW 3C — Jade Approves Romeo's Bulk Requisition
   const handleApprovePendingWithdrawal = (orderId) => {
     const order = batchOrders.find((o) => o.orderId === orderId);
     if (!order) return;
@@ -1017,7 +1085,55 @@ export default function App() {
     showToast(`Bulk materials authorized & deducted! Romeo's Scale & Kit is unlocked.`);
   };
 
-  // WORKFLOW 4: Update Batch Order Status
+  // WORKFLOW 3D — Jade Declines Romeo's Bulk Requisition (Phase 2.6)
+  // Sets bulkRequestStatus back to NOT_REQUESTED so Romeo can re-request,
+  // while retaining the decline metadata + audit trail (no local persistence
+  // of the decline action itself).
+  const handleDeclineBulkWithdrawal = (orderId, reason = 'Declined by Jade') => {
+    const targetOrder = batchOrders.find((o) => o.orderId === orderId);
+    if (!targetOrder) return;
+
+    const nowStr = new Date().toISOString().slice(0, 19).replace('T', ' ');
+    const previousSlip = targetOrder.bulkRequisitionSlipNo;
+
+    setBatchOrders((prev) =>
+      prev.map((o) => {
+        if (o.orderId !== orderId) return o;
+        return {
+          ...o,
+          bulkRequestStatus: 'NOT_REQUESTED',
+          bulkRequisitionSlipNo: null,
+          bulkRequestedAt: null,
+          bulkLastDeclinedAt: nowStr,
+          bulkLastDeclinedBy: currentRole,
+          bulkLastDeclinedReason: reason,
+          bulkLastDeclinedSlipNo: previousSlip || null
+        };
+      })
+    );
+
+    recordAudit(
+      'BULK_REQUISITION_DECLINED',
+      `Jade declined bulk requisition ${previousSlip || orderId} for ${targetOrder.recipeName} (${orderId}): ${reason}`
+    );
+
+    postSyncEvent(
+      'BATCH_ORDER_UPDATED',
+      `BULK_DECL_${orderId}_${Date.now()}`,
+      {
+        orderId,
+        bulkRequestStatus: 'NOT_REQUESTED',
+        bulkLastDeclinedAt: nowStr,
+        bulkLastDeclinedBy: currentRole,
+        bulkLastDeclinedReason: reason,
+        bulkLastDeclinedSlipNo: previousSlip || null,
+        timestamp: new Date().toISOString()
+      }
+    );
+
+    showToast(`Bulk requisition for ${orderId} declined. Romeo can re-request.`);
+  };
+
   const handleUpdateOrderStatus = (orderId, newStatus, tagId = null, batchedKg = 0) => {
     const nowStr = new Date().toISOString().slice(0, 19).replace('T', ' ');
     const targetOrder = batchOrders.find((o) => o.orderId === orderId);
@@ -1091,7 +1207,36 @@ export default function App() {
     showToast(`Order ${orderId} updated to ${newStatus}!`);
   };
 
-  // WORKFLOW 5: Collective Release All Completed
+  // WORKFLOW 4B — Cancel a batch order (Phase 2.6)
+  // Removes from D1 batch_orders, writes to audit_log, propagates via poller.
+  // No local persistence of the cancel state — D1 is the audit trail.
+  const handleCancelBatchOrder = (orderId, reason = 'Cancelled') => {
+    const targetOrder = batchOrders.find(o => o.orderId === orderId);
+    if (!targetOrder) return;
+
+    setBatchOrders(prev => prev.filter(o => o.orderId !== orderId));
+
+    recordAudit(
+      'BATCH_ORDER_CANCELLED',
+      `Batch order ${orderId} (${targetOrder.recipeName}) cancelled by ${currentRole}: ${reason}`
+    );
+
+    postSyncEvent(
+      'BATCH_ORDER_CANCELLED',
+      `BATCH_CANCEL_${orderId}_${Date.now()}`,
+      {
+        orderId,
+        recipeName: targetOrder.recipeName,
+        outletName: targetOrder.outletName,
+        cancelledBy: currentRole,
+        cancellationReason: reason,
+        timestamp: new Date().toISOString()
+      }
+    );
+
+    showToast(`Order ${orderId} cancelled.`);
+  };
+
   const handleBulkReleaseOrders = () => {
     const nowStr = new Date().toISOString().slice(0, 19).replace('T', ' ');
     const kittedOrders = batchOrders.filter((o) => o.status === 'BATCHED_KITTED');
@@ -1136,10 +1281,8 @@ export default function App() {
     showToast(`Successfully released all ${kittedOrders.length} completed batches to outlet logistics!`);
   };
 
-  // WORKFLOW 6: Physical Adjustment
   const handleSaveAdjustment = (newAdj) => {
     setAdjustments((prev) => [newAdj, ...prev]);
-
     const matchedMat = inventory.find((m) => m.code === newAdj.materialCode);
 
     setInventory((prevInv) => {
@@ -1178,7 +1321,6 @@ export default function App() {
     showToast(`Adjustment ${newAdj.id} committed to book balance!`);
   };
 
-  // WORKFLOW 7: Quarantine
   const handleSaveQuarantine = (newNcr) => {
     setQuarantineList((prev) => [newNcr, ...prev]);
 
@@ -1208,27 +1350,20 @@ export default function App() {
     showToast(`NCR ${newNcr.ncrNo} logged into exterior quarantine cabinet!`);
   };
 
-  // WORKFLOW 8: CSV Inventory Import
   const handleImportInventoryCsv = (updates = []) => {
     if (!Array.isArray(updates) || updates.length === 0) return;
-
     setInventory((prevInv) => {
       return prevInv.map((mat) => {
         const update = updates.find((u) => u.code.toLowerCase() === mat.code.toLowerCase());
         if (update && !isNaN(update.newBalance)) {
-          return {
-            ...mat,
-            currentBalance: update.newBalance
-          };
+          return { ...mat, currentBalance: update.newBalance };
         }
         return mat;
       });
     });
-
     showToast(`Imported count updates for ${updates.length} inventory items!`);
   };
 
-  // One-Time Physical Count Baseline Import
   const handleApplyInventoryImport = ({ newInventory, mode, clearHistory, summary }) => {
     setInventory(newInventory);
 
@@ -1261,7 +1396,6 @@ export default function App() {
     showToast(`Opening Inventory Baseline applied! ${summary.totalItems} material counts initialized.`);
   };
 
-  // Reset/Zero Out all materials
   const handleZeroOutAll = ({ actor, clearHistory }) => {
     const zeroed = MASTER_MATERIALS.map((m) => ({
       ...m,
@@ -1296,7 +1430,6 @@ export default function App() {
     showToast('Warehouse inventory zeroed out successfully! Ready for fresh inbound receiving.');
   };
 
-  // Quick Action from Dashboard
   const handleQuickAction = (action, item = null) => {
     setPrefilledItem(item);
     if (action === 'receiving') setActiveTab('receiving');
@@ -1306,7 +1439,6 @@ export default function App() {
     if (action === 'portal') setActiveTab('portal');
   };
 
-  // Reset Demo Data
   const handleResetData = () => {
     if (window.confirm('Reset all WMS data back to authentic initial system seeds?')) {
       localStorage.clear();
@@ -1322,7 +1454,6 @@ export default function App() {
     }
   };
 
-  // JSON Export
   const handleExportJson = () => {
     const backup = {
       system: 'JJB Warehouse Inventory System v4.6',
@@ -1371,7 +1502,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#FAF6EE] text-[#2A1B2E] font-sans flex flex-col relative antialiased selection:bg-[#C8963E] selection:text-white">
+    <div className="min-h-screen max-h-screen bg-[#FAF6EE] text-[#2A1B2E] font-sans flex flex-col overflow-hidden relative antialiased selection:bg-[#C8963E] selection:text-white">
       {toastMessage && (
         <div className="fixed top-4 right-4 z-50 bg-[#1E7A3E] text-white text-xs px-4 py-3 rounded-xl shadow-2xl flex items-center gap-2 border border-green-300 animate-bounce">
           <CheckCircle2 size={18} />
@@ -1380,7 +1511,6 @@ export default function App() {
         </div>
       )}
 
-      {/* Floating Cross-Device Notification Bell Bar when unread mobile requests arrive */}
       {unreadNotifications.length > 0 && (
         <div className="bg-amber-100 border-b border-amber-300 px-4 py-2 text-xs text-[#240e32] flex flex-wrap items-center justify-between gap-2 shadow-sm">
           <div className="flex items-center gap-2 font-bold">
@@ -1424,7 +1554,6 @@ export default function App() {
         queueCount={unreadNotifications.length}
         pendingBatchCount={pendingBatchCount}
         pendingBulkApprovalCount={totalIssuanceBadgeCount}
-        pendingRequestCount={pendingRequestCount}
         lowStockCount={lowStockCount}
         onQuickEod={() => setActiveTab('eod')}
         onOpenImportModal={() => setIsImportModalOpen(true)}
@@ -1433,141 +1562,161 @@ export default function App() {
         onOpenAdminModal={() => setIsAdminModalOpen(true)}
         isTestMode={isTestMode}
         setIsTestMode={toggleTestMode}
+        themeId={themeId}
+        setThemeId={setThemeId}
+        navLayout={navLayout}
+        setNavLayout={setNavLayout}
       />
 
-      <main className="flex-1 p-4 md:p-6 max-w-7xl mx-auto w-full">
-        {activeTab === 'dashboard' && (
-          <ExecutiveDashboard
-            inventory={inventory}
-            isMobileMode={isMobileMode}
-            onQuickAction={handleQuickAction}
-            storageRooms={STORAGE_ROOMS}
-            onOpenImportModal={() => setIsImportModalOpen(true)}
-            batchOrders={batchOrders}
-            withdrawals={withdrawals}
-            pendingRequests={pendingRequests}
+      <div className="flex flex-1 min-h-0">
+        {navLayout === 'sidebar' && (
+          <SidebarNavigation
+            activeTab={activeTab}
+            setActiveTab={setActiveTab}
+            lowStockCount={lowStockCount}
+            pendingBatchCount={pendingBatchCount}
+            pendingBulkApprovalCount={totalIssuanceBadgeCount}
           />
         )}
 
-        {activeTab === 'portal' && (
-          <OutletRequisitionPortal
-            inventory={inventory}
-            recipes={recipes}
-            onSubmitBatchOrder={handleSaveBatchOrder}
-            onSubmitMaterialRequest={handleSubmitWithdrawalRequest}
-            onSpecialtyRecipeSubmitted={(newProposal) => {
-              setRecipes(getAllMasterRecipes());
-              if (newProposal) {
-                postSyncEvent(
-                  'SPECIALTY_PROPOSAL_SAVED',
-                  `SPEC_${newProposal.proposalId || Date.now()}`,
-                  newProposal
-                );
-              }
-            }}
-            currentRole={currentRole}
-          />
-        )}
+        <main className="flex-1 overflow-y-auto p-4 md:p-6 w-full">
+          <div className="max-w-7xl mx-auto w-full">
+            {activeTab === 'dashboard' && (
+              <ExecutiveDashboard
+                inventory={inventory}
+                isMobileMode={isMobileMode}
+                onQuickAction={handleQuickAction}
+                storageRooms={STORAGE_ROOMS}
+                onOpenImportModal={() => setIsImportModalOpen(true)}
+                batchOrders={batchOrders}
+                withdrawals={withdrawals}
+                pendingRequests={pendingRequests}
+              />
+            )}
 
-        {activeTab === 'receiving' && (
-          <ReceivingModule
-            inventory={inventory}
-            onSaveReceiving={handleSaveReceiving}
-            receivingReports={receivingReports}
-            currentRole={currentRole}
-            isMobileMode={isMobileMode}
-            prefilledItem={prefilledItem}
-          />
-        )}
+            {activeTab === 'portal' && (
+              <OutletRequisitionPortal
+                inventory={inventory}
+                recipes={recipes}
+                onSubmitBatchOrder={handleSaveBatchOrder}
+                onSubmitMaterialRequest={handleSubmitWithdrawalRequest}
+                onSpecialtyRecipeSubmitted={(newProposal) => {
+                  setRecipes(getAllMasterRecipes());
+                  if (newProposal) {
+                    postSyncEvent(
+                      'SPECIALTY_PROPOSAL_SAVED',
+                      `SPEC_${newProposal.proposalId || Date.now()}`,
+                      newProposal
+                    );
+                  }
+                }}
+                currentRole={currentRole}
+              />
+            )}
 
-        {activeTab === 'issuance' && (
-          <IssuanceModule
-            inventory={inventory}
-            onSaveWithdrawal={handleSaveWithdrawal}
-            withdrawals={withdrawals}
-            pendingRequests={pendingRequests}
-            onIssuePendingRequest={handleIssuePendingRequest}
-            onCancelPendingRequest={handleCancelPendingRequest}
-            batchOrders={batchOrders}
-            onApprovePendingWithdrawal={handleApprovePendingWithdrawal}
-            currentRole={currentRole}
-            isMobileMode={isMobileMode}
-            prefilledItem={prefilledItem}
-          />
-        )}
+            {activeTab === 'receiving' && (
+              <ReceivingModule
+                inventory={inventory}
+                onSaveReceiving={handleSaveReceiving}
+                receivingReports={receivingReports}
+                currentRole={currentRole}
+                isMobileMode={isMobileMode}
+                prefilledItem={prefilledItem}
+              />
+            )}
 
-        {activeTab === 'batching' && (
-          <BatchingWorkbench
-            batchOrders={batchOrders}
-            onSaveBatchOrder={handleSaveBatchOrder}
-            onUpdateOrderStatus={handleUpdateOrderStatus}
-            onBulkReleaseOrders={handleBulkReleaseOrders}
-            onRequestBulkMaterials={handleRequestBulkMaterials}
-            onApproveSpecialtyRecipe={handleApproveSpecialtyRecipe}
-            recipes={recipes}
-            outlets={OUTLETS}
-            inventory={inventory}
-            currentRole={currentRole}
-            isMobileMode={isMobileMode}
-          />
-        )}
+            {activeTab === 'issuance' && (
+              <IssuanceModule
+                inventory={inventory}
+                onSaveWithdrawal={handleSaveWithdrawal}
+                withdrawals={withdrawals}
+                pendingRequests={pendingRequests}
+                onIssuePendingRequest={handleIssuePendingRequest}
+                onCancelPendingRequest={handleCancelPendingRequest}
+                batchOrders={batchOrders}
+                onApprovePendingWithdrawal={handleApprovePendingWithdrawal}
+                onDeclineBulkWithdrawal={handleDeclineBulkWithdrawal}
+                currentRole={currentRole}
+                isMobileMode={isMobileMode}
+                prefilledItem={prefilledItem}
+              />
+            )}
 
-        {activeTab === 'adjustments' && (
-          <AdjustmentsModule
-            inventory={inventory}
-            adjustments={adjustments}
-            quarantineList={quarantineList}
-            onSaveAdjustment={handleSaveAdjustment}
-            onSaveQuarantine={handleSaveQuarantine}
-            currentRole={currentRole}
-          />
-        )}
+            {activeTab === 'batching' && (
+              <BatchingWorkbench
+                batchOrders={batchOrders}
+                onSaveBatchOrder={handleSaveBatchOrder}
+                onUpdateOrderStatus={handleUpdateOrderStatus}
+                onBulkReleaseOrders={handleBulkReleaseOrders}
+                onRequestBulkMaterials={handleRequestBulkMaterials}
+                onCancelOrder={handleCancelBatchOrder}
+                onApproveSpecialtyRecipe={handleApproveSpecialtyRecipe}
+                recipes={recipes}
+                outlets={OUTLETS}
+                inventory={inventory}
+                currentRole={currentRole}
+                isMobileMode={isMobileMode}
+              />
+            )}
 
-        {activeTab === 'reports' && (
-          <ReportsModule
-            inventory={inventory}
-            receivingReports={receivingReports}
-            withdrawals={withdrawals}
-            batchOrders={batchOrders}
-            adjustments={adjustments}
-            quarantineList={quarantineList}
-            currentRole={currentRole}
-            onImportInventoryCsv={handleImportInventoryCsv}
-            onRecordAudit={recordAudit}
-            onOpenImportModal={() => setIsImportModalOpen(true)}
-          />
-        )}
+            {activeTab === 'adjustments' && (
+              <AdjustmentsModule
+                inventory={inventory}
+                adjustments={adjustments}
+                quarantineList={quarantineList}
+                onSaveAdjustment={handleSaveAdjustment}
+                onSaveQuarantine={handleSaveQuarantine}
+                currentRole={currentRole}
+              />
+            )}
 
-        {activeTab === 'eod' && (
-          <EodReportModule
-            receivingReports={receivingReports}
-            withdrawals={withdrawals}
-            batchOrders={batchOrders}
-            inventory={inventory}
-            quarantineList={quarantineList}
-            currentRole={currentRole}
-            onRecordAudit={recordAudit}
-          />
-        )}
+            {activeTab === 'reports' && (
+              <ReportsModule
+                inventory={inventory}
+                receivingReports={receivingReports}
+                withdrawals={withdrawals}
+                batchOrders={batchOrders}
+                adjustments={adjustments}
+                quarantineList={quarantineList}
+                currentRole={currentRole}
+                onImportInventoryCsv={handleImportInventoryCsv}
+                onRecordAudit={recordAudit}
+                onOpenImportModal={() => setIsImportModalOpen(true)}
+              />
+            )}
 
-        {activeTab === 'audit' && (
-          <AuditTrailModule
-            auditLogs={auditLogs}
-            onResetData={handleResetData}
-            onExportJson={handleExportJson}
-          />
-        )}
+            {activeTab === 'eod' && (
+              <EodReportModule
+                receivingReports={receivingReports}
+                withdrawals={withdrawals}
+                batchOrders={batchOrders}
+                inventory={inventory}
+                quarantineList={quarantineList}
+                currentRole={currentRole}
+                onRecordAudit={recordAudit}
+              />
+            )}
 
-        {activeTab === 'orderHistory' && (
-          <OrderHistory
-            currentRole={currentRole}
-            batchOrders={batchOrders}
-            withdrawals={withdrawals}
-            pendingRequests={pendingRequests}
-            onUpdateOrderStatus={handleUpdateOrderStatus}
-          />
-        )}
-      </main>
+            {activeTab === 'audit' && (
+              <AuditTrailModule
+                auditLogs={auditLogs}
+                onResetData={handleResetData}
+                onExportJson={handleExportJson}
+              />
+            )}
+
+            {activeTab === 'orderHistory' && (
+              <OrderHistory
+                currentRole={currentRole}
+                batchOrders={batchOrders}
+                withdrawals={withdrawals}
+                pendingRequests={pendingRequests}
+                onUpdateOrderStatus={handleUpdateOrderStatus}
+              />
+            )}
+          </div>
+        </main>
+      </div>
 
       <LoginModal
         isOpen={isLoginModalOpen}
@@ -1595,16 +1744,16 @@ export default function App() {
         onShowToast={showToast}
       />
 
-      <footer className="bg-[#240e32] text-white py-4 px-6 text-center text-xs border-t border-[#C8963E]/30 mt-auto">
+      <footer className="bg-[#240e32] text-white py-3 px-6 text-center text-xs border-t border-[#C8963E]/30 shrink-0">
         <div className="max-w-4xl mx-auto space-y-1">
           <p className="font-semibold text-gray-200">
-            Jang-Jang Bakeshop &amp; Kingdom Confectionary Business Lines · Manual of Operations Rev. 4.6 WMS Engine
+            Jang-Jang Bakeshop &amp; Kingdom Confectionary · Manual of Operations Rev. 4.6 WMS Engine
           </p>
           <p className="text-[#E5C585] text-[11px]">
             Indangan Subject Site FDA LTO No. 3000013388488 · Sasa Site LTO No. 3000002291335 · Davao City, Philippines
           </p>
           <p className="text-gray-400 text-[10px]">
-            Designed for Jade Q. Dela Cruz (Receiving &amp; Withdrawals) · Romeo B. Malusay (Batching &amp; Releasing) · Mariejohn F. Tacuban (Inventory &amp; PO Replenishment)
+            Jade Q. Dela Cruz (Receiving &amp; Withdrawals) · Romeo B. Malusay (Batching &amp; Releasing) · Mariejohn F. Tacuban (Inventory &amp; PO)
           </p>
         </div>
       </footer>

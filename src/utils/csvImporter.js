@@ -1,67 +1,61 @@
 // CSV Parser, Template Generator, and Validation Engine for Warehouse Opening Inventory
 // Governed by SOP-WAR-002 (JJB Indangan Bodega LTO No. 3000013388488)
+//
+// PUBLIC API (used by InitialDataImportModal.jsx):
+//   • generateInventoryTemplateCsv(masterMaterials)  → string
+//   • parseInventoryCsv(csvContent, masterMaterials) → { success, parsedItems, warnings, ... }
+//   • applyInventoryImport(currentInventory, parsedItems, mode) → array
+//   • parseRawCsvText(text) → string[][]  (utility, kept for backwards compat)
 
 /**
- * Generates a clean CSV template pre-populated with master materials
- * @param {Array} masterMaterials - List of master materials
- * @returns {string} - CSV formatted string
+ * Generates a clean CSV template pre-populated with master materials.
+ * One row per material — all count columns left at 0 for the physical count.
  */
 export function generateInventoryTemplateCsv(masterMaterials) {
   const headers = [
-    "Material Code",
-    "Description",
-    "Category",
-    "Storage Room",
-    "Primary Unit",
-    "Conversion Factor",
-    "Secondary Unit",
-    "Count Primary Units",
-    "Count Secondary Units",
-    "Lot Number",
-    "Expiration Date",
-    "Storage Location"
+    'Material Code',
+    'Description',
+    'Category',
+    'Storage Room',
+    'Primary Unit',
+    'Conversion Factor',
+    'Secondary Unit',
+    'Count Primary Units',
+    'Count Secondary Units',
+    'Lot Number',
+    'Expiration Date',
+    'Storage Location'
   ];
 
-  const rows = masterMaterials.map(m => {
-    // Escape quotes and commas in fields
-    const desc = `"${(m.name || '').replace(/"/g, '""')}"`;
-    const cat = `"${(m.category || '').replace(/"/g, '""')}"`;
-    const room = `"${(m.room || 'Dry Room 1').replace(/"/g, '""')}"`;
-    const primaryUom = m.primaryUom || 'Sack';
-    const factor = m.conversionFactor || 1;
-    const secondaryUom = m.secondaryUom || 'kg';
-    const countPrimary = 0; // Empty/zero baseline for fresh count
-    const countSecondary = 0;
-    const defaultLot = `LOT-${m.code.replace(/[^A-Z0-9]/g, '')}-INIT`;
-    const defaultExpiry = "2027-06-30";
-    const defaultLocation = "Pallet A1";
+  const escape = (s) => `"${String(s ?? '').replace(/"/g, '""')}"`;
 
+  const rows = masterMaterials.map((m) => {
+    const defaultLot = `LOT-${String(m.code).replace(/[^A-Z0-9]/gi, '')}-INIT`;
     return [
       m.code,
-      desc,
-      cat,
-      room,
-      primaryUom,
-      factor,
-      secondaryUom,
-      countPrimary,
-      countSecondary,
+      escape(m.name),
+      escape(m.category),
+      escape(m.room || 'Dry Room 1'),
+      m.primaryUom || 'Sack',
+      m.conversionFactor || 1,
+      m.secondaryUom || 'kg',
+      0,
+      0,
       defaultLot,
-      defaultExpiry,
-      defaultLocation
-    ].join(",");
+      '2027-06-30',
+      'Pallet A1'
+    ].join(',');
   });
 
-  return [headers.join(","), ...rows].join("\r\n");
+  return [headers.join(','), ...rows].join('\r\n');
 }
 
 /**
- * Simple robust CSV text parser that handles quotes, commas, and newlines
- * @param {string} text - Raw CSV string
- * @returns {Array<Array<string>>} - Array of rows with cell strings
+ * Handles quotes, embedded commas, escaped double-quotes, and CRLF/LF/CR
+ * line endings. Returns a 2D array of trimmed cell strings.
  */
 export function parseRawCsvText(text) {
-  const cleanText = text.replace(/^\uFEFF/, '').trim(); // Remove UTF-8 BOM
+  const cleanText = String(text || '').replace(/^\uFEFF/, '').replace(/\r\n/g, '\n').trim();
   const rows = [];
   let currentRow = [];
   let currentCell = '';
@@ -81,14 +75,9 @@ export function parseRawCsvText(text) {
     } else if (char === ',' && !insideQuotes) {
       currentRow.push(currentCell.trim());
       currentCell = '';
-    } else if ((char === '\r' || char === '\n') && !insideQuotes) {
-      if (char === '\r' && nextChar === '\n') {
-        i++;
-      }
+    } else if (char === '\n' && !insideQuotes) {
       currentRow.push(currentCell.trim());
-      if (currentRow.some(c => c.length > 0)) {
-        rows.push(currentRow);
-      }
+      if (currentRow.some((c) => c.length > 0)) rows.push(currentRow);
       currentRow = [];
       currentCell = '';
     } else {
@@ -98,35 +87,57 @@ export function parseRawCsvText(text) {
 
   if (currentCell.length > 0 || currentRow.length > 0) {
     currentRow.push(currentCell.trim());
-    if (currentRow.some(c => c.length > 0)) {
-      rows.push(currentRow);
-    }
+    if (currentRow.some((c) => c.length > 0)) rows.push(currentRow);
   }
 
   return rows;
 }
 
-/**
- * Normalizes header names for flexible CSV mapping
- */
 function normalizeHeader(header) {
-  return header.toLowerCase().replace(/[^a-z0-9]/g, '');
+  return String(header || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
 /**
- * Parses and validates an uploaded CSV file against the warehouse master materials
- * @param {string} csvContent - Raw CSV text
- * @param {Array} masterMaterials - Master materials catalog
- * @returns {Object} - { parsedItems, matchedCount, totalQuantityKg, totalValuation, errors, warnings }
+ * Accepts YYYY-MM-DD, ISO timestamps, or Date-parseable strings.
+ * Returns null for garbage — caller substitutes a sane default.
+ */
+function sanitizeDate(v) {
+  if (!v) return null;
+  const s = String(v).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  const d = new Date(s);
+  if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+  return null;
+}
+
+/**
+ * Parses + validates an uploaded CSV against the master catalog.
+ *
+ * @returns {{
+ *   success: boolean,
+ *   error?: string,
+ *   totalRowsParsed: number,
+ *   matchedCount: number,
+ *   totalQuantityKg: number,
+ *   totalValuation: number,
+ *   parsedItems: Array,
+ *   errors: string[],
+ *   warnings: string[]
+ * }}
  */
 export function parseInventoryCsv(csvContent, masterMaterials) {
   const rows = parseRawCsvText(csvContent);
+
   if (rows.length < 2) {
     return {
       success: false,
-      error: "CSV file is empty or does not contain a header row and data rows.",
+      error: 'CSV file is empty or does not contain both a header row and at least one data row.',
+      totalRowsParsed: 0,
+      matchedCount: 0,
+      totalQuantityKg: 0,
+      totalValuation: 0,
       parsedItems: [],
-      errors: ["File contains no data rows."],
+      errors: ['File contains no data rows.'],
       warnings: []
     };
   }
@@ -137,7 +148,6 @@ export function parseInventoryCsv(csvContent, masterMaterials) {
     headerMap[normalizeHeader(h)] = idx;
   });
 
-  // Find column indices
   const getCol = (possibleNames) => {
     for (const name of possibleNames) {
       const norm = normalizeHeader(name);
@@ -146,28 +156,32 @@ export function parseInventoryCsv(csvContent, masterMaterials) {
     return -1;
   };
 
-  const codeIdx = getCol(["materialcode", "code", "itemcode", "sku", "material_code", "material"]);
-  const descIdx = getCol(["description", "name", "itemdescription", "item_name", "item"]);
-  const countPrimIdx = getCol(["countprimaryunits", "primaryunits", "primaryqty", "quantityprimary", "countprimary", "bags", "sacks", "boxes", "tins", "primarycount"]);
-  const countSecIdx = getCol(["countsecondaryunits", "secondaryunits", "secondaryqty", "quantitysecondary", "countsecondary", "quantity", "qty", "count", "kg", "grams", "pieces"]);
-  const factorIdx = getCol(["conversionfactor", "factor", "conversion"]);
-  const lotIdx = getCol(["lotnumber", "lot", "lotno", "batchnumber", "batch"]);
-  const expiryIdx = getCol(["expirationdate", "expirydate", "expiry", "expdate"]);
-  const locationIdx = getCol(["storagelocation", "location", "pallet", "bay", "bin"]);
-  const roomIdx = getCol(["storageroom", "room", "chamber"]);
+  const codeIdx = getCol(['materialcode', 'code', 'itemcode', 'sku', 'material']);
+  const descIdx = getCol(['description', 'name', 'itemdescription', 'item']);
+  const countPrimIdx = getCol(['countprimaryunits', 'primaryunits', 'primaryqty', 'quantityprimary', 'countprimary', 'bags', 'sacks', 'boxes', 'tins', 'primarycount']);
+  const countSecIdx = getCol(['countsecondaryunits', 'secondaryunits', 'secondaryqty', 'quantitysecondary', 'countsecondary', 'quantity', 'qty', 'count', 'kg', 'grams', 'pieces']);
+  const factorIdx = getCol(['conversionfactor', 'factor', 'conversion']);
+  const lotIdx = getCol(['lotnumber', 'lot', 'lotno', 'batchnumber', 'batch']);
+  const expiryIdx = getCol(['expirationdate', 'expirydate', 'expiry', 'expdate']);
+  const locationIdx = getCol(['storagelocation', 'location', 'pallet', 'bay', 'bin']);
+  const roomIdx = getCol(['storageroom', 'room', 'chamber']);
 
   if (codeIdx === -1 && descIdx === -1) {
     return {
       success: false,
-      error: "Unable to find 'Material Code' or 'Description' column in CSV header.",
+      error: 'Unable to find a "Material Code" or "Description" column in the CSV header.',
+      totalRowsParsed: 0,
+      matchedCount: 0,
+      totalQuantityKg: 0,
+      totalValuation: 0,
       parsedItems: [],
-      errors: ["Missing Material Code / SKU column in header."],
+      errors: ['Missing required column: Material Code / SKU (or Description).'],
       warnings: []
     };
   }
 
-  const masterByCode = new Map(masterMaterials.map(m => [m.code.trim().toUpperCase(), m]));
-  const masterByName = new Map(masterMaterials.map(m => [m.name.trim().toLowerCase(), m]));
+  const masterByCode = new Map(masterMaterials.map((m) => [String(m.code).trim().toUpperCase(), m]));
+  const masterByName = new Map(masterMaterials.map((m) => [String(m.name).trim().toLowerCase(), m]));
 
   const parsedItems = [];
   const errors = [];
@@ -175,59 +189,57 @@ export function parseInventoryCsv(csvContent, masterMaterials) {
 
   for (let r = 1; r < rows.length; r++) {
     const row = rows[r];
-    if (row.length === 0 || row.every(c => !c)) continue; // skip blank row
+    if (!row || row.length === 0 || row.every((c) => !c)) continue;
 
-    const rawCode = codeIdx !== -1 ? (row[codeIdx] || '').trim().toUpperCase() : '';
-    const rawDesc = descIdx !== -1 ? (row[descIdx] || '').trim() : '';
+    const rawCode = codeIdx !== -1 ? String(row[codeIdx] || '').trim().toUpperCase() : '';
+    const rawDesc = descIdx !== -1 ? String(row[descIdx] || '').trim() : '';
 
-    // Match material
     let matchedMaterial = masterByCode.get(rawCode);
-    if (!matchedMaterial && rawDesc) {
-      matchedMaterial = masterByName.get(rawDesc.toLowerCase());
-    }
+    if (!matchedMaterial && rawDesc) matchedMaterial = masterByName.get(rawDesc.toLowerCase());
 
     if (!matchedMaterial) {
-      warnings.push(`Row ${r + 1}: Unknown Material Code '${rawCode || rawDesc}'. Row will be skipped.`);
+      warnings.push(`Row ${r + 1}: Unknown material "${rawCode || rawDesc}". Row skipped.`);
       continue;
     }
 
-    // Determine quantity
+    // ── Quantity resolution ──────────────────────────────────────────
     const rawCountPrim = countPrimIdx !== -1 ? parseFloat(row[countPrimIdx]) : NaN;
     const rawCountSec = countSecIdx !== -1 ? parseFloat(row[countSecIdx]) : NaN;
-    const factor = (factorIdx !== -1 && !isNaN(parseFloat(row[factorIdx]))) 
-      ? parseFloat(row[factorIdx]) 
-      : (matchedMaterial.conversionFactor || 1);
+    const factor =
+      factorIdx !== -1 && Number.isFinite(parseFloat(row[factorIdx]))
+        ? parseFloat(row[factorIdx])
+        : Number(matchedMaterial.conversionFactor) || 1;
 
-    let finalSecondaryQty = 0;
     let finalPrimaryQty = 0;
+    let finalSecondaryQty = 0;
 
     if (!isNaN(rawCountPrim) && rawCountPrim >= 0) {
       finalPrimaryQty = rawCountPrim;
-      finalSecondaryQty = (!isNaN(rawCountSec) && rawCountSec > 0) ? rawCountSec : rawCountPrim * factor;
+      finalSecondaryQty =
+        !isNaN(rawCountSec) && rawCountSec > 0 ? rawCountSec : rawCountPrim * (factor || 1);
     } else if (!isNaN(rawCountSec) && rawCountSec >= 0) {
       finalSecondaryQty = rawCountSec;
       finalPrimaryQty = finalSecondaryQty / (factor || 1);
-    } else {
-      // Default to 0
-      finalPrimaryQty = 0;
-      finalSecondaryQty = 0;
     }
 
-    const lotNumber = (lotIdx !== -1 && row[lotIdx]) 
-      ? row[lotIdx].trim() 
-      : `INIT-${matchedMaterial.code.replace(/[^A-Z0-9]/g, '')}-${new Date().toISOString().slice(2, 7).replace('-', '')}`;
-    
-    const expiryDate = (expiryIdx !== -1 && row[expiryIdx]) 
-      ? row[expiryIdx].trim() 
-      : "2027-06-30";
+    // ── Lot / expiry / location ──────────────────────────────────────
+    const lotNumber =
+      lotIdx !== -1 && row[lotIdx]
+        ? String(row[lotIdx]).trim()
+        : `OPEN-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${matchedMaterial.code}`;
 
-    const location = (locationIdx !== -1 && row[locationIdx]) 
-      ? row[locationIdx].trim() 
-      : "Pallet A1";
+    const expiryDate =
+      sanitizeDate(expiryIdx !== -1 ? row[expiryIdx] : null) || '2027-06-30';
 
-    const room = (roomIdx !== -1 && row[roomIdx]) 
-      ? row[roomIdx].trim() 
-      : (matchedMaterial.room || "Dry Room 1");
+    const location =
+      locationIdx !== -1 && row[locationIdx]
+        ? String(row[locationIdx]).trim()
+        : 'Pallet A1';
+
+    const room =
+      roomIdx !== -1 && row[roomIdx]
+        ? String(row[roomIdx]).trim()
+        : matchedMaterial.room || 'Dry Room 1';
 
     parsedItems.push({
       code: matchedMaterial.code,
@@ -238,23 +250,48 @@ export function parseInventoryCsv(csvContent, masterMaterials) {
       room,
       primaryUom: matchedMaterial.primaryUom,
       secondaryUom: matchedMaterial.secondaryUom,
-      conversionFactor: factor,
+      conversionFactor: factor || 1,
       threshold: matchedMaterial.threshold,
       unitCost: matchedMaterial.unitCost,
-      primaryQty: finalPrimaryQty,
-      secondaryQty: Math.round(finalSecondaryQty * 100) / 100,
+      primaryQty: Math.round(finalPrimaryQty * 1000) / 1000,
+      secondaryQty: Math.round(finalSecondaryQty * 1000) / 1000,
       lotNumber,
       expiryDate,
       location
     });
   }
 
-  const totalQuantityKg = parsedItems.reduce((sum, item) => sum + (item.secondaryQty || 0), 0);
-  const totalValuation = parsedItems.reduce((sum, item) => sum + (item.primaryQty * (item.unitCost || 0)), 0);
+  if (parsedItems.length === 0) {
+    return {
+      success: false,
+      error: 'No rows in the CSV matched any material in the master catalog.',
+      totalRowsParsed: rows.length - 1,
+      matchedCount: 0,
+      totalQuantityKg: 0,
+      totalValuation: 0,
+      parsedItems: [],
+      errors,
+      warnings
+    };
+  }
+
+  const totalQuantityKg =
+    Math.round(parsedItems.reduce((s, it) => s + (it.secondaryQty || 0), 0) * 100) / 100;
+
+  // Valuation: for each line, prefer primaryQty × unitCost (exact when possible);
+  // fall back to secondaryQty × (unitCost / factor) when primary is zero.
+  const totalValuation =
+    Math.round(
+      parsedItems.reduce((sum, it) => {
+        const factor = it.conversionFactor || 1;
+        if (it.primaryQty > 0) return sum + it.primaryQty * (it.unitCost || 0);
+        return sum + it.secondaryQty * ((it.unitCost || 0) / factor);
+      }, 0) * 100
+    ) / 100;
 
   return {
     success: true,
-    totalRowsParsed: parsedItems.length,
+    totalRowsParsed: rows.length - 1,
     matchedCount: parsedItems.length,
     totalQuantityKg,
     totalValuation,
@@ -265,62 +302,78 @@ export function parseInventoryCsv(csvContent, masterMaterials) {
 }
 
 /**
- * Applies the imported baseline rows into the inventory state
- * @param {Array} currentInventory - Existing inventory state
- * @param {Array} importedRows - Rows parsed from CSV
- * @param {string} mode - 'FRESH_BASELINE' | 'UPDATE_QUANTITIES'
- * @returns {Array} - New updated inventory state
+ * Applies the imported baseline rows into the inventory state.
+ *
+ * @param {Array}  currentInventory - Existing inventory state (masterMaterials + live balances)
+ * @param {Array}  importedRows     - `parseResult.parsedItems`
+ * @param {string} mode             - 'FRESH_BASELINE' | 'UPDATE_ONLY' (alias: 'UPDATE_QUANTITIES')
+ *
+ * Behaviour:
+ *   FRESH_BASELINE — every material's `currentBalance` becomes exactly the
+ *                    sum of its imported lots. Materials absent from the CSV
+ *                    are zeroed. This is what the 2027 general inventory uses.
+ *
+ *   UPDATE_ONLY    — same replacement logic for materials present in the CSV
+ *                    (i.e. the imported row becomes the source of truth),
+ *                    but materials absent from the CSV are left untouched.
+ *                    Downstream D1 reconciliation (buildReconciliationStatement)
+ *                    keeps `materials.current_balance = SUM(material_lots.qty_sec)`
+ *                    consistent regardless of mode.
+ *
+ *   Multi-lot support: if the same material code appears on N rows with
+ *   different lot numbers, all N lots are preserved and their quantities
+ *   summed into the material's balance.
  */
 export function applyInventoryImport(currentInventory, importedRows, mode = 'FRESH_BASELINE') {
-  const importedMap = new Map(importedRows.map(row => [row.code, row]));
+  const isFreshBaseline = mode === 'FRESH_BASELINE';
+  const isUpdateMode = mode === 'UPDATE_ONLY' || mode === 'UPDATE_QUANTITIES';
 
-  return currentInventory.map(item => {
-    const imported = importedMap.get(item.code);
+  // Group imported rows by material code so multi-lot CSVs aggregate cleanly
+  const importedByCode = new Map();
+  for (const row of importedRows || []) {
+    const code = row.code;
+    if (!code) continue;
+    if (!importedByCode.has(code)) importedByCode.set(code, []);
+    importedByCode.get(code).push(row);
+  }
 
-    if (imported) {
-      if (mode === 'FRESH_BASELINE') {
-        // Complete clean baseline: set exact balance and single verified initial lot
-        const newLots = imported.secondaryQty > 0 ? [
-          {
-            lotNumber: imported.lotNumber,
-            expiryDate: imported.expiryDate,
-            qtySec: imported.secondaryQty,
-            location: imported.location
-          }
-        ] : [];
+  return currentInventory.map((item) => {
+    const importedList = importedByCode.get(item.code);
 
-        return {
-          ...item,
-          currentBalance: imported.secondaryQty,
-          lots: newLots,
-          room: imported.room || item.room
-        };
-      } else {
-        // UPDATE_QUANTITIES: append or adjust
-        return {
-          ...item,
-          currentBalance: imported.secondaryQty,
-          lots: imported.secondaryQty > 0 ? [
-            {
-              lotNumber: imported.lotNumber,
-              expiryDate: imported.expiryDate,
-              qtySec: imported.secondaryQty,
-              location: imported.location
-            }
-          ] : []
-        };
+    // ── Material not present in the CSV ───────────────────────────────
+    if (!importedList || importedList.length === 0) {
+      if (isFreshBaseline) {
+        // Zero out unmentioned items — clean year-start baseline
+        return { ...item, currentBalance: 0, lots: [] };
       }
-    } else {
-      // Item in master catalog not present in CSV
-      if (mode === 'FRESH_BASELINE') {
-        // Zero out unmentioned items to ensure fresh baseline
-        return {
-          ...item,
-          currentBalance: 0,
-          lots: []
-        };
-      }
+      // UPDATE_ONLY / unknown modes: leave existing stock alone
       return item;
     }
+
+    // ── Material present in the CSV ───────────────────────────────────
+    const totalSecondaryQty =
+      Math.round(importedList.reduce((s, r) => s + (Number(r.secondaryQty) || 0), 0) * 1000) / 1000;
+
+    const newLots = importedList
+      .filter((r) => Number(r.secondaryQty) > 0)
+      .map((r) => ({
+        lotNumber: r.lotNumber,
+        expiryDate: r.expiryDate,
+        qtySec: Number(r.secondaryQty),
+        location: r.location
+      }));
+
+    const resolvedRoom = importedList[0]?.room || item.room;
+
+    // Both FRESH_BASELINE and UPDATE_ONLY replace the material's lots with
+    // the imported set — this matches the "clean slate" physical count the
+    // operator enters. Anything not in the CSV for that material is
+    // considered counted-as-zero.
+    return {
+      ...item,
+      currentBalance: totalSecondaryQty,
+      lots: newLots,
+      room: resolvedRoom
+    };
   });
 }

@@ -8,7 +8,7 @@
  *   GET    /api/admin/:table               -> Paginated rows (?filter=all|test|prod&limit=100&offset=0&q=...)
  *   DELETE /api/admin/:table/:id           -> Single-row delete with JSON snapshot into admin_action_log
  *   POST   /api/admin/toggle-test-flag     -> Toggle is_test_data (0 <-> 1) on a specific record
- *   POST   /api/admin/purge-test-data      -> Atomic 18-step purge of is_test_data=1 + PBKDF2 password check
+ *   POST   /api/admin/purge-test-data      -> Atomic FK-safe purge of is_test_data=1 + PBKDF2 password check
  *   POST   /api/admin/restore/:actionId    -> Undo single-row delete from admin_action_log.record_snapshot
  * ============================================================================
  */
@@ -105,6 +105,47 @@ function buildReconciliationStatement(env) {
   `);
 }
 
+/**
+ * Build the child-table deletes required when a parent row is deleted.
+ * Returns [] for tables without cascade-linked children.
+ * Safe against FK CASCADE: if the child rows were already cascaded,
+ * these DELETE statements affect 0 rows (no-op).
+ */
+function buildChildDeleteStatements(env, tableName, recordId) {
+  const stmts = [];
+  if (tableName === 'receiving_reports') {
+    stmts.push(env.DB.prepare(`DELETE FROM receiving_items WHERE report_no = ?1`).bind(recordId));
+  } else if (tableName === 'withdrawals') {
+    stmts.push(env.DB.prepare(`DELETE FROM withdrawal_items WHERE slip_no = ?1`).bind(recordId));
+  } else if (tableName === 'orders') {
+    stmts.push(env.DB.prepare(`DELETE FROM order_items WHERE order_id = ?1`).bind(recordId));
+  } else if (tableName === 'specialty_recipe_proposals') {
+    stmts.push(env.DB.prepare(`DELETE FROM specialty_recipe_ingredients WHERE proposal_id = ?1`).bind(recordId));
+  } else if (tableName === 'recipes') {
+    stmts.push(env.DB.prepare(`DELETE FROM recipe_ingredients WHERE recipe_sku = ?1`).bind(recordId));
+  }
+  return stmts;
+}
+
+/**
+ * Extract the (material_code, lot_number) pairs this parent record created
+ * so we can toggle/delete the matching material_lots records. Returns [] if
+ * the parent table does not have a lot-defining child.
+ */
+async function getLotPairsForParent(env, tableName, recordId) {
+  try {
+    if (tableName === 'receiving_reports') {
+      const out = await env.DB.prepare(
+        `SELECT material_code, lot_number FROM receiving_items WHERE report_no = ?1 AND lot_number IS NOT NULL`
+      ).bind(recordId).all();
+      return out?.results || [];
+    }
+  } catch (e) {
+    console.warn('getLotPairsForParent failed (non-fatal):', e.message);
+  }
+  return [];
+}
+
 export async function onRequest(context) {
   const { request, env, params } = context;
   const method = request.method.toUpperCase();
@@ -132,6 +173,9 @@ export async function onRequest(context) {
   }
 
   try {
+    // ---------------------------------------------------------------
+    // GET /api/admin/tables
+    // ---------------------------------------------------------------
     if (method === 'GET' && routeParts.length === 1 && routeParts[0] === 'tables') {
       const tableNames = Object.keys(TABLE_META);
       const countStatements = tableNames.map((t) => {
@@ -204,6 +248,9 @@ export async function onRequest(context) {
       });
     }
 
+    // ---------------------------------------------------------------
+    // GET /api/admin/audit
+    // ---------------------------------------------------------------
     if (method === 'GET' && routeParts.length === 1 && routeParts[0] === 'audit') {
       const url = new URL(request.url);
       const limit = Math.min(200, Math.max(1, parseInt(url.searchParams.get('limit') || '100', 10)));
@@ -217,6 +264,9 @@ export async function onRequest(context) {
       return json({ ok: true, logs: results || [] });
     }
 
+    // ---------------------------------------------------------------
+    // GET /api/admin/:table   (paginated)
+    // ---------------------------------------------------------------
     if (method === 'GET' && routeParts.length === 1) {
       const tableName = routeParts[0];
       if (!ALLOWED_ADMIN_TABLES.has(tableName) || !TABLE_META[tableName]) {
@@ -244,7 +294,8 @@ export async function onRequest(context) {
       }
 
       const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
-      const orderCol = tableName === 'roles' || tableName === 'system_config' ? meta.pk : 'rowid DESC';
+      // Fallback to PK DESC — works on both rowid and WITHOUT ROWID tables.
+      const orderCol = `"${meta.pk}" DESC`;
 
       const rowsStmt = env.DB.prepare(
         `SELECT * FROM ${tableName} ${whereSql} ORDER BY ${orderCol} LIMIT ? OFFSET ?`
@@ -267,6 +318,9 @@ export async function onRequest(context) {
       });
     }
 
+    // ---------------------------------------------------------------
+    // DELETE /api/admin/:table/:id
+    // ---------------------------------------------------------------
     if (method === 'DELETE' && routeParts.length === 2) {
       const [tableName, rawId] = routeParts;
       const recordId = decodeURIComponent(rawId);
@@ -291,6 +345,7 @@ export async function onRequest(context) {
       const reason = parsedBody?.reason || `Single-row delete from Admin Panel by ${auth.user.name}`;
       const stmts = [];
 
+      // Snapshot parent + all children for restore
       let childSnapshot = null;
       if (tableName === 'receiving_reports') {
         const children = await env.DB.prepare(`SELECT * FROM receiving_items WHERE report_no = ?1`).bind(recordId).all();
@@ -301,6 +356,12 @@ export async function onRequest(context) {
       } else if (tableName === 'orders') {
         const children = await env.DB.prepare(`SELECT * FROM order_items WHERE order_id = ?1`).bind(recordId).all();
         childSnapshot = { childTable: 'order_items', rows: children?.results || [] };
+      } else if (tableName === 'specialty_recipe_proposals') {
+        const children = await env.DB.prepare(`SELECT * FROM specialty_recipe_ingredients WHERE proposal_id = ?1`).bind(recordId).all();
+        childSnapshot = { childTable: 'specialty_recipe_ingredients', rows: children?.results || [] };
+      } else if (tableName === 'recipes') {
+        const children = await env.DB.prepare(`SELECT * FROM recipe_ingredients WHERE recipe_sku = ?1`).bind(recordId).all();
+        childSnapshot = { childTable: 'recipe_ingredients', rows: children?.results || [] };
       }
 
       const snapshotPayload = JSON.stringify({
@@ -317,6 +378,10 @@ export async function onRequest(context) {
         `).bind(auth.user.id, tableName, String(recordId), snapshotPayload, reason)
       );
 
+      // Delete children FIRST (idempotent regardless of FK CASCADE presence)
+      stmts.push(...buildChildDeleteStatements(env, tableName, recordId));
+
+      // Delete parent
       stmts.push(
         env.DB.prepare(`DELETE FROM ${tableName} WHERE ${meta.pk} = ?1`).bind(recordId)
       );
@@ -334,6 +399,9 @@ export async function onRequest(context) {
       });
     }
 
+    // ---------------------------------------------------------------
+    // POST /api/admin/toggle-test-flag
+    // ---------------------------------------------------------------
     if (method === 'POST' && routeParts.length === 1 && routeParts[0] === 'toggle-test-flag') {
       const { table: tableName, id: recordId, isTestData } = parsedBody || {};
       if (!ALLOWED_ADMIN_TABLES.has(tableName) || !TABLE_META[tableName]?.hasTestFlag) {
@@ -342,39 +410,67 @@ export async function onRequest(context) {
 
       const meta = TABLE_META[tableName];
       const newFlag = isTestData ? 1 : 0;
+
+      // Build all statements, then dispatch in one atomic batch.
+      // Audit log is part of the batch so a partial failure cannot leave a
+      // phantom audit entry (fixes previous non-atomic .run() + .batch() bug).
       const stmts = [
         env.DB.prepare(
           `UPDATE ${tableName} SET is_test_data = ?1 WHERE ${meta.pk} = ?2`
         ).bind(newFlag, recordId)
       ];
 
+      // Cascade to child tables
       if (tableName === 'receiving_reports') {
         stmts.push(env.DB.prepare(`UPDATE receiving_items SET is_test_data = ?1 WHERE report_no = ?2`).bind(newFlag, recordId));
+
+        // Also toggle the material_lots created by this receipt so that the
+        // reconciliation statement reflects the new is_test_data state.
+        const lotPairs = await getLotPairsForParent(env, tableName, recordId);
+        for (const pair of lotPairs) {
+          if (pair.material_code && pair.lot_number) {
+            stmts.push(
+              env.DB.prepare(`
+                UPDATE material_lots SET is_test_data = ?1
+                WHERE material_code = ?2 AND lot_number = ?3
+              `).bind(newFlag, pair.material_code, pair.lot_number)
+            );
+          }
+        }
       } else if (tableName === 'withdrawals') {
         stmts.push(env.DB.prepare(`UPDATE withdrawal_items SET is_test_data = ?1 WHERE slip_no = ?2`).bind(newFlag, recordId));
       } else if (tableName === 'orders') {
         stmts.push(env.DB.prepare(`UPDATE order_items SET is_test_data = ?1 WHERE order_id = ?2`).bind(newFlag, recordId));
+      } else if (tableName === 'specialty_recipe_proposals') {
+        stmts.push(env.DB.prepare(`UPDATE specialty_recipe_ingredients SET is_test_data = ?1 WHERE proposal_id = ?2`).bind(newFlag, recordId));
+      } else if (tableName === 'recipes') {
+        stmts.push(env.DB.prepare(`UPDATE recipe_ingredients SET is_test_data = ?1 WHERE recipe_sku = ?2`).bind(newFlag, recordId));
       }
 
       if (meta.balanceAffecting) {
         stmts.push(buildReconciliationStatement(env));
       }
 
-      await env.DB.prepare(`
-        INSERT INTO admin_action_log (admin_user_id, action, table_name, record_id, record_snapshot, reason)
-        VALUES (?1, 'UPDATE_ROW', ?2, ?3, ?4, ?5)
-      `).bind(
-        auth.user.id,
-        tableName,
-        String(recordId),
-        JSON.stringify({ is_test_data: newFlag }),
-        `Toggled is_test_data=${newFlag}`
-      ).run();
+      stmts.push(
+        env.DB.prepare(`
+          INSERT INTO admin_action_log (admin_user_id, action, table_name, record_id, record_snapshot, reason)
+          VALUES (?1, 'UPDATE_ROW', ?2, ?3, ?4, ?5)
+        `).bind(
+          auth.user.id,
+          tableName,
+          String(recordId),
+          JSON.stringify({ is_test_data: newFlag }),
+          `Toggled is_test_data=${newFlag}`
+        )
+      );
 
       await env.DB.batch(stmts);
       return json({ ok: true, table: tableName, id: recordId, is_test_data: newFlag });
     }
 
+    // ---------------------------------------------------------------
+    // POST /api/admin/purge-test-data
+    // ---------------------------------------------------------------
     if (method === 'POST' && routeParts.length === 1 && routeParts[0] === 'purge-test-data') {
       const password = String(parsedBody?.password || '').trim();
       const reason = String(parsedBody?.reason || 'Bulk Purge of Test Data (is_test_data = 1)').trim();
@@ -394,18 +490,24 @@ export async function onRequest(context) {
         return json({ ok: false, error: 'Invalid password or PIN. Test data purge aborted.' }, 403);
       }
 
-      const batchResults = await executePurgeTestDataBatch(env.DB, auth.user.id, reason);
-      const deletedCounts = batchResults.slice(0, 16).map((r) => Number(r?.meta?.changes || 0));
-      const totalPurged = deletedCounts.reduce((a, b) => a + b, 0);
+      const { totalPurged, purgedTableCount } = await executePurgeTestDataBatch(
+        env.DB,
+        auth.user.id,
+        reason
+      );
 
       return json({
         ok: true,
         status: 'PURGED_AND_RECONCILED',
         total_rows_purged: totalPurged,
+        tables_purged: purgedTableCount,
         reconciled_by: auth.user.name
       });
     }
 
+    // ---------------------------------------------------------------
+    // POST /api/admin/restore/:actionId
+    // ---------------------------------------------------------------
     if (method === 'POST' && routeParts.length === 2 && routeParts[0] === 'restore') {
       const actionId = parseInt(routeParts[1], 10);
       const logEntry = await env.DB.prepare(
@@ -479,5 +581,3 @@ export async function onRequest(context) {
     return json({ ok: false, error: String(err.message || err) }, 500);
   }
 }
-
-

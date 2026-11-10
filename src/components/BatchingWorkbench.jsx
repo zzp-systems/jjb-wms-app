@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Scale, Plus, CheckCircle2, Clock, Truck, Printer, 
-  AlertCircle, ShieldCheck, Layers, ArrowRight, CheckCheck, 
-  RotateCcw, Sparkles, Lock, Unlock, Send, Award, Check
+import {
+  Scale, Plus, CheckCircle2, Clock, Truck, Printer,
+  AlertCircle, ShieldCheck, Layers, ArrowRight, CheckCheck,
+  RotateCcw, Sparkles, Lock, Unlock, Send, Award, Check,
+  XCircle
 } from 'lucide-react';
 import { calculateRecipeIngredients } from '../utils/wmsLogic';
-import { 
-  loadStoredSpecialtyProposals, 
-  persistSpecialtyProposals 
+import {
+  loadStoredSpecialtyProposals,
+  persistSpecialtyProposals
 } from '../utils/specialtyRecipeLogic';
 
 export default function BatchingWorkbench({
@@ -16,6 +17,7 @@ export default function BatchingWorkbench({
   onUpdateOrderStatus,
   onBulkReleaseOrders,
   onRequestBulkMaterials,
+  onCancelOrder,           // ← Phase 2.6
   onApproveSpecialtyRecipe,
   recipes,
   outlets,
@@ -64,7 +66,7 @@ export default function BatchingWorkbench({
       requestedBy: currentRole,
       enteredBy: currentRole,
       status: "PENDING_BATCHING",
-      bulkRequestStatus: "NOT_REQUESTED", // Handshake Gate: NOT_REQUESTED -> PENDING_JADE_APPROVAL -> BULK_ISSUED_BY_JADE
+      bulkRequestStatus: "NOT_REQUESTED",
       bulkRequisitionSlipNo: null,
       bulkRequestedAt: null,
       bulkApprovedAt: null,
@@ -87,6 +89,18 @@ export default function BatchingWorkbench({
     setOrderNotes('');
   };
 
+  // Phase 2.6 — Cancel handler
+  const handleCancelClick = (order) => {
+    if (!onCancelOrder) return;
+    const reason = window.prompt(
+      `Cancel batch order ${order.orderId}?\n\nReason (this will be logged to the audit trail):`,
+      'Cancelled by ' + currentRole
+    );
+    if (reason !== null) {
+      onCancelOrder(order.orderId, reason || 'No reason given');
+    }
+  };
+
   // Filtered Orders
   const filteredOrders = batchOrders.filter(order => {
     if (filterStatus === 'ALL') return true;
@@ -104,11 +118,11 @@ export default function BatchingWorkbench({
     }
     const updated = specialtyProposals.map(p => {
       if (p.proposalId === proposalId) {
-        return { 
-          ...p, 
-          status: 'APPROVED', 
-          approvedAt: new Date().toISOString(), 
-          approvedBy: `${currentRole} (Scaler Lead)` 
+        return {
+          ...p,
+          status: 'APPROVED',
+          approvedAt: new Date().toISOString(),
+          approvedBy: `${currentRole} (Scaler Lead)`
         };
       }
       return p;
@@ -121,11 +135,11 @@ export default function BatchingWorkbench({
     const reason = window.prompt('Enter revision comments for proposing baker:') || 'Formula requires moisture / flour balance adjustment.';
     const updated = specialtyProposals.map(p => {
       if (p.proposalId === proposalId) {
-        return { 
-          ...p, 
-          status: 'REJECTED', 
-          revisionNotes: reason, 
-          rejectedAt: new Date().toISOString() 
+        return {
+          ...p,
+          status: 'REJECTED',
+          revisionNotes: reason,
+          rejectedAt: new Date().toISOString()
         };
       }
       return p;
@@ -320,8 +334,8 @@ export default function BatchingWorkbench({
                 const isBulkNotRequested = !order.bulkRequestStatus || order.bulkRequestStatus === 'NOT_REQUESTED';
 
                 return (
-                  <div 
-                    key={order.orderId} 
+                  <div
+                    key={order.orderId}
                     className={`bg-white rounded-xl border shadow-sm p-4 flex flex-col justify-between space-y-3 transition ${
                       isPending ? 'border-amber-300 bg-amber-50/10' :
                       isBatched ? 'border-blue-300 bg-blue-50/10' :
@@ -461,6 +475,17 @@ export default function BatchingWorkbench({
                               <Truck size={13} /> Release to Outlet
                             </button>
                           </>
+                        )}
+
+                        {/* Action 3: Cancel (Phase 2.6) — only for pending orders */}
+                        {isPending && onCancelOrder && (
+                          <button
+                            onClick={() => handleCancelClick(order)}
+                            className="bg-red-100 hover:bg-red-200 text-red-700 text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1 transition"
+                            title="Cancel this batch order (removes from queue, writes to audit log)"
+                          >
+                            <XCircle size={13} /> Cancel
+                          </button>
                         )}
 
                         {/* View Tag for Released */}
@@ -660,7 +685,7 @@ export default function BatchingWorkbench({
                 const isRejected = prop.status === 'REJECTED';
 
                 return (
-                  <div 
+                  <div
                     key={prop.proposalId}
                     className={`bg-white rounded-2xl border p-5 shadow-sm space-y-4 transition ${
                       isPending ? 'border-amber-300 bg-amber-50/10' :
@@ -819,7 +844,7 @@ export default function BatchingWorkbench({
                 <h3 className="font-serif font-bold text-xl text-gray-900">{scalingModalOrder.recipeName}</h3>
                 <p className="text-xs text-gray-500">Destination: {scalingModalOrder.outletName} ({scalingModalOrder.requestedQtyPcs} pcs)</p>
               </div>
-              <button 
+              <button
                 onClick={() => setScalingModalOrder(null)}
                 className="text-gray-400 hover:text-gray-600 font-bold text-lg"
               >
@@ -876,7 +901,7 @@ export default function BatchingWorkbench({
               <button
                 onClick={() => {
                   onUpdateOrderStatus(
-                    scalingModalOrder.orderId, 
+                    scalingModalOrder.orderId,
                     'BATCHED_KITTED',
                     `KIT-${new Date().toISOString().slice(2, 10).replace(/-/g, '')}-${scalingModalOrder.orderId.slice(-4)}`,
                     parseFloat(((scalingModalOrder.requestedQtyPcs * 0.04) + 5).toFixed(1))

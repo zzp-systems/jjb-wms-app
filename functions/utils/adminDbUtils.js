@@ -53,19 +53,52 @@ export async function verifyPbkdf2Secret(plainText, storedHash, pepper = '') {
 }
 
 /**
- * Executes the FK-safe 18-step test-data purge in one atomic D1 batch, then
+ * Executes the FK-safe test-data purge in one atomic D1 batch, then
  * reconciles materials.current_balance from surviving non-test lots.
  *
- * NOTE — Snapshot is a *summary* row, not per-row data. This makes the purge
- *        irreversible unless you also take an external D1 backup first.
+ * Ordering rationale:
+ *   1. Detail / child tables first (order_items, *_items, *_ingredients)
+ *   2. Operational document tables (orders, withdrawals, receiving_reports,
+ *      batch_orders, adjustments, quarantine_ncr, specialty_recipe_proposals)
+ *   3. Audit + recipes + materials
+ *   4. Lookup tables (storage_rooms, outlets, suppliers)
+ *   5. users LAST (referenced by audit/user-attribution columns)
+ *
+ * The snapshot logged to admin_action_log is a *summary* row, not per-row
+ * data. This makes the purge irreversible unless you also take an external
+ * D1 backup first.
+ *
+ * @returns {Promise<{ totalPurged: number, purgedTableCount: number, deletedCounts: number[] }>}
  */
 export async function executePurgeTestDataBatch(db, adminUserId, reason = 'Admin Test Data Purge') {
+  // FK-safe deletion order — must match the returns.slice() length below.
+  // Never reorder without verifying no FK depends on a table that appears earlier.
   const purgeOrder = [
-    'order_items', 'withdrawal_items', 'receiving_items',
-    'specialty_recipe_ingredients', 'recipe_ingredients', 'material_lots',
-    'orders', 'withdrawals', 'receiving_reports', 'batch_orders',
-    'adjustments', 'quarantine_ncr', 'specialty_recipe_proposals',
-    'audit_log', 'recipes', 'materials'
+    // 1. Detail / child tables
+    'order_items',
+    'withdrawal_items',
+    'receiving_items',
+    'specialty_recipe_ingredients',
+    'recipe_ingredients',
+    'material_lots',
+    // 2. Operational documents
+    'orders',
+    'withdrawals',
+    'receiving_reports',
+    'batch_orders',
+    'adjustments',
+    'quarantine_ncr',
+    'specialty_recipe_proposals',
+    // 3. Audit / recipes / materials
+    'audit_log',
+    'recipes',
+    'materials',
+    // 4. Lookup tables
+    'storage_rooms',
+    'outlets',
+    'suppliers',
+    // 5. Users last — any residual FK reference above has already been removed
+    'users'
   ];
 
   const statements = [];
@@ -73,6 +106,7 @@ export async function executePurgeTestDataBatch(db, adminUserId, reason = 'Admin
     statements.push(db.prepare(`DELETE FROM ${table} WHERE is_test_data = 1`));
   }
 
+  // Reconcile materials.current_balance from surviving non-test lots
   statements.push(db.prepare(`
     UPDATE materials
     SET current_balance = COALESCE((
@@ -84,21 +118,39 @@ export async function executePurgeTestDataBatch(db, adminUserId, reason = 'Admin
     WHERE is_test_data = 0
   `));
 
+  // Summary audit entry (survives forever — it is the immutable record of purge)
   statements.push(db.prepare(`
     INSERT INTO admin_action_log (admin_user_id, action, table_name, record_id, record_snapshot, reason)
     VALUES (?1, 'BULK_DELETE_TEST', 'ALL_OPERATIONAL_TABLES', 'is_test_data=1', ?2, ?3)
   `).bind(
     adminUserId,
-    JSON.stringify({ purgedTables: purgeOrder, balanceReconciled: true, timestampUtc: new Date().toISOString() }),
+    JSON.stringify({
+      purgedTables: purgeOrder,
+      balanceReconciled: true,
+      timestampUtc: new Date().toISOString()
+    }),
     reason
   ));
 
-  return await db.batch(statements);
+  const results = await db.batch(statements);
+
+  // First purgeOrder.length results are the DELETEs (in order). The next two
+  // are the reconciliation UPDATE and the audit INSERT — not counted as purges.
+  const deletedCounts = results
+    .slice(0, purgeOrder.length)
+    .map((r) => Number(r?.meta?.changes || 0));
+  const totalPurged = deletedCounts.reduce((a, b) => a + b, 0);
+
+  return {
+    totalPurged,
+    purgedTableCount: purgeOrder.length,
+    deletedCounts
+  };
 }
 
 function hexToUint8Array(hex) {
   const bytes = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < bytes.length; i++) bytes[i] = parseInt(hex.substr(i * 2, 2), 16);
+  for (let i = 0; i < bytes.length; i++) bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
   return bytes;
 }
 
