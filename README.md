@@ -1,4 +1,4 @@
-# Jang-Jang Bakeshop — Systems & Operations Repository
+# Jang-Jang Bakeshop — Warehouse Management System (WMS) Repository
 
 **Repository:** `jjb-systems`
 **Document ID:** JJB-REPO-001
