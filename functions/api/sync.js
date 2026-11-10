@@ -572,7 +572,10 @@ export async function onRequestPost({ request, env }) {
         await env.DB.prepare(
           `UPDATE sync_events SET projected_at = datetime('now'), projection_error = ? WHERE idempotency_key = ?`
         ).bind(String(e.message || e), key).run();
-        projectionOk = true;
+        
+        // ⚡ CRITICAL FIX: Return 400 so the client outbox marks this as DEAD.
+        // This prevents the client from purging a failed event from IndexedDB.
+        return json({ status: 'error', error: String(e.message || e) }, 400);
       }
     } else {
       await env.DB.prepare(

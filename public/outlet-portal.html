@@ -40,6 +40,11 @@
     <button onclick="hideToast()" class="ml-2 font-extrabold hover:opacity-75">✕</button>
   </div>
 
+  <div id="outboxBadge" class="hidden fixed bottom-4 left-4 z-50 bg-amber-500 text-[#240e32] text-xs font-extrabold px-3 py-2 rounded-xl shadow-2xl border border-amber-300 flex items-center gap-2">
+    <span class="animate-pulse text-base">⚡</span>
+    <span id="outboxBadgeText">Syncing…</span>
+  </div>
+
   <header class="theme-header text-white shadow-xl border-b-2 theme-border sticky top-0 z-30 transition-colors duration-300 shrink-0 no-print">
     <div id="sandboxBanner" class="hidden bg-amber-500 text-[#240e32] px-4 py-1 text-[11px] font-extrabold flex items-center justify-between border-b border-amber-300">
       <div class="flex items-center gap-2"><span>🧪 SANDBOX MODE ACTIVE — All kiosk submissions are tagged <code class="bg-black/15 px-1 rounded">is_test_data = 1</code>.</span></div>
@@ -295,10 +300,19 @@
   </div>
 
   <script>
+    // ============================================================================
+    // CONSTANTS & TAXONOMY
+    // ============================================================================
     const STORAGE_KEY = 'JJB_WMS_LIVE_V4_6_STATE';
     const UI_PREF_KEY = 'JJB_WMS_UI_PREFS';
     const SANDBOX_KEY = 'JJB_WMS_SANDBOX_MODE';
     const WORKER_SYNC_URL = '/api/sync';
+
+    // Offline-First Outbox (localStorage-based for standalone kiosk)
+    const OUTBOX_KEY = `${STORAGE_KEY}_kiosk_outbox`;
+    const OUTBOX_MAX_ATTEMPTS = 5;
+    const OUTBOX_TIMEOUT_MS = 15000;
+    const OUTBOX_FLUSH_INTERVAL_MS = 30000;
 
     const THEME_MAP = {
       'jjb-gold':    { headerBg: '#240e32', sidebarBg: '#240e32', accentBg: '#C8963E', accentText: '#E5C585', btnText: '#240e32' },
@@ -377,7 +391,7 @@
     ];
 
     // ============================================================================
-    // 30 MASTER RECIPES WITH FULL INGREDIENT BOMs (from recipesData.js)
+    // 30 MASTER RECIPES WITH FULL INGREDIENT BOMs
     // ============================================================================
     const KIOSK_MASTER_RECIPES = [
       {
@@ -837,7 +851,7 @@
     ];
 
     // ============================================================================
-    // MATERIAL HELPERS (from original + new dual-unit + compute)
+    // MATERIAL HELPERS
     // ============================================================================
     function getMaterialUnitPresets(material = {}) {
       const code = String(material.code || '').toUpperCase();
@@ -912,7 +926,7 @@
     }
 
     // ============================================================================
-    // NEW: 3:00 PM PHT CUT-OFF + BOM SCALER + DUAL UNIT
+    // 3:00 PM PHT CUT-OFF + BOM SCALER + DUAL UNIT
     // ============================================================================
     function evaluateKioskBatchCutoff(nowDate = new Date()) {
       const parts = new Intl.DateTimeFormat('en-CA', {
@@ -970,7 +984,6 @@
       const estimatedYieldPcs = Math.round(baseYield * mult);
       let totalCost = 0;
 
-      // Consolidate duplicate ingredient codes and filter out sub-assembly markers
       const consolidatedMap = {};
       (recipe.ingredients || []).forEach(ing => {
         const code = String(ing.code || '');
@@ -990,7 +1003,6 @@
         let requiredSec, secUom;
 
         if (isEggCode) {
-          // Value ≤ 60 means already in pcs; > 60 means in grams → ÷50g per egg
           if (eggVal <= 60) {
             requiredSec = +rawScaled.toFixed(2);
           } else {
@@ -1031,6 +1043,185 @@
     }
 
     // ============================================================================
+    // OFFLINE-FIRST OUTBOX (localStorage, poison-pill safe)
+    // ============================================================================
+    let kioskFlushInFlight = false;
+    let kioskFlushAgain = false;
+
+    function getOutboxQueue() {
+      try { return JSON.parse(localStorage.getItem(OUTBOX_KEY) || '[]'); }
+      catch { return []; }
+    }
+
+    function saveOutboxQueue(queue) {
+      try { localStorage.setItem(OUTBOX_KEY, JSON.stringify(queue)); }
+      catch {}
+    }
+
+    function computeOutboxBackoff(attempts) {
+      if (!attempts || attempts <= 0) return 0;
+      return Math.min(Math.pow(2, attempts) * 1000, 60000);
+    }
+
+    function queueKioskEvent(eventType, idempotencyKey, payload) {
+      const queue = getOutboxQueue();
+      const record = {
+        id: `KO-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        event_type: eventType,
+        idempotency_key: idempotencyKey,
+        payload: { ...payload, is_test_data: payload.is_test_data ?? (isTestMode ? 1 : 0) },
+        status: 'PENDING',
+        attempts: 0,
+        next_retry_at: 0,
+        last_http_status: null,
+        error: null,
+        created_at: Date.now(),
+        updated_at: Date.now()
+      };
+      queue.push(record);
+      saveOutboxQueue(queue);
+      updateOutboxBadge();
+      return record.id;
+    }
+
+    function updateOutboxStatus(id, status, opts = {}) {
+      const queue = getOutboxQueue();
+      const idx = queue.findIndex(e => e.id === id);
+      if (idx === -1) return;
+      const ev = queue[idx];
+      ev.status = status;
+      ev.updated_at = Date.now();
+      if (opts.errorMsg) ev.error = opts.errorMsg;
+      if (opts.httpStatus != null) ev.last_http_status = opts.httpStatus;
+      if (status === 'FAILED') {
+        ev.attempts = (ev.attempts || 0) + 1;
+        ev.next_retry_at = Date.now() + computeOutboxBackoff(ev.attempts);
+        if (ev.attempts >= OUTBOX_MAX_ATTEMPTS) {
+          ev.status = 'DEAD';
+          ev.error = ev.error || `Exceeded ${OUTBOX_MAX_ATTEMPTS} attempts`;
+        }
+      }
+      saveOutboxQueue(queue);
+      updateOutboxBadge();
+    }
+
+    function getRetryableKioskEvents() {
+      const queue = getOutboxQueue();
+      const now = Date.now();
+      return queue.filter(e =>
+        (e.status === 'PENDING' || e.status === 'FAILED') &&
+        (e.attempts || 0) < OUTBOX_MAX_ATTEMPTS &&
+        (e.next_retry_at || 0) <= now
+      ).sort((a, b) => a.created_at - b.created_at);
+    }
+
+    function clearSyncedKioskEvents() {
+      const queue = getOutboxQueue().filter(e => e.status !== 'SYNCED');
+      saveOutboxQueue(queue);
+    }
+
+    function updateOutboxBadge() {
+      const badge = document.getElementById('outboxBadge');
+      const badgeText = document.getElementById('outboxBadgeText');
+      if (!badge || !badgeText) return;
+      const queue = getOutboxQueue();
+      const pending = queue.filter(e => e.status === 'PENDING' || e.status === 'FAILED' || e.status === 'SYNCING');
+      if (pending.length > 0) {
+        badge.classList.remove('hidden');
+        badgeText.textContent = `Syncing ${pending.length} pending event${pending.length > 1 ? 's' : ''}…`;
+      } else {
+        badge.classList.add('hidden');
+      }
+    }
+
+    async function flushKioskOutbox() {
+      if (kioskFlushInFlight) { kioskFlushAgain = true; return; }
+      kioskFlushInFlight = true;
+      let syncedAny = false;
+      let deadNewly = 0;
+
+      try {
+        do {
+          kioskFlushAgain = false;
+          const retryable = getRetryableKioskEvents();
+          if (retryable.length === 0) break;
+
+          for (const ev of retryable) {
+            updateOutboxStatus(ev.id, 'SYNCING');
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), OUTBOX_TIMEOUT_MS);
+            try {
+              const res = await fetch(WORKER_SYNC_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  event_type: ev.event_type,
+                  idempotency_key: ev.idempotency_key,
+                  payload: ev.payload
+                }),
+                signal: controller.signal
+              });
+              clearTimeout(timeoutId);
+
+              if (res.ok) {
+                updateOutboxStatus(ev.id, 'SYNCED');
+                syncedAny = true;
+                continue;
+              }
+
+              const httpStatus = res.status;
+              const isClientError = httpStatus >= 400 && httpStatus < 500;
+              const isTransient = httpStatus === 429 || httpStatus === 408;
+
+              if (isClientError && !isTransient) {
+                updateOutboxStatus(ev.id, 'DEAD', {
+                  errorMsg: `Permanently rejected (HTTP ${httpStatus})`,
+                  httpStatus
+                });
+                deadNewly++;
+              } else {
+                updateOutboxStatus(ev.id, 'FAILED', {
+                  errorMsg: `Transient (HTTP ${httpStatus})`,
+                  httpStatus
+                });
+              }
+            } catch (err) {
+              clearTimeout(timeoutId);
+              const isAbort = err?.name === 'AbortError';
+              updateOutboxStatus(ev.id, 'FAILED', {
+                errorMsg: isAbort ? 'Request timeout (15s)' : (err.message || 'Network error')
+              });
+            }
+          }
+
+          clearSyncedKioskEvents();
+        } while (kioskFlushAgain);
+
+        if (deadNewly > 0) {
+          showToast(`⚠️ ${deadNewly} queued event${deadNewly > 1 ? 's' : ''} permanently rejected.`);
+        }
+        if (syncedAny) {
+          pollD1FromKiosk();
+        }
+      } catch (err) {
+        console.warn('flushKioskOutbox error:', err);
+      } finally {
+        kioskFlushInFlight = false;
+      }
+    }
+
+    async function postToCloudD1(eventType, idempotencyKey, payloadData) {
+      queueKioskEvent(eventType, idempotencyKey, payloadData);
+      await flushKioskOutbox();
+      const queue = getOutboxQueue();
+      const ev = queue.find(e => e.idempotency_key === idempotencyKey);
+      if (!ev) throw new Error('Event vanished from queue');
+      if (ev.status === 'SYNCED') return 'SYNCED';
+      if (ev.status === 'DEAD') throw new Error(ev.error || 'Permanently rejected');
+      return 'QUEUED';
+    }
+
+    // ============================================================================
     // STATE
     // ============================================================================
     let activeKioskTab = 'batch';
@@ -1044,7 +1235,7 @@
     let catalogRecipes = [...KIOSK_MASTER_RECIPES];
     let currentUnitPresets = [];
     let stagedMaterialCart = [];
-    let stagedKioskRecipesCart = []; // NEW
+    let stagedKioskRecipesCart = [];
 
     let pendingRequestsQueue = [];
     let pendingBatchOrdersQueue = [];
@@ -1188,9 +1379,6 @@
       });
     }
 
-    // ============================================================================
-    // FORM INIT
-    // ============================================================================
     function populateSelects() {
       const lineSel = document.getElementById('unifiedLineSelect');
       lineSel.innerHTML = UNIFIED_PRODUCTION_LINES.map(
@@ -1234,9 +1422,6 @@
       updateBatchYieldPreview();
     }
 
-    // ============================================================================
-    // UPDATED BATCH FUNCTIONS
-    // ============================================================================
     function updateBatchYieldPreview() {
       const sel = document.getElementById('recipeSelect');
       if (!sel) return;
@@ -1353,7 +1538,9 @@
       }
 
       const groupOrderRef = `MORD-${Date.now().toString().slice(-6)}`;
-      let submitted = 0;
+      let syncedCount = 0;
+      let queuedCount = 0;
+      let deadCount = 0;
 
       for (let idx = 0; idx < recipesToSubmit.length; idx++) {
         const item = recipesToSubmit[idx];
@@ -1387,9 +1574,13 @@
           localStorage.setItem(key, JSON.stringify(existing));
         } catch {}
         try {
-          await postToCloudD1('BATCH_ORDER_SAVED', `PORTAL_BATCH_${orderId}_${Date.now()}`, newOrder);
-          submitted++;
-        } catch (err) { console.warn('D1 sync failed for', orderId, err); }
+          const result = await postToCloudD1('BATCH_ORDER_SAVED', `PORTAL_BATCH_${orderId}_${Date.now()}`, newOrder);
+          if (result === 'SYNCED') syncedCount++;
+          else queuedCount++;
+        } catch (err) {
+          console.warn('Permanently rejected:', orderId, err);
+          deadCount++;
+        }
       }
 
       broadcastCrossTab('batch order', locationName);
@@ -1399,9 +1590,17 @@
       document.getElementById('kioskOrderGeneralRemarks').value = '';
       document.getElementById('kioskRecipeItemRemarks').value = '';
       document.getElementById('kioskRecipeBomPreview').innerHTML = '';
-      showToast(submitted === recipesToSubmit.length
-        ? `✅ ${submitted} batch order(s) synced to D1!`
-        : `⚠️ ${submitted}/${recipesToSubmit.length} orders synced; rest queued locally.`);
+
+      const total = recipesToSubmit.length;
+      if (deadCount > 0 && syncedCount + queuedCount === 0) {
+        showToast(`⚠️ ${deadCount} order(s) permanently rejected — check outbox.`);
+      } else if (queuedCount > 0 && syncedCount === 0) {
+        showToast(`📤 ${queuedCount} order(s) queued; will auto-sync when online.`);
+      } else if (syncedCount === total) {
+        showToast(`✅ All ${syncedCount} batch order(s) synced to D1!`);
+      } else {
+        showToast(`⚠️ ${syncedCount} synced · ${queuedCount} queued · ${deadCount} rejected.`);
+      }
     }
 
     function handleMaterialItemChange() {
@@ -1569,25 +1768,6 @@
       } catch {}
     }
 
-    async function postToCloudD1(eventType, idempotencyKey, payloadData) {
-      const enrichedPayload = {
-        ...payloadData,
-        is_test_data: payloadData.is_test_data ?? (isTestMode ? 1 : 0)
-      };
-      const res = await fetch(WORKER_SYNC_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          event_type: eventType, eventType,
-          idempotency_key: idempotencyKey, idempotencyKey,
-          payload: enrichedPayload, ...enrichedPayload
-        })
-      });
-      const text = await res.text();
-      if (!res.ok || text.trim().startsWith('<')) throw new Error(`HTTP ${res.status}`);
-      return JSON.parse(text);
-    }
-
     async function handleMaterialRequestSubmit(e) {
       e.preventDefault();
       if (stagedMaterialCart.length === 0) return alert('Please add at least one raw material item.');
@@ -1618,10 +1798,15 @@
       renderStagedMaterialCart();
       renderRightQueueDock();
       broadcastCrossTab('material requisition', locationName);
+
       try {
-        await postToCloudD1('WITHDRAWAL_REQUEST_SUBMITTED', `PORTAL_REQ_${requestId}_${Date.now()}`, queuedRequest);
-        showToast(`✅ Requisition ${requestId} synced to D1!`);
-      } catch { showToast(`⚠️ Requisition ${requestId} saved locally.`); }
+        const result = await postToCloudD1('WITHDRAWAL_REQUEST_SUBMITTED', `PORTAL_REQ_${requestId}_${Date.now()}`, queuedRequest);
+        showToast(result === 'SYNCED'
+          ? `✅ Requisition ${requestId} synced to D1!`
+          : `📤 Requisition ${requestId} queued; will sync when online.`);
+      } catch (err) {
+        showToast(`⚠️ Requisition ${requestId} permanently rejected — check outbox.`);
+      }
     }
 
     async function handleSpecialtyProposalSubmit(e) {
@@ -1653,10 +1838,15 @@
         localStorage.setItem('JJB_WMS_LIVE_V4_6_SPECIALTY_RECIPES', JSON.stringify(list));
       } catch {}
       broadcastCrossTab('specialty R&D recipe', locationName);
+
       try {
-        await postToCloudD1('SPECIALTY_PROPOSAL_SAVED', `SPEC_${proposalId}_${Date.now()}`, proposal);
-        showToast(`✨ R&D Proposal ${proposalId} synced!`);
-      } catch { showToast(`⚠️ Proposal ${proposalId} saved locally.`); }
+        const result = await postToCloudD1('SPECIALTY_PROPOSAL_SAVED', `SPEC_${proposalId}_${Date.now()}`, proposal);
+        showToast(result === 'SYNCED'
+          ? `✨ R&D Proposal ${proposalId} synced!`
+          : `📤 R&D Proposal ${proposalId} queued; will sync when online.`);
+      } catch (err) {
+        showToast(`⚠️ Proposal ${proposalId} permanently rejected — check outbox.`);
+      }
       document.getElementById('rndName').value = '';
       document.getElementById('rndNotes').value = '';
     }
@@ -1830,6 +2020,10 @@
     renderStagedMaterialCart();
     renderStagedKioskRecipeCart();
     renderRightQueueDock();
+    updateOutboxBadge();
+    flushKioskOutbox();
+    window.addEventListener('online', flushKioskOutbox);
+    setInterval(() => { if (!document.hidden) flushKioskOutbox(); }, OUTBOX_FLUSH_INTERVAL_MS);
     pollD1FromKiosk();
     setInterval(() => { if (!document.hidden) pollD1FromKiosk(); }, 12000);
   </script>

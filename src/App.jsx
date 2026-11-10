@@ -28,15 +28,30 @@ import {
 } from './data/initialData';
 
 import { deductFefoLots, calculateRecipeIngredients } from './utils/wmsLogic';
-import { CheckCircle2, Bell } from 'lucide-react';
+import {
+  initOfflineDb,
+  queueEvent,
+  getPendingEvents,
+  getRetryableEvents,
+  getDeadEvents,
+  updateEventStatus,
+  clearSyncedEvents,
+  reviveEvent,
+  dismissDeadEvent,
+  MAX_ATTEMPTS
+} from './utils/offlineDb';
+import { CheckCircle2, Bell, AlertTriangle, RefreshCw, Trash2 } from 'lucide-react';
 
 export const STORAGE_KEY = 'JJB_WMS_LIVE_V4_6_STATE';
 export const UI_PREF_KEY = 'JJB_WMS_UI_PREFS';
 export const WORKER_SYNC_URL = '/api/sync';
 export const GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbwBll5ZKuiBO0wX9WSXGRd-Tua4QpxbfKAcrnWhVmdkjkU_3mnwgI7bX-iiRgjHlkYa/exec';
 
+// Polling cadence (3s = near real-time, reasonable D1 cost)
+export const POLL_INTERVAL_MS = 3000;
+
 // ============================================================================
-// Helper: Resolve D1 users.id FK from display name or user object
+// Helpers
 // ============================================================================
 const resolveUserId = (nameOrId, authUserObj = null) => {
   if (authUserObj?.id) {
@@ -55,9 +70,6 @@ const resolveUserId = (nameOrId, authUserObj = null) => {
   return matched?.id || 'jade';
 };
 
-// ============================================================================
-// Helper: Withdrawal item normalizer
-// ============================================================================
 const buildNormalizedWithdrawalItems = (rawItems, materialsList) => {
   return (rawItems || []).map((item) => {
     const code = item.materialCode || item.material_code || item.itemCode || item.code;
@@ -104,9 +116,6 @@ const buildNormalizedWithdrawalItems = (rawItems, materialsList) => {
   });
 };
 
-// ============================================================================
-// Helper: UI preferences (theme + nav layout) — safe, non-transactional
-// ============================================================================
 const loadUiPrefs = () => {
   try {
     const raw = localStorage.getItem(UI_PREF_KEY);
@@ -126,19 +135,6 @@ export default function App() {
     }
   };
 
-  // ==========================================================================
-  // localStorage writer — DIRECT WRITE (no merge).
-  //
-  // Why no merge?
-  //   The previous merge pattern seeded a Map with existingList first, then
-  //   overwrote with value. Deleted items could never be evicted because they
-  //   were already in the Map before `value` was applied. Cross-tab consistency
-  //   is handled separately by:
-  //     • the `storage` event → reloadExternalData()
-  //     • the D1 poller every 12s → pollCrossDeviceEvents()
-  //     • BroadcastChannel → NEW_REQUISITION messages
-  //   So the localStorage write must simply mirror current React state.
-  // ==========================================================================
   const saveToStorage = (key, value) => {
     try {
       const fullKey = `${STORAGE_KEY}_${key}`;
@@ -158,7 +154,7 @@ export default function App() {
   const [quarantineList, setQuarantineList] = useState(() => getSaved('quarantine', INITIAL_QUARANTINE));
   const [auditLogs, setAuditLogs] = useState(() => getSaved('audit_logs', INITIAL_AUDIT_LOGS));
 
-  // UI Preferences (theme + nav layout) — persisted, non-transactional
+  // UI Preferences
   const initialUiPrefs = loadUiPrefs();
   const [themeId, setThemeId] = useState(initialUiPrefs.themeId || 'jjb-gold');
   const [navLayout, setNavLayout] = useState(initialUiPrefs.navLayout || 'sidebar');
@@ -169,7 +165,7 @@ export default function App() {
     } catch (e) {}
   }, [navLayout, themeId]);
 
-  // Operational & Authentication State
+  // Auth State
   const [authUser, setAuthUser] = useState(() => {
     try {
       const saved = localStorage.getItem('JJB_WMS_AUTH_USER');
@@ -187,22 +183,21 @@ export default function App() {
   const [currentRole, setCurrentRole] = useState(() => authUser?.name || 'Jade Q. Dela Cruz');
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
-// Sandbox flag is intentionally stored in localStorage (not sessionStorage) so
-// toggling it in one tab propagates to every other open tab within seconds.
-const [isTestMode, setIsTestMode] = useState(() => {
-  try {
-    return localStorage.getItem('JJB_WMS_SANDBOX_MODE') === '1';
-  } catch {
-    return false;
-  }
-});
 
-const toggleTestMode = (val) => {
-  setIsTestMode(val);
-  try {
-    localStorage.setItem('JJB_WMS_SANDBOX_MODE', val ? '1' : '0');
-  } catch {}
-};
+  const [isTestMode, setIsTestMode] = useState(() => {
+    try {
+      return localStorage.getItem('JJB_WMS_SANDBOX_MODE') === '1';
+    } catch {
+      return false;
+    }
+  });
+
+  const toggleTestMode = (val) => {
+    setIsTestMode(val);
+    try {
+      localStorage.setItem('JJB_WMS_SANDBOX_MODE', val ? '1' : '0');
+    } catch {}
+  };
 
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isMobileMode, setIsMobileMode] = useState(false);
@@ -213,12 +208,20 @@ const toggleTestMode = (val) => {
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [recipes, setRecipes] = useState(() => getAllMasterRecipes());
 
-  // Cross-Device Notification Bell State
+  // IndexedDB Outbox State
+  const [outboxCount, setOutboxCount] = useState(0);
+  const [isOutboxModalOpen, setIsOutboxModalOpen] = useState(false);
+  const [deadEvents, setDeadEvents] = useState([]);
+
+  // Notification State
   const [unreadNotifications, setUnreadNotifications] = useState([]);
-  const lastSeenSyncIdRef = useRef(
-    Number(localStorage.getItem(`${STORAGE_KEY}_last_sync_id`) || 0)
-  );
+  const lastSeenSyncIdRef = useRef(Number(localStorage.getItem(`${STORAGE_KEY}_last_sync_id`) || 0));
   const initialPollDoneRef = useRef(false);
+
+  // Concurrency Guards
+  const flushInFlightRef = useRef(false);
+  const flushAgainRef = useRef(false);
+  const pollInFlightRef = useRef(false);
 
   const showToast = useCallback((message) => {
     setToastMessage(message);
@@ -226,35 +229,40 @@ const toggleTestMode = (val) => {
   }, []);
 
   // ============================================================================
-  // Unified Edge Sync Dispatcher
+  // Outbox Diagnostics Logic
   // ============================================================================
-  const postSyncEvent = useCallback((eventType, idempotencyKey, payloadData = {}) => {
-    if (isOffline) return;
-    const enrichedPayload = {
-      ...payloadData,
-      is_test_data: payloadData.is_test_data ?? (isTestMode ? 1 : 0)
-    };
-    fetch(WORKER_SYNC_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        event_type: eventType,
-        eventType: eventType,
-        idempotency_key: idempotencyKey,
-        idempotencyKey: idempotencyKey,
-        payload: enrichedPayload,
-        ...enrichedPayload
-      })
-    }).catch((err) => console.warn('Background sync error:', err));
-  }, [isOffline, isTestMode]);
+  const loadDeadEvents = useCallback(async () => {
+    const events = await getDeadEvents();
+    setDeadEvents(events);
+  }, []);
+
+  useEffect(() => {
+    if (isOutboxModalOpen) loadDeadEvents();
+  }, [isOutboxModalOpen, loadDeadEvents]);
+
+  const handleReviveEvent = async (id) => {
+    await reviveEvent(id);
+    await loadDeadEvents();
+    await flushOutbox();
+    showToast('Event revived and re-queued.');
+  };
+
+  const handleDismissEvent = async (id) => {
+    if (window.confirm('Permanently discard this event? This cannot be undone.')) {
+      await dismissDeadEvent(id);
+      await loadDeadEvents();
+      showToast('Event discarded permanently.');
+    }
+  };
 
   // ============================================================================
-  // Phase 2.6 — Cross-Device D1 Poller
-  // Cancelled / issued items are filtered out (NOT persisted) — D1 sync_events
-  // and audit_log are the permanent record.
+  // Cross-Device D1 Poller
   // ============================================================================
-  const pollCrossDeviceEvents = useCallback(async () => {
-    if (isOffline) return;
+  const pollCrossDeviceEvents = useCallback(async (force = false) => {
+    if (isOffline && !force) return;
+    if (pollInFlightRef.current) return;
+    pollInFlightRef.current = true;
+
     try {
       const sinceId = lastSeenSyncIdRef.current || 0;
       const res = await fetch(`${WORKER_SYNC_URL}?since_id=${sinceId}`, {
@@ -268,8 +276,6 @@ const toggleTestMode = (val) => {
       const incomingEvents = Array.isArray(data.events) ? data.events : [];
       const remoteBatchOrders = Array.isArray(data.batch_orders) ? data.batch_orders : [];
 
-      // 1. Hydrate NEW batch orders from D1 (updates are handled below via
-      //    the BATCH_ORDER_UPDATED event case)
       if (remoteBatchOrders.length > 0) {
         setBatchOrders((prev) => {
           const map = new Map(prev.map((o) => [o.orderId, o]));
@@ -317,7 +323,6 @@ const toggleTestMode = (val) => {
         const evType = String(ev.event_type || '').toUpperCase();
         const p = ev.payload || {};
 
-        // A. Mobile Material / Mess Hall Request -> Queue in Jade's Pending Requests
         if (evType === 'WITHDRAWAL_REQUEST_SUBMITTED') {
           const reqId = p.requestId || p.withdrawalNo || p.slipNo;
           if (!reqId) return;
@@ -352,7 +357,6 @@ const toggleTestMode = (val) => {
           });
         }
 
-        // B. Cancelled Request -> Remove from queue entirely (no local persistence)
         if (evType === 'WITHDRAWAL_REQUEST_CANCELLED') {
           const targetId = p.requestId || p.sourceRequestId || p.withdrawalNo || p.slipNo;
           if (targetId) {
@@ -362,7 +366,6 @@ const toggleTestMode = (val) => {
           }
         }
 
-        // C. Issued Withdrawal -> Remove matching pending request from queue
         if (evType === 'WITHDRAWAL_SAVED') {
           const targetId = p.sourceRequestId || p.requestId || p.withdrawalNo;
           if (targetId) {
@@ -372,7 +375,6 @@ const toggleTestMode = (val) => {
           }
         }
 
-        // D. Mobile Batch Order (Form-ORD-001) -> Queue in Romeo's Workbench
         if (evType === 'BATCH_ORDER_SAVED' || evType === 'OUTLET_BATCH_ORDER') {
           const orderId = p.orderId || p.order_id;
           if (!orderId) return;
@@ -404,7 +406,6 @@ const toggleTestMode = (val) => {
           });
         }
 
-        // E. Batch Order UPDATED -> Merge status/bulk fields from D1 into local state
         if (evType === 'BATCH_ORDER_UPDATED') {
           const orderId = p.orderId || p.order_id;
           if (!orderId) return;
@@ -436,7 +437,6 @@ const toggleTestMode = (val) => {
           );
         }
 
-        // F. Batch Order Cancelled -> Remove from Romeo's queue entirely
         if (evType === 'BATCH_ORDER_CANCELLED') {
           const orderId = p.orderId || p.order_id;
           if (orderId) {
@@ -444,7 +444,6 @@ const toggleTestMode = (val) => {
           }
         }
 
-        // G. Mobile Specialty R&D Proposal (Form-RND-001) -> Save to localStorage & notify Romeo
         if (evType === 'SPECIALTY_PROPOSAL_SAVED' || evType === 'SPECIALTY_PROPOSAL_CREATED') {
           const propId = p.proposalId || p.proposal_id;
           if (!propId) return;
@@ -485,18 +484,148 @@ const toggleTestMode = (val) => {
       initialPollDoneRef.current = true;
     } catch (err) {
       // Silent retry on next interval
+    } finally {
+      pollInFlightRef.current = false;
     }
   }, [isOffline, showToast]);
 
+  // ============================================================================
+  // Offline-First Outbox Flusher
+  // ============================================================================
+  const flushOutbox = useCallback(async () => {
+    if (isOffline) return;
+    if (flushInFlightRef.current) {
+      flushAgainRef.current = true;
+      return;
+    }
+
+    flushInFlightRef.current = true;
+    let syncedAny = false;
+    let deadNewly = 0;
+
+    try {
+      do {
+        flushAgainRef.current = false;
+        const retryable = await getRetryableEvents();
+        if (retryable.length === 0) break;
+
+        for (const event of retryable) {
+          await updateEventStatus(event.id, 'SYNCING');
+
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 15_000);
+          try {
+            const res = await fetch(WORKER_SYNC_URL, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                event_type: event.event_type,
+                idempotency_key: event.idempotency_key,
+                payload: event.payload
+              }),
+              signal: controller.signal
+            });
+
+            clearTimeout(timeoutId);
+
+            if (res.ok) {
+              await updateEventStatus(event.id, 'SYNCED');
+              syncedAny = true;
+              continue;
+            }
+
+            const httpStatus = res.status;
+            const isClientError = httpStatus >= 400 && httpStatus < 500;
+            const isTransient429Or408 = httpStatus === 429 || httpStatus === 408;
+
+            if (isClientError && !isTransient429Or408) {
+              await updateEventStatus(event.id, 'DEAD', {
+                errorMsg: `Payload permanently rejected (HTTP ${httpStatus})`,
+                httpStatus
+              });
+              deadNewly++;
+            } else {
+              await updateEventStatus(event.id, 'FAILED', {
+                errorMsg: `Transient failure (HTTP ${httpStatus})`,
+                httpStatus
+              });
+            }
+          } catch (err) {
+            clearTimeout(timeoutId);
+            const isAbort = err?.name === 'AbortError';
+            await updateEventStatus(event.id, 'FAILED', {
+              errorMsg: isAbort ? 'Request timeout (15s)' : (err.message || 'Network error')
+            });
+          }
+        }
+
+        await clearSyncedEvents();
+      } while (flushAgainRef.current);
+
+      const remaining = await getPendingEvents();
+      setOutboxCount(remaining.length);
+
+      if (deadNewly > 0) {
+        showToast(`⚠️ ${deadNewly} queued event${deadNewly > 1 ? 's' : ''} permanently rejected. Open Outbox to review.`);
+      }
+
+      if (syncedAny) {
+        pollCrossDeviceEvents(true);
+      }
+    } catch (err) {
+      console.warn('flushOutbox error:', err);
+    } finally {
+      flushInFlightRef.current = false;
+    }
+  }, [isOffline, pollCrossDeviceEvents, showToast]);
+
+  // ============================================================================
+  // Unified Edge Sync Dispatcher
+  // ============================================================================
+  const postSyncEvent = useCallback(async (eventType, idempotencyKey, payloadData = {}) => {
+    try {
+      const enrichedPayload = {
+        ...payloadData,
+        is_test_data: payloadData.is_test_data ?? (isTestMode ? 1 : 0)
+      };
+      await queueEvent(eventType, idempotencyKey, enrichedPayload);
+      await flushOutbox();
+    } catch (err) {
+      console.warn('postSyncEvent failed:', err);
+    }
+  }, [isTestMode, flushOutbox]);
+
+  // ============================================================================
+  // Boot & Polling Lifecycle
+  // ============================================================================
   useEffect(() => {
+    initOfflineDb()
+      .then(() => flushOutbox())
+      .catch((err) => console.warn('OfflineDB init failed:', err));
+
     pollCrossDeviceEvents();
     const interval = setInterval(() => {
       if (!document.hidden) pollCrossDeviceEvents();
-    }, 12000);
-    return () => clearInterval(interval);
-  }, [pollCrossDeviceEvents]);
+    }, POLL_INTERVAL_MS);
 
-  // Specialty Recipe Approval Handler
+    const handleOnline = () => flushOutbox();
+    window.addEventListener('online', handleOnline);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('online', handleOnline);
+    };
+  }, [flushOutbox, pollCrossDeviceEvents]);
+
+  useEffect(() => {
+    if (!isOffline) {
+      flushOutbox();
+    }
+  }, [isOffline, flushOutbox]);
+
+  // ============================================================================
+  // Existing Workflows
+  // ============================================================================
   const handleApproveSpecialtyRecipe = (proposalId) => {
     try {
       const raw = localStorage.getItem('JJB_WMS_LIVE_V4_6_SPECIALTY_RECIPES');
@@ -597,34 +726,31 @@ const toggleTestMode = (val) => {
       pollCrossDeviceEvents();
     };
 
-const handleStorageEvent = (e) => {
-  // ── Data-array keys → reload from disk ──────────────────────────────
-  if (
-    e.key === `${STORAGE_KEY}_batch_orders` ||
-    e.key === `${STORAGE_KEY}_withdrawals` ||
-    e.key === `${STORAGE_KEY}_pending_requests` ||
-    e.key === `${STORAGE_KEY}_inventory` ||
-    e.key === 'JJB_WMS_LIVE_V4_6_SPECIALTY_RECIPES'
-  ) {
-    reloadExternalData();
-    return;
-  }
+    const handleStorageEvent = (e) => {
+      if (
+        e.key === `${STORAGE_KEY}_batch_orders` ||
+        e.key === `${STORAGE_KEY}_withdrawals` ||
+        e.key === `${STORAGE_KEY}_pending_requests` ||
+        e.key === `${STORAGE_KEY}_inventory` ||
+        e.key === 'JJB_WMS_LIVE_V4_6_SPECIALTY_RECIPES'
+      ) {
+        reloadExternalData();
+        return;
+      }
 
-  // ── Sandbox flag → reflect toggle from any other tab ────────────────
-  if (e.key === 'JJB_WMS_SANDBOX_MODE') {
-    setIsTestMode(e.newValue === '1');
-    return;
-  }
+      if (e.key === 'JJB_WMS_SANDBOX_MODE') {
+        setIsTestMode(e.newValue === '1');
+        return;
+      }
 
-  // ── UI prefs (theme + nav layout) → reflect changes live ────────────
-  if (e.key === UI_PREF_KEY) {
-    try {
-      const prefs = JSON.parse(e.newValue || '{}');
-      if (prefs.themeId) setThemeId(prefs.themeId);
-      if (prefs.navLayout) setNavLayout(prefs.navLayout);
-    } catch {}
-  }
-};
+      if (e.key === UI_PREF_KEY) {
+        try {
+          const prefs = JSON.parse(e.newValue || '{}');
+          if (prefs.themeId) setThemeId(prefs.themeId);
+          if (prefs.navLayout) setNavLayout(prefs.navLayout);
+        } catch {}
+      }
+    };
     window.addEventListener('storage', handleStorageEvent);
 
     const handleFocus = () => reloadExternalData();
@@ -707,7 +833,6 @@ const handleStorageEvent = (e) => {
     return () => clearInterval(timer);
   }, [lastEodTriggerDate]);
 
-  // WORKFLOW 1: Inbound Receiving Save
   const handleSaveReceiving = (newReport) => {
     setReceivingReports((prev) => [newReport, ...prev]);
 
@@ -767,9 +892,6 @@ const handleStorageEvent = (e) => {
     setActiveTab('dashboard');
   };
 
-  // ============================================================================
-  // Phase 1.5 DEDUCTION GATE — Shared Withdrawal Executor
-  // ============================================================================
   const performWithdrawal = (newWithdrawal, opts = {}) => {
     const normalizedItems = buildNormalizedWithdrawalItems(newWithdrawal.items, inventory);
     const computedCost =
@@ -1011,7 +1133,6 @@ const handleStorageEvent = (e) => {
     showToast(`Bulk requisition for ${order.recipeName} sent to Jade Dela Cruz in Tab 4!`);
   };
 
-  // WORKFLOW 3C — Jade Approves Romeo's Bulk Requisition
   const handleApprovePendingWithdrawal = (orderId) => {
     const order = batchOrders.find((o) => o.orderId === orderId);
     if (!order) return;
@@ -1085,10 +1206,6 @@ const handleStorageEvent = (e) => {
     showToast(`Bulk materials authorized & deducted! Romeo's Scale & Kit is unlocked.`);
   };
 
-  // WORKFLOW 3D — Jade Declines Romeo's Bulk Requisition (Phase 2.6)
-  // Sets bulkRequestStatus back to NOT_REQUESTED so Romeo can re-request,
-  // while retaining the decline metadata + audit trail (no local persistence
-  // of the decline action itself).
   const handleDeclineBulkWithdrawal = (orderId, reason = 'Declined by Jade') => {
     const targetOrder = batchOrders.find((o) => o.orderId === orderId);
     if (!targetOrder) return;
@@ -1207,9 +1324,6 @@ const handleStorageEvent = (e) => {
     showToast(`Order ${orderId} updated to ${newStatus}!`);
   };
 
-  // WORKFLOW 4B — Cancel a batch order (Phase 2.6)
-  // Removes from D1 batch_orders, writes to audit_log, propagates via poller.
-  // No local persistence of the cancel state — D1 is the audit trail.
   const handleCancelBatchOrder = (orderId, reason = 'Cancelled') => {
     const targetOrder = batchOrders.find(o => o.orderId === orderId);
     if (!targetOrder) return;
@@ -1511,6 +1625,19 @@ const handleStorageEvent = (e) => {
         </div>
       )}
 
+      {/* Outbox sync indicator — CLICKABLE to open diagnostics */}
+      {outboxCount > 0 && (
+        <button 
+          onClick={() => setIsOutboxModalOpen(true)} 
+          className="fixed bottom-4 left-4 z-50 bg-amber-500 hover:bg-amber-600 transition text-[#240e32] text-xs font-extrabold px-3 py-2 rounded-xl shadow-2xl border border-amber-300 flex items-center gap-2"
+        >
+          <span className="animate-pulse text-base">⚡</span>
+          <span>
+            Syncing {outboxCount} pending event{outboxCount > 1 ? 's' : ''}…
+          </span>
+        </button>
+      )}
+
       {unreadNotifications.length > 0 && (
         <div className="bg-amber-100 border-b border-amber-300 px-4 py-2 text-xs text-[#240e32] flex flex-wrap items-center justify-between gap-2 shadow-sm">
           <div className="flex items-center gap-2 font-bold">
@@ -1717,6 +1844,56 @@ const handleStorageEvent = (e) => {
           </div>
         </main>
       </div>
+
+      {/* Outbox Diagnostics Modal */}
+      {isOutboxModalOpen && (
+        <div className="fixed inset-0 z-[60] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border-2 border-[#C8963E] space-y-4">
+            <div className="flex justify-between items-start border-b pb-2">
+              <div>
+                <h3 className="font-serif text-xl font-bold text-[#3D1C52] flex items-center gap-2">
+                  <AlertTriangle size={20} className="text-amber-500" /> Outbox Diagnostics
+                </h3>
+                <p className="text-xs text-gray-500">Dead-letter queue for permanently rejected sync events.</p>
+              </div>
+              <button onClick={() => setIsOutboxModalOpen(false)} className="text-gray-400 hover:text-gray-600 font-bold text-lg">✕</button>
+            </div>
+
+            {deadEvents.length === 0 ? (
+              <div className="text-center py-10 text-gray-500 text-sm">
+                <CheckCircle2 size={32} className="mx-auto text-emerald-500 mb-2" />
+                No dead events. All data is in sync.
+              </div>
+            ) : (
+              <div className="space-y-3 max-h-80 overflow-y-auto">
+                {deadEvents.map((ev) => (
+                  <div key={ev.id} className="p-3 border border-red-200 bg-red-50 rounded-xl flex justify-between items-start gap-4">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-mono text-xs font-bold text-red-700">{ev.event_type}</span>
+                        <span className="text-[10px] text-gray-500">{new Date(ev.created_at).toLocaleString()}</span>
+                      </div>
+                      <p className="text-xs text-gray-700 truncate"><strong>Key:</strong> {ev.idempotency_key}</p>
+                      <p className="text-xs text-red-600 font-bold mt-1">Reason: {ev.error}</p>
+                    </div>
+                    <div className="flex gap-2 shrink-0">
+                      <button onClick={() => handleReviveEvent(ev.id)} className="px-3 py-1.5 text-xs font-bold bg-emerald-600 text-white rounded flex items-center gap-1 hover:bg-emerald-700">
+                        <RefreshCw size={12} /> Revive
+                      </button>
+                      <button onClick={() => handleDismissEvent(ev.id)} className="px-3 py-1.5 text-xs font-bold bg-gray-200 text-gray-700 rounded flex items-center gap-1 hover:bg-gray-300">
+                        <Trash2 size={12} /> Discard
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="pt-3 border-t flex justify-end">
+              <button onClick={() => setIsOutboxModalOpen(false)} className="px-5 py-2 rounded-xl bg-[#240e32] text-[#E5C585] font-bold text-xs">Close</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <LoginModal
         isOpen={isLoginModalOpen}
