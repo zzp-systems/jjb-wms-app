@@ -1,13 +1,14 @@
-import React, { useState } from 'react';
-import { Plus, Trash2, X } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { Plus, Trash2, X, Clock, AlertTriangle, CheckCircle2, Layers, FileText } from 'lucide-react';
 import {
   UNIFIED_PRODUCTION_LINES,
   UNIFIED_CONSUMPTION_PURPOSES,
   getMaterialUnitPresets,
-  formatMaterialAvailability
+  formatMaterialAvailability,
+  evaluateBatchCutoffPht,
+  computeRecipeBatchBreakdown
 } from '../data/SharedTaxonomy';
 
-// Helper — "1 × BULK TRAY + 17 × SINGLE"
 function composeSummary(composition) {
   if (!composition || composition.length === 0) return '';
   return composition.map((c) => `${c.count} × ${c.badge || 'UNIT'}`).join(' + ');
@@ -26,10 +27,20 @@ export default function OutletRequisitionPortal({
   const [customLineName, setCustomLineName] = useState('');
   const [requisitionedBy, setRequisitionedBy] = useState(currentRole || 'Duty Baker');
 
+  // -------------------------------------------------------------------------
+  // Tab 1: Multi-Recipe Batch Order State & 3:00 PM PHT Cut-Off
+  // -------------------------------------------------------------------------
+  const cutoffInfo = useMemo(() => evaluateBatchCutoffPht(new Date()), []);
   const [selectedRecipeSku, setSelectedRecipeSku] = useState(recipes[0]?.sku || 'BRD-PAN-001');
   const [batchMultiplier, setBatchMultiplier] = useState(1);
   const [targetDelivery, setTargetDelivery] = useState('04:30 AM Dawn Dispatch');
+  const [recipeItemRemarks, setRecipeItemRemarks] = useState('');
+  const [orderGeneralRemarks, setOrderGeneralRemarks] = useState('');
+  const [stagedRecipesCart, setStagedRecipesCart] = useState([]);
 
+  // -------------------------------------------------------------------------
+  // Tab 2: Raw Material Requisition State
+  // -------------------------------------------------------------------------
   const [consumptionPurpose, setConsumptionPurpose] = useState(UNIFIED_CONSUMPTION_PURPOSES[0]);
   const [notes, setNotes] = useState('');
   const [selectedMatCode, setSelectedMatCode] = useState(inventory[0]?.code || 'RM-FLR-001');
@@ -45,13 +56,17 @@ export default function OutletRequisitionPortal({
       : selectedLineMeta.label.replace(/^\d+\.\s*/, '');
 
   const selectedRecipeObj =
-    recipes.find((r) => r.sku === selectedRecipeSku) || recipes[0] || { name: 'Commercial Batch', baseYieldPcs: 100 };
+    recipes.find((r) => r.sku === selectedRecipeSku) || recipes[0] || { name: 'Commercial Batch', unitPieceYield: 100, ingredients: [] };
+
+  const liveRecipePreview = useMemo(
+    () => computeRecipeBatchBreakdown(selectedRecipeObj, batchMultiplier, inventory),
+    [selectedRecipeObj, batchMultiplier, inventory]
+  );
 
   const selectedMatObj = inventory.find((m) => m.code === selectedMatCode) || inventory[0] || {};
   const unitPresets = getMaterialUnitPresets(selectedMatObj);
   const activePreset = unitPresets[selectedPresetIdx] || unitPresets[0] || { label: 'Base UoM', multiplierInSec: 1, badge: 'UNIT' };
   const computedSecQty = +(Number(packCount || 0) * Number(activePreset.multiplierInSec || 1)).toFixed(3);
-
   const selectedMatAvailability = formatMaterialAvailability(selectedMatObj);
 
   const handleLineChange = (lineId) => {
@@ -62,10 +77,99 @@ export default function OutletRequisitionPortal({
     }
   };
 
-  // -------------------------------------------------------------------------
-  // Composition builder — same material can be added multiple times with
-  // different unit presets on one line item.
-  // -------------------------------------------------------------------------
+  // Add a pre-scaled recipe to the multi-recipe order cart
+  const handleAddRecipeToOrderCart = () => {
+    if (!selectedRecipeObj) return;
+    const mult = Number(batchMultiplier) > 0 ? Number(batchMultiplier) : 1;
+    const breakdown = computeRecipeBatchBreakdown(selectedRecipeObj, mult, inventory);
+
+    setStagedRecipesCart((prev) => [
+      ...prev,
+      {
+        lineId: `REC-LINE-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        recipeSku: selectedRecipeObj.sku,
+        recipeName: selectedRecipeObj.name,
+        batchMultiplier: mult,
+        requestedQtyPcs: breakdown.estimatedYieldPcs,
+        estimatedCost: breakdown.totalEstimatedCost,
+        scaledIngredients: breakdown.scaledIngredients,
+        targetDelivery,
+        remarks: recipeItemRemarks.trim()
+      }
+    ]);
+    setRecipeItemRemarks('');
+  };
+
+  const handleRemoveStagedRecipe = (lineId) => {
+    setStagedRecipesCart((prev) => prev.filter((r) => r.lineId !== lineId));
+  };
+
+  // Submit all staged recipes in a single multi-recipe order action
+  const handleBatchSubmit = (e) => {
+    e.preventDefault();
+    const freshCutoff = evaluateBatchCutoffPht(new Date());
+
+    // If the user didn't click "+ Add Recipe to Order List" first, stage the currently selected one
+    const recipesToSubmit =
+      stagedRecipesCart.length > 0
+        ? stagedRecipesCart
+        : [
+            {
+              lineId: `REC-LINE-${Date.now()}`,
+              recipeSku: selectedRecipeObj.sku,
+              recipeName: selectedRecipeObj.name,
+              batchMultiplier: Number(batchMultiplier) || 1,
+              requestedQtyPcs: liveRecipePreview.estimatedYieldPcs,
+              estimatedCost: liveRecipePreview.totalEstimatedCost,
+              scaledIngredients: liveRecipePreview.scaledIngredients,
+              targetDelivery,
+              remarks: recipeItemRemarks.trim()
+            }
+          ];
+
+    const groupOrderRef = `MORD-${Date.now().toString().slice(-6)}`;
+
+    recipesToSubmit.forEach((item, idx) => {
+      const suffix = recipesToSubmit.length > 1 ? `-${idx + 1}` : '';
+      const orderId = `ORD-${Date.now().toString().slice(-6)}${suffix}`;
+      const combinedNotes = [
+        item.remarks,
+        orderGeneralRemarks.trim(),
+        `[${freshCutoff.cutoffStatusLabel}]`
+      ]
+        .filter(Boolean)
+        .join(' | ');
+
+      onSubmitBatchOrder({
+        orderId,
+        groupOrderRef,
+        requestDate: freshCutoff.orderDate,
+        scheduledScalingDate: freshCutoff.scheduledScalingDate,
+        targetDate: freshCutoff.scheduledDeliveryDate,
+        isAfter3PmCutoff: freshCutoff.isAfterCutoff,
+        cutoffStatusLabel: freshCutoff.cutoffStatusLabel,
+        outletName: resolvedLocationName,
+        recipeSku: item.recipeSku,
+        recipeName: item.recipeName,
+        requestedQtyPcs: item.requestedQtyPcs,
+        batchMultiplier: item.batchMultiplier,
+        estimatedCost: item.estimatedCost,
+        scaledIngredients: item.scaledIngredients,
+        targetDelivery: item.targetDelivery || targetDelivery,
+        requisitionedBy,
+        enteredBy: requisitionedBy,
+        notes: combinedNotes,
+        status: 'PENDING_BATCHING',
+        bulkRequestStatus: 'NOT_REQUESTED'
+      });
+    });
+
+    setStagedRecipesCart([]);
+    setRecipeItemRemarks('');
+    setOrderGeneralRemarks('');
+  };
+
+  // Raw Material Composition Builder
   const handleAddMaterialCartItem = () => {
     if (!selectedMatObj || computedSecQty <= 0) return;
     const unitCostPerSec =
@@ -144,23 +248,6 @@ export default function OutletRequisitionPortal({
     setCartItems((prev) => prev.filter((_, i) => i !== idx));
   };
 
-  const handleBatchSubmit = (e) => {
-    e.preventDefault();
-    const orderId = `ORD-${Date.now().toString().slice(-6)}`;
-    const baseYield = Number(selectedRecipeObj.baseYieldPcs || selectedRecipeObj.yieldPcs || 100);
-    onSubmitBatchOrder({
-      orderId,
-      outletName: resolvedLocationName,
-      recipeSku: selectedRecipeObj.sku,
-      recipeName: selectedRecipeObj.name,
-      requestedQtyPcs: Math.round(baseYield * Number(batchMultiplier || 1)),
-      batchMultiplier: Number(batchMultiplier || 1),
-      targetDelivery,
-      requisitionedBy,
-      status: 'PENDING_BATCHING'
-    });
-  };
-
   const handleMaterialSubmit = (e) => {
     e.preventDefault();
     if (cartItems.length === 0) {
@@ -185,6 +272,9 @@ export default function OutletRequisitionPortal({
     setCartItems([]);
     setNotes('');
   };
+
+  const totalOrderYieldPcs = stagedRecipesCart.reduce((s, r) => s + (r.requestedQtyPcs || 0), 0);
+  const totalOrderEstimatedCost = +stagedRecipesCart.reduce((s, r) => s + (r.estimatedCost || 0), 0).toFixed(2);
 
   return (
     <div className="space-y-5">
@@ -256,42 +346,238 @@ export default function OutletRequisitionPortal({
       </div>
 
       {portalMode === 'batch' ? (
-        <form onSubmit={handleBatchSubmit} className="bg-white rounded-2xl p-5 border border-gray-200 shadow-sm space-y-4">
-          <h3 className="text-sm font-extrabold text-[#240e32] border-b pb-2">
-            Form-ORD-001 — Pre-Scaled Recipe Batch Order (Queues to Romeo Malusay)
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="md:col-span-2">
-              <label className="block text-xs font-bold text-gray-700 mb-1">Master Formulation *</label>
-              <select
-                value={selectedRecipeSku}
-                onChange={(e) => setSelectedRecipeSku(e.target.value)}
-                className="w-full border border-gray-300 rounded-xl px-3 py-2 text-xs font-semibold"
-              >
-                {recipes.map((r) => (
-                  <option key={r.sku} value={r.sku}>
-                    {r.sku} · {r.name} ({r.baseYieldPcs || r.yieldPcs || 100} pcs)
-                  </option>
-                ))}
-              </select>
+        <form onSubmit={handleBatchSubmit} className="bg-white rounded-2xl p-5 border border-gray-200 shadow-sm space-y-5">
+          {/* 3:00 PM PHT Cut-Off Policy Banner */}
+          <div
+            className={`p-3.5 rounded-xl border flex flex-wrap items-center justify-between gap-2 text-xs ${
+              cutoffInfo.isAfterCutoff
+                ? 'bg-amber-50 border-amber-400 text-amber-950'
+                : 'bg-emerald-50 border-emerald-300 text-emerald-950'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              {cutoffInfo.isAfterCutoff ? (
+                <AlertTriangle size={18} className="text-amber-600 shrink-0" />
+              ) : (
+                <CheckCircle2 size={18} className="text-emerald-700 shrink-0" />
+              )}
+              <div>
+                <p className="font-extrabold">
+                  3:00 PM PHT Daily Batching Cut-Off Policy ({cutoffInfo.phtTimeFormatted})
+                </p>
+                <p className="text-[11px] opacity-90">{cutoffInfo.cutoffStatusLabel}</p>
+              </div>
             </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1">Batch Multiplier *</label>
-              <input
-                type="number"
-                step="0.5"
-                min="0.5"
-                value={batchMultiplier}
-                onChange={(e) => setBatchMultiplier(e.target.value)}
-                className="w-full border border-gray-300 rounded-xl px-3 py-2 text-xs font-bold"
-              />
+            <div className="text-right font-mono text-[11px] font-bold">
+              <div>Pre-Scaling Date: {cutoffInfo.scheduledScalingDate}</div>
+              <div>Delivery Date: {cutoffInfo.scheduledDeliveryDate}</div>
             </div>
           </div>
+
+          <div className="flex items-center justify-between border-b pb-2">
+            <h3 className="text-sm font-extrabold text-[#240e32]">
+              Form-ORD-001 — Multi-Recipe Pre-Scaled Batch Order Builder
+            </h3>
+            <span className="text-[11px] font-bold text-[#5B2E7A]">
+              Add multiple recipes to a single order
+            </span>
+          </div>
+
+          {/* Recipe Selector & Live Preview Builder */}
+          <div className="bg-[#FAF6EE] p-4 rounded-xl border border-[#C8963E]/40 space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+              <div className="md:col-span-6">
+                <label className="block text-xs font-bold text-gray-700 mb-1">
+                  Select Master Formulation *
+                </label>
+                <select
+                  value={selectedRecipeSku}
+                  onChange={(e) => setSelectedRecipeSku(e.target.value)}
+                  className="w-full border border-gray-300 rounded-xl px-3 py-2 text-xs font-semibold bg-white"
+                >
+                  {recipes.map((r) => (
+                    <option key={r.sku} value={r.sku}>
+                      {r.sku} · {r.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-xs font-bold text-gray-700 mb-1">
+                  Batch Multiplier *
+                </label>
+                <input
+                  type="number"
+                  step="0.25"
+                  min="0.25"
+                  value={batchMultiplier}
+                  onChange={(e) => setBatchMultiplier(e.target.value)}
+                  className="w-full border border-gray-300 rounded-xl px-3 py-2 text-xs font-bold bg-white font-mono"
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-xs font-bold text-gray-700 mb-1">
+                  Pull-Out Window
+                </label>
+                <select
+                  value={targetDelivery}
+                  onChange={(e) => setTargetDelivery(e.target.value)}
+                  className="w-full border border-gray-300 rounded-xl px-2.5 py-2 text-xs font-semibold bg-white"
+                >
+                  <option value="04:30 AM Dawn Dispatch">04:30 AM Dawn</option>
+                  <option value="06:00 AM Morning Pull-Out">06:00 AM Morning</option>
+                  <option value="01:00 PM Afternoon Replenishment">01:00 PM Afternoon</option>
+                </select>
+              </div>
+
+              <div className="md:col-span-2">
+                <button
+                  type="button"
+                  onClick={handleAddRecipeToOrderCart}
+                  className="w-full py-2 px-3 rounded-xl bg-[#C8963E] hover:bg-[#b58432] text-[#240e32] font-extrabold text-xs flex items-center justify-center gap-1 shadow"
+                >
+                  <Plus size={14} /> Add Recipe
+                </button>
+              </div>
+            </div>
+
+            {/* Live Selected Recipe Yield, Cost & Ingredient List Preview */}
+            <div className="bg-white p-3.5 rounded-xl border border-gray-200 space-y-2.5">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-2 text-xs">
+                <span className="font-bold text-[#240e32]">
+                  Preview: {selectedRecipeObj.sku} ({batchMultiplier}x Batch)
+                </span>
+                <div className="flex items-center gap-4">
+                  <span>
+                    Estimated Yield:{' '}
+                    <strong className="text-[#1E7A3E] font-mono">
+                      {liveRecipePreview.estimatedYieldPcs.toLocaleString()} pcs
+                    </strong>
+                  </span>
+                  <span>
+                    Estimated Total Cost:{' '}
+                    <strong className="text-purple-900 font-mono">
+                      ₱{liveRecipePreview.totalEstimatedCost.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    </strong>
+                  </span>
+                </div>
+              </div>
+
+              <div className="max-h-40 overflow-y-auto">
+                <table className="w-full text-left text-[11px]">
+                  <thead className="bg-gray-100 text-gray-700 font-bold">
+                    <tr>
+                      <th className="py-1 px-2">Code</th>
+                      <th className="py-1 px-2">Ingredient</th>
+                      <th className="py-1 px-2 text-right">Scaled Weight</th>
+                      <th className="py-1 px-2 text-right">Unit / Pack Equivalent</th>
+                      <th className="py-1 px-2 text-right">Est. Cost</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {liveRecipePreview.scaledIngredients.map((ing, i) => (
+                      <tr key={i}>
+                        <td className="py-1 px-2 font-mono font-bold text-[#5B2E7A]">{ing.code}</td>
+                        <td className="py-1 px-2">{ing.name}</td>
+                        <td className="py-1 px-2 text-right font-mono">{ing.requiredGrams.toLocaleString()} g</td>
+                        <td className="py-1 px-2 text-right font-mono font-semibold text-[#1E7A3E]">{ing.dualUnitDisplay}</td>
+                        <td className="py-1 px-2 text-right font-mono">₱{ing.lineCost.toLocaleString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-gray-700 mb-1">
+                  Recipe-Specific Remarks / Handling Instructions (Multi-Line)
+                </label>
+                <textarea
+                  rows={2}
+                  value={recipeItemRemarks}
+                  onChange={(e) => setRecipeItemRemarks(e.target.value)}
+                  placeholder="Enter recipe-specific instructions (e.g., ice substitution for warm ambient temp, separate yeast packet, crust glaze preference)..."
+                  className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-xs"
+                />
+              </div>
+            </div>
+
+            {/* Staged Multi-Recipe Order List */}
+            {stagedRecipesCart.length > 0 && (
+              <div className="space-y-3 pt-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-extrabold uppercase tracking-wider text-[#240e32] flex items-center gap-1.5">
+                    <Layers size={15} className="text-[#C8963E]" />
+                    Staged Recipes in This Order ({stagedRecipesCart.length})
+                  </span>
+                  <span className="text-xs font-bold text-[#1E7A3E]">
+                    Total Order Yield: {totalOrderYieldPcs.toLocaleString()} pcs · Total Cost: ₱{totalOrderEstimatedCost.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+
+                {stagedRecipesCart.map((rec, idx) => (
+                  <div key={rec.lineId} className="bg-white rounded-xl p-3.5 border-2 border-purple-200 shadow-sm space-y-2">
+                    <div className="flex flex-wrap items-start justify-between gap-2 border-b pb-2">
+                      <div>
+                        <span className="font-mono text-xs font-extrabold px-2 py-0.5 rounded bg-[#240e32] text-[#E5C585]">
+                          #{idx + 1} · {rec.recipeSku}
+                        </span>
+                        <h4 className="font-bold text-xs text-gray-900 mt-1">{rec.recipeName}</h4>
+                      </div>
+                      <div className="flex items-center gap-3 text-xs">
+                        <span>Multiplier: <strong>{rec.batchMultiplier}x</strong></span>
+                        <span className="text-[#1E7A3E] font-bold">Yield: {rec.requestedQtyPcs.toLocaleString()} pcs</span>
+                        <span className="text-purple-900 font-extrabold">₱{rec.estimatedCost.toLocaleString()}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveStagedRecipe(rec.lineId)}
+                          className="text-red-600 hover:text-red-800 font-bold flex items-center gap-1"
+                        >
+                          <Trash2 size={13} /> Remove
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1.5 text-[11px] bg-[#FAF6EE] p-2.5 rounded-lg border border-gray-200">
+                      {rec.scaledIngredients.map((ing, ii) => (
+                        <div key={ii} className="truncate" title={`${ing.name}: ${ing.dualUnitDisplay}`}>
+                          <code className="font-bold text-[#5B2E7A]">{ing.code}</code>: <strong>{ing.dualUnitDisplay}</strong>
+                        </div>
+                      ))}
+                    </div>
+
+                    {rec.remarks && (
+                      <p className="text-[11px] text-gray-600 italic bg-amber-50/60 px-2.5 py-1 rounded border border-amber-200 whitespace-pre-line">
+                        <strong>Handling Note:</strong> {rec.remarks}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* General Multi-Line Order Handling Instructions */}
+          <div>
+            <label className="block text-xs font-bold text-gray-700 mb-1 flex items-center gap-1">
+              <FileText size={13} /> Order-Wide Remarks & Handling Instructions (Multi-Line)
+            </label>
+            <textarea
+              rows={3}
+              value={orderGeneralRemarks}
+              onChange={(e) => setOrderGeneralRemarks(e.target.value)}
+              placeholder="Enter overall order handling instructions, driver dispatch notes, or special packaging requirements..."
+              className="w-full border border-gray-300 rounded-xl px-3 py-2 text-xs"
+            />
+          </div>
+
           <button
             type="submit"
             className="w-full py-3 rounded-xl bg-[#240e32] hover:bg-black text-[#E5C585] font-extrabold text-xs uppercase tracking-wider shadow-lg"
           >
-            Submit Batch Order to Dry Room 2 Workbench
+            Submit {stagedRecipesCart.length > 0 ? `${stagedRecipesCart.length} Pre-Scaled Recipe Batch(es)` : 'Pre-Scaled Recipe Batch Order'} to Dry Room 2 Workbench
           </button>
         </form>
       ) : (
@@ -316,12 +602,14 @@ export default function OutletRequisitionPortal({
               </select>
             </div>
             <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1">Notes / Justification</label>
-              <input
-                type="text"
+              <label className="block text-xs font-bold text-gray-700 mb-1">
+                Multi-Line Remarks / Handling & Justification Notes
+              </label>
+              <textarea
+                rows={2}
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                placeholder="e.g. For morning prep shift"
+                placeholder="Enter multi-line remarks, shift justification, or handling instructions..."
                 className="w-full border border-gray-300 rounded-xl px-3 py-2 text-xs"
               />
             </div>
@@ -419,9 +707,6 @@ export default function OutletRequisitionPortal({
 
             {cartItems.length > 0 && (
               <div className="space-y-2 pt-2">
-                <p className="text-[10px] font-extrabold uppercase tracking-widest text-gray-500">
-                  Composition — one line per material, multiple unit entries allowed
-                </p>
                 {cartItems.map((it, idx) => (
                   <div
                     key={it.materialCode}
@@ -446,7 +731,6 @@ export default function OutletRequisitionPortal({
                                 type="button"
                                 onClick={() => handleRemoveCompositionEntry(it.materialCode, ci)}
                                 className="text-red-600 hover:text-red-800"
-                                title="Remove this entry"
                               >
                                 <X size={11} />
                               </button>

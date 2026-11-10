@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   PackageMinus, Plus, Trash2, CheckCircle2, XCircle, Clock,
-  AlertTriangle, Sparkles, Printer, Layers, X
+  Layers, X, FileText
 } from 'lucide-react';
 import {
   UNIFIED_PRODUCTION_LINES,
@@ -9,10 +9,7 @@ import {
   getMaterialUnitPresets,
   formatMaterialAvailability
 } from '../data/SharedTaxonomy';
-import { calculateRecipeIngredients } from '../utils/wmsLogic';
 
-// Helper — turns a composition array into a human string like
-// "1 × BULK TRAY + 17 × SINGLE"
 function composeSummary(composition) {
   if (!composition || composition.length === 0) return '';
   return composition.map((c) => `${c.count} × ${c.badge || 'UNIT'}`).join(' + ');
@@ -51,23 +48,14 @@ export default function IssuanceModule({
   const unitPresets = getMaterialUnitPresets(selectedMatObj);
   const activePreset = unitPresets[selectedPresetIdx] || unitPresets[0] || { label: 'Base UoM', multiplierInSec: 1, badge: 'UNIT' };
   const computedSecondaryQty = +(Number(packCount || 0) * Number(activePreset.multiplierInSec || 1)).toFixed(3);
-
   const selectedMatAvailability = formatMaterialAvailability(selectedMatObj);
 
   const handleLineSelectChange = (newLineId) => {
     setSelectedLineId(newLineId);
     const found = UNIFIED_PRODUCTION_LINES.find((l) => l.id === newLineId);
-    if (found?.defaultPurpose) {
-      setConsumptionPurpose(found.defaultPurpose);
-    }
+    if (found?.defaultPurpose) setConsumptionPurpose(found.defaultPurpose);
   };
 
-  // -------------------------------------------------------------------------
-  // Compose: add another (preset × count) to the material's line item.
-  // If the material is already on the slip, append to its composition array
-  // instead of creating a duplicate row. This is what enables
-  // "1 Tray + 17 pcs of Eggs" as a single line.
-  // -------------------------------------------------------------------------
   const handleAddLineItem = () => {
     if (!selectedMatObj || computedSecondaryQty <= 0) return;
 
@@ -75,8 +63,8 @@ export default function IssuanceModule({
       selectedMatObj.unitCost != null && selectedMatObj.conversionFactor
         ? Number(selectedMatObj.unitCost) / Number(selectedMatObj.conversionFactor)
         : Number(selectedMatObj.unitCost || 0);
-
     const estCost = +(computedSecondaryQty * unitCostPerSec).toFixed(2);
+
     const activeLots = Array.isArray(selectedMatObj.lots)
       ? [...selectedMatObj.lots]
           .filter((l) => Number(l.qtySec) > 0)
@@ -136,14 +124,12 @@ export default function IssuanceModule({
           const newComp = [...(item.composition || [])];
           newComp.splice(entryIdx, 1);
           if (newComp.length === 0) return null;
-          const newQty = +newComp.reduce((s, c) => s + c.qtyInSec, 0).toFixed(3);
-          const newCost = +newComp.reduce((s, c) => s + c.estCost, 0).toFixed(2);
           return {
             ...item,
             composition: newComp,
-            qtyRequestedSec: newQty,
-            qtyIssuedSec: newQty,
-            estimatedCost: newCost,
+            qtyRequestedSec: +newComp.reduce((s, c) => s + c.qtyInSec, 0).toFixed(3),
+            qtyIssuedSec: +newComp.reduce((s, c) => s + c.qtyInSec, 0).toFixed(3),
+            estimatedCost: +newComp.reduce((s, c) => s + c.estCost, 0).toFixed(2),
             remarks: composeSummary(newComp)
           };
         })
@@ -208,7 +194,6 @@ export default function IssuanceModule({
 
   return (
     <div className="space-y-6">
-      {/* 1. QUEUED PORTAL REQUISITIONS */}
       {pendingPortalList.length > 0 && (
         <section className="bg-white rounded-2xl p-5 border-2 border-[#C8963E] shadow-lg space-y-4">
           <div className="flex items-center justify-between border-b pb-3">
@@ -239,13 +224,11 @@ export default function IssuanceModule({
                       <span className="font-mono font-extrabold text-xs px-2 py-0.5 rounded bg-[#240e32] text-[#E5C585]">
                         {reqKey}
                       </span>
-                      <span className="text-[11px] text-gray-500 font-mono">
-                        {req.withdrawalDate}
-                      </span>
+                      <span className="text-[11px] text-gray-500 font-mono">{req.withdrawalDate}</span>
                     </div>
                     <h3 className="font-bold text-sm text-[#240e32]">{req.requestingLine}</h3>
                     <p className="text-xs text-gray-600">
-                      <strong>Consumption Purpose:</strong> {req.purpose} · <strong>By:</strong> {req.requisitionedBy}
+                      <strong>Purpose:</strong> {req.purpose} · <strong>By:</strong> {req.requisitionedBy}
                     </p>
                     <ul className="mt-2 space-y-1 bg-white p-2.5 rounded-lg border border-amber-200 text-xs">
                       {(req.items || []).map((it, i) => (
@@ -264,6 +247,11 @@ export default function IssuanceModule({
                         </li>
                       ))}
                     </ul>
+                    {req.notes && (
+                      <p className="mt-2 text-[11px] text-gray-600 italic bg-white px-2 py-1 rounded border border-amber-200 whitespace-pre-line">
+                        <strong>Remarks:</strong> {req.notes}
+                      </p>
+                    )}
                   </div>
 
                   <div className="flex items-center justify-end gap-2 pt-2 border-t border-amber-200">
@@ -287,9 +275,7 @@ export default function IssuanceModule({
                     {onIssuePendingRequest && (
                       <button
                         type="button"
-                        onClick={() =>
-                          triggerAnimatedAction(reqKey, () => onIssuePendingRequest(reqKey))
-                        }
+                        onClick={() => triggerAnimatedAction(reqKey, () => onIssuePendingRequest(reqKey))}
                         className="px-3.5 py-1.5 rounded-lg text-xs font-extrabold bg-[#1E7A3E] hover:bg-emerald-800 text-white flex items-center gap-1.5 shadow transition"
                       >
                         <CheckCircle2 size={14} /> Issue & Deduct Stock
@@ -303,7 +289,6 @@ export default function IssuanceModule({
         </section>
       )}
 
-      {/* 2. ROMEO'S BULK BATCHING REQUISITIONS */}
       {pendingBulkOrders.length > 0 && (
         <section className="bg-white rounded-2xl p-5 border-2 border-purple-500 shadow-lg space-y-3">
           <div className="flex items-center justify-between border-b pb-2">
@@ -349,9 +334,7 @@ export default function IssuanceModule({
                             'Insufficient lot stock / rescheduled batch'
                           );
                           if (reason !== null) {
-                            triggerAnimatedAction(ord.orderId, () =>
-                              onDeclineBulkWithdrawal(ord.orderId, reason)
-                            );
+                            triggerAnimatedAction(ord.orderId, () => onDeclineBulkWithdrawal(ord.orderId, reason));
                           }
                         }}
                         className="px-3 py-1.5 rounded-lg text-xs font-bold bg-red-100 hover:bg-red-600 text-red-700 hover:text-white flex items-center gap-1 transition"
@@ -361,11 +344,7 @@ export default function IssuanceModule({
                     )}
                     <button
                       type="button"
-                      onClick={() =>
-                        triggerAnimatedAction(ord.orderId, () =>
-                          onApprovePendingWithdrawal(ord.orderId)
-                        )
-                      }
+                      onClick={() => triggerAnimatedAction(ord.orderId, () => onApprovePendingWithdrawal(ord.orderId))}
                       className="px-3.5 py-1.5 rounded-lg text-xs font-extrabold bg-purple-800 hover:bg-purple-950 text-white flex items-center gap-1.5 shadow transition"
                     >
                       <CheckCircle2 size={14} /> Authorize Bulk Release
@@ -378,7 +357,6 @@ export default function IssuanceModule({
         </section>
       )}
 
-      {/* 3. DIRECT WAREHOUSE ISSUANCE FORM */}
       <form
         onSubmit={handleSubmitDirectSlip}
         className="bg-white rounded-2xl p-5 border border-gray-200 shadow-sm space-y-5"
@@ -409,9 +387,7 @@ export default function IssuanceModule({
               className="w-full border border-gray-300 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:border-[#C8963E]"
             >
               {UNIFIED_PRODUCTION_LINES.map((line) => (
-                <option key={line.id} value={line.id}>
-                  {line.label}
-                </option>
+                <option key={line.id} value={line.id}>{line.label}</option>
               ))}
             </select>
             {selectedLineId === 'CUSTOM' && (
@@ -427,26 +403,20 @@ export default function IssuanceModule({
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-gray-700 mb-1">
-              Consumption Purpose *
-            </label>
+            <label className="block text-xs font-bold text-gray-700 mb-1">Consumption Purpose *</label>
             <select
               value={consumptionPurpose}
               onChange={(e) => setConsumptionPurpose(e.target.value)}
               className="w-full border border-gray-300 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:border-[#C8963E]"
             >
               {UNIFIED_CONSUMPTION_PURPOSES.map((p) => (
-                <option key={p} value={p}>
-                  {p}
-                </option>
+                <option key={p} value={p}>{p}</option>
               ))}
             </select>
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-gray-700 mb-1">
-              Requested By (Production / Outlet Staff) *
-            </label>
+            <label className="block text-xs font-bold text-gray-700 mb-1">Requested By (Production / Outlet Staff) *</label>
             <input
               type="text"
               value={requestedBy}
@@ -457,9 +427,7 @@ export default function IssuanceModule({
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-gray-700 mb-1">
-              Received At Door Handoff By *
-            </label>
+            <label className="block text-xs font-bold text-gray-700 mb-1">Received At Door Handoff By *</label>
             <input
               type="text"
               value={receivedBy}
@@ -482,9 +450,7 @@ export default function IssuanceModule({
 
           <div className="grid grid-cols-1 md:grid-cols-12 gap-2.5 items-end">
             <div className="md:col-span-5">
-              <label className="block text-[11px] font-bold text-gray-700 mb-1">
-                Raw Material / Packaging Item
-              </label>
+              <label className="block text-[11px] font-bold text-gray-700 mb-1">Raw Material / Packaging Item</label>
               <select
                 value={selectedMaterialCode}
                 onChange={(e) => {
@@ -502,18 +468,14 @@ export default function IssuanceModule({
             </div>
 
             <div className="md:col-span-3">
-              <label className="block text-[11px] font-bold text-gray-700 mb-1">
-                Unit / Pack Size
-              </label>
+              <label className="block text-[11px] font-bold text-gray-700 mb-1">Unit / Pack Size</label>
               <select
                 value={selectedPresetIdx}
                 onChange={(e) => setSelectedPresetIdx(Number(e.target.value))}
                 className="w-full border border-gray-300 rounded-lg px-2.5 py-2 text-xs font-bold bg-white text-[#240e32]"
               >
                 {unitPresets.map((preset, idx) => (
-                  <option key={idx} value={idx}>
-                    {preset.label}
-                  </option>
+                  <option key={idx} value={idx}>{preset.label}</option>
                 ))}
               </select>
             </div>
@@ -626,6 +588,29 @@ export default function IssuanceModule({
               ))}
             </div>
           )}
+        </div>
+
+        {/* ═══════════ NEW: MULTI-LINE REMARKS / HANDLING NOTES ═══════════ */}
+        <div>
+          <label className="block text-xs font-bold text-gray-700 mb-1 flex items-center gap-1.5">
+            <FileText size={13} /> Multi-Line Remarks / Handling Notes
+          </label>
+          <textarea
+            rows={3}
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder={`Enter multi-line delivery instructions, receiving notes, or special handling remarks...
+
+Examples:
+• Deliver to Dry Room 2 north gate before 05:00 AM
+• Separate yeast packet from flour sack
+• Rinse eggs before Wet Room entry
+• Split boxed items across Pallet A1 and A2`}
+            className="w-full border border-gray-300 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[#C8963E] whitespace-pre-line"
+          />
+          <p className="text-[10px] text-gray-500 mt-1">
+            ℹ️ Notes are stored on the slip and appear on the printed Form-WAR-001.
+          </p>
         </div>
 
         <button

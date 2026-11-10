@@ -1,8 +1,5 @@
 // ============================================================================
-// JJB WMS — /api/sync  (Phase 1.5 projection + Phase 2.5/2.6 polling)
-//
-// POST /api/sync            — inbound floor-app events
-// GET  /api/sync?since_id=N — cross-device polling for pending requests
+// JJB WMS — /api/sync  (Phase 1.5 projection + Phase 2.5/2.6 polling + Phase 3 Cutoff)
 // ============================================================================
 
 // --------------------------- helpers -------------------------------------
@@ -220,14 +217,18 @@ function projectBatchOrder(env, p, isTest) {
   const orderId = pick(p, 'orderId', 'order_id');
   if (!orderId) throw new Error('MISSING_ORDER_ID');
 
+  // We use COALESCE heavily so that if a payload from a partial update (e.g. releasing)
+  // omits fields, the existing values in D1 are NOT overwritten with NULL.
   return [env.DB.prepare(`
     INSERT INTO batch_orders
       (order_id, outlet_name, recipe_sku, recipe_name_snapshot, requested_qty_pcs,
        batch_multiplier, status, bulk_request_status, bulk_requisition_slip_no,
        bulk_requested_at, bulk_approved_at, bulk_approved_by, batch_tag_id,
        actual_batched_kg, actual_batched_units, batched_at, batched_by,
-       scale_used, sifter_40mesh_checked, released_at, released_to, is_test_data)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       scale_used, sifter_40mesh_checked, released_at, released_to,
+       scheduled_scaling_date, scheduled_delivery_date, is_after_cutoff, 
+       cutoff_status_label, group_order_ref, estimated_cost, notes, is_test_data)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(order_id) DO UPDATE SET
       outlet_name              = COALESCE(excluded.outlet_name,              batch_orders.outlet_name),
       recipe_sku               = COALESCE(excluded.recipe_sku,               batch_orders.recipe_sku),
@@ -249,6 +250,13 @@ function projectBatchOrder(env, p, isTest) {
       sifter_40mesh_checked    = COALESCE(excluded.sifter_40mesh_checked,    batch_orders.sifter_40mesh_checked),
       released_at              = COALESCE(excluded.released_at,              batch_orders.released_at),
       released_to              = COALESCE(excluded.released_to,              batch_orders.released_to),
+      scheduled_scaling_date   = COALESCE(excluded.scheduled_scaling_date,   batch_orders.scheduled_scaling_date),
+      scheduled_delivery_date  = COALESCE(excluded.scheduled_delivery_date,  batch_orders.scheduled_delivery_date),
+      is_after_cutoff          = COALESCE(excluded.is_after_cutoff,          batch_orders.is_after_cutoff),
+      cutoff_status_label      = COALESCE(excluded.cutoff_status_label,      batch_orders.cutoff_status_label),
+      group_order_ref          = COALESCE(excluded.group_order_ref,          batch_orders.group_order_ref),
+      estimated_cost           = COALESCE(excluded.estimated_cost,           batch_orders.estimated_cost),
+      notes                    = COALESCE(excluded.notes,                    batch_orders.notes),
       is_test_data             = excluded.is_test_data,
       updated_at               = datetime('now')
   `).bind(
@@ -273,11 +281,17 @@ function projectBatchOrder(env, p, isTest) {
     p.sifter40MeshChecked != null ? bool(p.sifter40MeshChecked) : null,
     str(pick(p, 'releasedAt', 'released_at')),
     str(pick(p, 'releasedTo', 'released_to')),
+    isoDate(pick(p, 'scheduledScalingDate', 'scheduled_scaling_date')),
+    isoDate(pick(p, 'scheduledDeliveryDate', 'scheduled_delivery_date', 'targetDate')),
+    p.isAfter3PmCutoff != null ? bool(p.isAfter3PmCutoff) : (p.is_after_cutoff != null ? bool(p.is_after_cutoff) : null),
+    str(pick(p, 'cutoffStatusLabel', 'cutoff_status_label')),
+    str(pick(p, 'groupOrderRef', 'group_order_ref')),
+    cents(pick(p, 'estimatedCost', 'estimated_cost')),
+    str(p.notes),
     isTest
   )];
 }
 
-// Phase 2.6 — Batch order cancellation
 function projectBatchOrderCancel(env, p, isTest) {
   const stmts = [];
   const orderId = pick(p, 'orderId', 'order_id');
@@ -286,28 +300,17 @@ function projectBatchOrderCancel(env, p, isTest) {
   const reason = str(p.cancellationReason || p.reason || 'Cancelled');
   const actor = str(p.cancelledBy || p.cancelledByName || 'Warehouse Staff');
 
-  // Hard-delete from batch_orders (the row is gone from live queue)
-  stmts.push(
-    env.DB.prepare(`DELETE FROM batch_orders WHERE order_id = ?`).bind(orderId)
-  );
-
-  // Audit trail lives in audit_log — this IS the permanent record.
-  // The client-side state removes the card entirely; D1 is the source of
-  // truth for "what happened". No local persistence of the cancel state.
-  stmts.push(
-    env.DB.prepare(`
+  stmts.push(env.DB.prepare(`DELETE FROM batch_orders WHERE order_id = ?`).bind(orderId));
+  stmts.push(env.DB.prepare(`
       INSERT INTO audit_log (timestamp, actor, role, action, details, is_test_data)
       VALUES (?, ?, ?, ?, ?, ?)
     `).bind(
       str(p.timestamp) || new Date().toISOString(),
-      actor,
-      str(p.cancelledByRole) || null,
+      actor, str(p.cancelledByRole) || null,
       'BATCH_ORDER_CANCELLED',
       `Batch order ${orderId} cancelled: ${reason}`,
       isTest
-    )
-  );
-
+    ));
   return stmts;
 }
 
@@ -524,8 +527,6 @@ export async function onRequestPost({ request, env }) {
     return json({ status: 'error', error: 'invalid_json' }, 400);
   }
 
-  // Robust shape extraction — handles Shape A, Shape B, AND the mixed shape
-  // ({ idempotencyKey, eventType, payload }) that outlet-portal.html uses.
   const type = String(
     body.event_type || body.eventType || body.type || ''
   ).toUpperCase();
