@@ -2,7 +2,9 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>JJB-WMS v4.6 · Outlet & Production Line Requisition Kiosk</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -45,26 +47,26 @@
 <body class="min-h-screen max-h-screen flex flex-col overflow-hidden antialiased selection:bg-[#C8963E] selection:text-white">
 
   <!-- Toast Notification Banner -->
-  <div id="toastBanner" class="hidden fixed top-4 right-4 z-50 bg-[#1E7A3E] text-white text-xs font-bold px-4 py-3 rounded-xl shadow-2xl border border-green-300 flex items-center gap-2 transition-all duration-300">
+  <div id="toastBanner" class="hidden fixed top-4 right-4 z-[60] bg-[#1E7A3E] text-white text-xs font-bold px-4 py-3 rounded-xl shadow-2xl border border-green-300 flex items-center gap-2 transition-all duration-300">
     <span id="toastText">Action completed</span>
     <button onclick="hideToast()" class="ml-2 font-extrabold hover:opacity-75">✕</button>
   </div>
 
-  <header class="theme-header text-white shadow-xl border-b-2 theme-border sticky top-0 z-40 transition-colors duration-300 shrink-0 no-print">
+  <header class="theme-header text-white shadow-xl border-b-2 theme-border sticky top-0 z-30 transition-colors duration-300 shrink-0 no-print">
     <div id="sandboxBanner" class="hidden bg-amber-500 text-[#240e32] px-4 py-1 text-[11px] font-extrabold flex items-center justify-between border-b border-amber-300">
       <div class="flex items-center gap-2">
-        <span>🧪 SANDBOX / TRAINING MODE ACTIVE — All kiosk submissions are tagged <code class="bg-black/15 px-1 rounded">is_test_data = 1</code> for 1-click purge.</span>
+        <span>🧪 SANDBOX MODE ACTIVE — All kiosk submissions are tagged <code class="bg-black/15 px-1 rounded">is_test_data = 1</code>.</span>
       </div>
       <button onclick="toggleSandboxMode()" class="bg-[#240e32] text-amber-300 px-2.5 py-0.5 rounded text-[10px] font-bold uppercase">
         Exit Sandbox
       </button>
     </div>
 
-    <div class="max-w-[1600px] mx-auto px-4 py-2.5 flex flex-wrap items-center justify-between gap-3">
+    <div class="max-w-[1600px] mx-auto px-3 py-2.5 flex flex-wrap items-center justify-between gap-3">
       <div class="flex items-center gap-3">
         <button
           onclick="toggleNavLayout()"
-          class="p-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 theme-accent-text transition"
+          class="hidden md:flex p-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 theme-accent-text transition"
           title="Switch between Left Submenu Dock and Top Horizontal Bar"
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/></svg>
@@ -72,39 +74,36 @@
         <img
           src="/jjb-logo-transaparent.png"
           alt="JJB Logo"
-          class="h-10 w-10 object-contain rounded-xl bg-white/10 p-1 border border-[#C8963E]/50"
+          class="h-9 w-9 md:h-10 md:w-10 object-contain rounded-xl bg-white/10 p-1 border border-[#C8963E]/50"
           onerror="this.style.display='none'"
         />
         <div>
-          <div class="flex items-center gap-2 flex-wrap">
-            <span class="text-[10px] font-extrabold uppercase tracking-widest px-2 py-0.5 rounded theme-accent-bg">
-              JJB-WMS v4.6 KIOSK
+          <div class="flex items-center gap-1.5 flex-wrap">
+            <span class="text-[9px] md:text-[10px] font-extrabold uppercase tracking-widest px-1.5 py-0.5 rounded theme-accent-bg">
+              JJB-WMS KIOSK
             </span>
-            <span id="syncStatusBadge" class="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-700 text-emerald-100">
-              ● CLOUD D1 ONLINE
-            </span>
-            <span class="text-[11px] font-semibold theme-accent-text hidden sm:inline">
-              Indangan Central Commissary · LTO #3000013388488
+            <span id="syncStatusBadge" class="text-[9px] md:text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-700 text-emerald-100">
+              ● D1 ONLINE
             </span>
           </div>
-          <h1 class="text-sm md:text-base font-extrabold tracking-tight text-white">
-            Jang-Jang Bakeshop & Kingdom Confectionary — Outlet & Line Requisition Kiosk
+          <h1 class="text-xs md:text-sm font-extrabold tracking-tight text-white mt-0.5 max-w-[220px] md:max-w-none leading-tight">
+            JJB Requisition Kiosk
           </h1>
         </div>
       </div>
 
-      <div class="flex flex-wrap items-center gap-2 text-xs">
+      <div class="flex flex-wrap items-center gap-1.5 md:gap-2 text-xs">
         <div class="hidden xl:flex items-center gap-1.5 bg-white/10 px-2.5 py-1.5 rounded-lg border border-white/15 theme-accent-text font-mono-code text-[11px]" id="livePhtClock">
           PHT (UTC+8)
         </div>
 
-        <div class="flex items-center gap-1 bg-white/10 px-2.5 py-1.5 rounded-lg border border-white/15">
-          <span class="theme-accent-text text-xs">🎨</span>
+        <div class="flex items-center gap-1 bg-white/10 px-2 py-1.5 rounded-lg border border-white/15">
+          <span class="theme-accent-text text-xs hidden sm:inline">🎨</span>
           <select
             id="themeSelect"
             onchange="applyTheme(this.value)"
             aria-label="Select UI Theme"
-            class="bg-transparent text-white text-[11px] font-bold focus:outline-none cursor-pointer"
+            class="bg-transparent text-white text-[10px] md:text-[11px] font-bold focus:outline-none cursor-pointer max-w-[100px] md:max-w-[130px] truncate"
           >
             <option value="jjb-gold" class="bg-[#1a202c] text-white">JJB Royal Gold</option>
             <option value="athena-teal" class="bg-[#1a202c] text-white">Athena Executive</option>
@@ -116,54 +115,59 @@
         <button
           id="btnSandboxToggle"
           onclick="toggleSandboxMode()"
-          class="px-2.5 py-1.5 rounded-lg font-bold flex items-center gap-1 text-[11px] bg-white/10 text-amber-200 hover:bg-white/20 border border-white/15 transition"
-          title="Toggle Sandbox / Training Mode (is_test_data = 1)"
+          class="px-2 py-1.5 rounded-lg font-bold flex items-center gap-1 text-[10px] md:text-[11px] bg-white/10 text-amber-200 hover:bg-white/20 border border-white/15 transition"
         >
           <span>🧪</span>
-          <span id="sandboxBtnText">Sandbox</span>
+          <span id="sandboxBtnText" class="hidden sm:inline">Sandbox</span>
         </button>
 
+        <!-- Live Queue Toggle (Mobile Drawer Trigger) -->
         <button
           id="btnActivityDock"
           onclick="toggleActivityDock()"
-          class="px-2.5 py-1.5 rounded-lg font-bold flex items-center gap-1 border transition theme-accent-bg border-[#E5C585]"
-          title="Toggle Right-Hand Live Activity & Active Requisition Queue"
+          class="px-2.5 py-1.5 rounded-lg font-bold flex items-center gap-1 border transition bg-white/10 text-white border-white/15 hover:bg-white/20"
+          title="Toggle Live Queue"
         >
-          <span>⚡ Live Queue</span>
-          <span id="activeQueueBadge" class="px-1.5 py-0.2 rounded-full text-[10px] bg-black/25 text-white font-extrabold">0</span>
+          <span>⚡</span>
+          <span class="hidden sm:inline">Queue</span>
+          <span id="activeQueueBadge" class="px-1.5 py-0.2 rounded-full text-[9px] bg-black/40 text-white font-extrabold ml-0.5">0</span>
         </button>
 
         <a
           href="/"
-          class="bg-white/10 hover:bg-white/20 text-white border border-white/20 px-2.5 py-1.5 rounded-lg font-bold text-[11px] transition"
-          title="Open Main Warehouse Command App (Restricted to 6 Authorized Staff)"
+          class="bg-white/10 hover:bg-white/20 text-white border border-white/20 px-2 py-1.5 rounded-lg font-bold text-[10px] md:text-[11px] transition flex items-center gap-1"
         >
-          🔒 Main WMS
+          🔒 <span class="hidden sm:inline">Main WMS</span>
         </a>
       </div>
     </div>
 
     <nav id="topNavBar" class="hidden bg-black/30 border-t border-white/10">
-      <div class="max-w-[1600px] mx-auto px-4 flex items-center gap-1.5 overflow-x-auto py-1.5 no-scrollbar">
-        <button onclick="switchKioskTab('batch')" id="topTab_batch" class="px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap flex items-center gap-1.5 transition shrink-0">
-          🥖 1. Order Pre-Scaled Recipe Batches (`Form-ORD-001`)
+      <div class="max-w-[1600px] mx-auto px-2 flex items-center gap-1.5 overflow-x-auto py-1.5 no-scrollbar">
+        <button onclick="switchKioskTab('batch')" id="topTab_batch" class="px-3 py-1.5 rounded-lg text-[11px] font-bold whitespace-nowrap flex items-center gap-1.5 transition shrink-0">
+          🥖 1. Batch Orders (`ORD-001`)
         </button>
-        <button onclick="switchKioskTab('material')" id="topTab_material" class="px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap flex items-center gap-1.5 transition shrink-0">
-          📦 2. Request Raw Materials (`Form-WAR-001`)
+        <button onclick="switchKioskTab('material')" id="topTab_material" class="px-3 py-1.5 rounded-lg text-[11px] font-bold whitespace-nowrap flex items-center gap-1.5 transition shrink-0">
+          📦 2. Raw Materials (`WAR-001`)
         </button>
-        <button onclick="switchKioskTab('specialty')" id="topTab_specialty" class="px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap flex items-center gap-1.5 transition shrink-0">
-          ✨ 3. Propose Specialty R&D Recipe (`Form-RND-001`)
+        <button onclick="switchKioskTab('specialty')" id="topTab_specialty" class="px-3 py-1.5 rounded-lg text-[11px] font-bold whitespace-nowrap flex items-center gap-1.5 transition shrink-0">
+          ✨ 3. R&D Recipe (`RND-001`)
         </button>
       </div>
     </nav>
   </header>
 
-  <div class="flex flex-1 min-h-0 overflow-hidden max-w-[1600px] w-full mx-auto">
+  <!-- Mobile Backdrop for Right Dock -->
+  <div id="mobileDockBackdrop" class="fixed inset-0 bg-black/60 z-40 hidden lg:hidden no-print" onclick="toggleActivityDock()"></div>
 
+  <!-- TRI-PANE WORKBENCH SHELL -->
+  <div class="flex flex-1 min-h-0 overflow-hidden max-w-[1600px] w-full mx-auto relative">
+
+    <!-- 1. LEFT-HAND SUBMENU DOCK (Desktop only) -->
     <aside id="leftSidebarDock" class="hidden md:flex flex-col w-64 theme-sidebar text-white border-r border-[#C8963E]/30 transition-all duration-300 shrink-0 h-full no-print">
       <div class="p-3 border-b border-white/10 flex items-center justify-between">
         <span class="text-[10px] font-extrabold uppercase tracking-widest theme-accent-text">
-          Kiosk Requisition Menu
+          Kiosk Menu
         </span>
         <button onclick="toggleSidebarCollapse()" class="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 theme-accent-text" title="Collapse/Expand">
           ⇄
@@ -173,7 +177,7 @@
       <nav class="flex-1 overflow-y-auto p-2.5 space-y-5">
         <div>
           <p class="sidebar-label text-[10px] font-extrabold uppercase tracking-widest text-gray-300/70 px-2 mb-1.5">
-            1. Production & Outlet Orders
+            Production & Outlet
           </p>
           <div class="space-y-1">
             <button
@@ -183,8 +187,8 @@
             >
               <span class="text-base shrink-0">🥖</span>
               <div class="sidebar-label truncate">
-                <div class="font-extrabold">Recipe Batch Orders</div>
-                <div class="text-[10px] opacity-75 font-mono-code">Form-ORD-001 · Romeo</div>
+                <div class="font-extrabold">Batch Orders</div>
+                <div class="text-[10px] opacity-75 font-mono-code">Form-ORD-001</div>
               </div>
             </button>
 
@@ -195,8 +199,8 @@
             >
               <span class="text-base shrink-0">📦</span>
               <div class="sidebar-label truncate">
-                <div class="font-extrabold">Raw Materials & Mess Hall</div>
-                <div class="text-[10px] opacity-75 font-mono-code">Form-WAR-001 · Jade</div>
+                <div class="font-extrabold">Raw Materials</div>
+                <div class="text-[10px] opacity-75 font-mono-code">Form-WAR-001</div>
               </div>
             </button>
           </div>
@@ -204,7 +208,7 @@
 
         <div>
           <p class="sidebar-label text-[10px] font-extrabold uppercase tracking-widest text-gray-300/70 px-2 mb-1.5">
-            2. Formulation & R&D
+            Formulation
           </p>
           <div class="space-y-1">
             <button
@@ -214,368 +218,272 @@
             >
               <span class="text-base shrink-0">✨</span>
               <div class="sidebar-label truncate">
-                <div class="font-extrabold">Specialty Recipe Proposal</div>
-                <div class="text-[10px] opacity-75 font-mono-code">Form-RND-001 · Scaler</div>
+                <div class="font-extrabold">R&D Recipe</div>
+                <div class="text-[10px] opacity-75 font-mono-code">Form-RND-001</div>
               </div>
             </button>
           </div>
         </div>
 
         <div class="sidebar-label bg-black/25 p-3 rounded-xl border border-white/10 text-[11px] space-y-1.5">
-          <div class="font-extrabold theme-accent-text uppercase text-[10px] tracking-wider">
-            Standard Pack Conversions
+          <div class="font-extrabold theme-accent-text uppercase text-[10px] tracking-wider mb-1">
+            Pack Conversions
           </div>
-          <div class="flex justify-between text-gray-300"><span>🥚 1 Egg Tray:</span><strong class="text-white">30 pcs (1.8 kg)</strong></div>
-          <div class="flex justify-between text-gray-300"><span>🥚 1 Dozen Eggs:</span><strong class="text-white">12 pcs (0.72 kg)</strong></div>
-          <div class="flex justify-between text-gray-300"><span>🥫 1 Creamer Box:</span><strong class="text-white">48 Cans (18.72 kg)</strong></div>
-          <div class="flex justify-between text-gray-300"><span>🥫 Line Pack:</span><strong class="text-white">4 Cans (1.56 kg)</strong></div>
-          <div class="flex justify-between text-gray-300"><span>🌾 1 Flour Sack:</span><strong class="text-white">25 kg</strong></div>
-          <div class="flex justify-between text-gray-300"><span>🍬 1 Sugar Sack:</span><strong class="text-white">50 kg</strong></div>
+          <div class="flex justify-between text-gray-300"><span>🥚 Tray:</span><strong class="text-white">30 pcs</strong></div>
+          <div class="flex justify-between text-gray-300"><span>🥫 Box:</span><strong class="text-white">48 Cans</strong></div>
+          <div class="flex justify-between text-gray-300"><span>🌾 Sack:</span><strong class="text-white">25 kg</strong></div>
         </div>
       </nav>
     </aside>
 
-    <main class="flex-1 overflow-y-auto p-4 md:p-6 space-y-5">
-      <div class="max-w-4xl mx-auto space-y-5">
+    <!-- 2. CENTER WORKBENCH STAGE -->
+    <main class="flex-1 overflow-y-auto p-3 md:p-6 space-y-4 md:space-y-5 w-full">
+      <div class="max-w-4xl mx-auto space-y-4 md:space-y-5">
 
-        <div class="grid grid-cols-3 gap-2 bg-white p-1.5 rounded-2xl border border-gray-200 shadow-sm md:hidden">
-          <button type="button" onclick="switchKioskTab('batch')" id="mobTab_batch" class="py-2 px-2 rounded-xl text-[11px] font-extrabold transition">
-            🥖 1. Batch (`ORD-001`)
+        <!-- Mobile Quick Mode Switcher -->
+        <div class="grid grid-cols-3 gap-1.5 bg-white p-1.5 rounded-2xl border border-gray-200 shadow-sm md:hidden sticky top-0 z-20">
+          <button type="button" onclick="switchKioskTab('batch')" id="mobTab_batch" class="py-2 px-1 rounded-xl text-[10px] font-extrabold transition">
+            🥖 1. Batch
           </button>
-          <button type="button" onclick="switchKioskTab('material')" id="mobTab_material" class="py-2 px-2 rounded-xl text-[11px] font-extrabold transition">
-            📦 2. Materials (`WAR-001`)
+          <button type="button" onclick="switchKioskTab('material')" id="mobTab_material" class="py-2 px-1 rounded-xl text-[10px] font-extrabold transition">
+            📦 2. Materials
           </button>
-          <button type="button" onclick="switchKioskTab('specialty')" id="mobTab_specialty" class="py-2 px-2 rounded-xl text-[11px] font-extrabold transition">
-            ✨ 3. R&D (`RND-001`)
+          <button type="button" onclick="switchKioskTab('specialty')" id="mobTab_specialty" class="py-2 px-1 rounded-xl text-[10px] font-extrabold transition">
+            ✨ 3. R&D
           </button>
         </div>
 
-        <section class="bg-white rounded-2xl p-5 border border-gray-200 shadow-sm space-y-4">
+        <!-- SHARED SECTION: Identity -->
+        <section class="bg-white rounded-2xl p-4 md:p-5 border border-gray-200 shadow-sm space-y-3 md:space-y-4">
           <div class="flex items-center justify-between border-b pb-2.5">
             <div>
               <h2 class="text-xs font-extrabold uppercase tracking-wider text-[#240e32]">
-                Step 1 — Requesting Production Line / Outlet / Department & Staff Identity
+                Step 1 — Requester Identity
               </h2>
-              <p class="text-[11px] text-gray-500">
-                Synchronized with Warehouse Issuance (`IssuanceModule.jsx`) and Romeo's Workbench (`BatchingWorkbench.jsx`)
-              </p>
             </div>
-            <span id="selectedDeptBadge" class="text-[10px] font-bold px-2.5 py-1 rounded-full bg-purple-100 text-purple-900">
-              Retail Outlet Dispatch
+            <span id="selectedDeptBadge" class="text-[9px] md:text-[10px] font-bold px-2 py-1 rounded-full bg-purple-100 text-purple-900 truncate max-w-[120px] md:max-w-none">
+              Retail Outlet
             </span>
           </div>
 
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
             <div>
-              <label class="block text-xs font-bold text-gray-700 mb-1">
-                Requesting Production Line / Outlet / Department *
+              <label class="block text-[11px] md:text-xs font-bold text-gray-700 mb-1">
+                Requesting Line / Outlet *
               </label>
               <select
                 id="unifiedLineSelect"
                 onchange="handleUnifiedLineChange(this.value)"
-                class="w-full border border-gray-300 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:border-[#C8963E]"
+                class="w-full border border-gray-300 rounded-xl px-2.5 py-2 text-xs font-semibold focus:outline-none focus:border-[#C8963E]"
               ></select>
               <input
                 id="customLineInput"
                 type="text"
-                placeholder="Enter custom production line, satellite kiosk, or event name..."
-                class="hidden mt-2 w-full border border-gray-300 rounded-xl px-3 py-2 text-xs font-semibold"
+                placeholder="Enter custom line..."
+                class="hidden mt-2 w-full border border-gray-300 rounded-xl px-2.5 py-2 text-xs font-semibold"
               />
             </div>
 
             <div>
-              <label class="block text-xs font-bold text-gray-700 mb-1">
-                Requisitioned By (Staff / Baker Full Name) *
+              <label class="block text-[11px] md:text-xs font-bold text-gray-700 mb-1">
+                Requisitioned By *
               </label>
               <input
                 id="requisitionedByInput"
                 type="text"
-                value="Duty Baker / Outlet Staff"
-                placeholder="e.g. Roberto S. Blase / Othniel Tilan / Line Lead"
+                value="Duty Baker"
+                placeholder="Full Name"
                 required
-                class="w-full border border-gray-300 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:border-[#C8963E]"
+                class="w-full border border-gray-300 rounded-xl px-2.5 py-2 text-xs font-semibold focus:outline-none focus:border-[#C8963E]"
               />
             </div>
           </div>
         </section>
 
-        <form id="view_batch" onsubmit="handleBatchOrderSubmit(event)" class="bg-white rounded-2xl p-5 border border-gray-200 shadow-sm space-y-4">
-          <div class="flex flex-wrap items-center justify-between gap-2 border-b pb-3">
+        <!-- VIEW 1: BATCH ORDER -->
+        <form id="view_batch" onsubmit="handleBatchOrderSubmit(event)" class="bg-white rounded-2xl p-4 md:p-5 border border-gray-200 shadow-sm space-y-4">
+          <div class="flex flex-wrap items-center justify-between gap-2 border-b pb-2.5">
             <div>
-              <h3 class="text-sm md:text-base font-extrabold text-[#240e32]">
-                1. Order Pre-Scaled Recipe Batches (`Form-ORD-001`) — Queues to Romeo Malusay
-              </h3>
-              <p class="text-xs text-gray-500">
-                Transmits directly via Cloudflare D1 to Dry Room 2 Batching Workbench with real-time desktop notification bell
-              </p>
+              <h3 class="text-sm font-extrabold text-[#240e32]">1. Batch Orders</h3>
+              <p class="text-[11px] text-gray-500">Queues to Romeo</p>
             </div>
-            <span class="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-amber-100 text-amber-900">
-              Form-ORD-001
-            </span>
+            <span class="text-[9px] font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-900">ORD-001</span>
           </div>
 
-          <div class="grid grid-cols-1 md:grid-cols-12 gap-4">
+          <div class="grid grid-cols-1 md:grid-cols-12 gap-3 md:gap-4">
             <div class="md:col-span-7">
-              <label class="block text-xs font-bold text-gray-700 mb-1">Master Commercial Formulation *</label>
-              <select
-                id="recipeSelect"
-                onchange="updateBatchYieldPreview()"
-                class="w-full border border-gray-300 rounded-xl px-3 py-2 text-xs font-semibold"
-              ></select>
+              <label class="block text-[11px] md:text-xs font-bold text-gray-700 mb-1">Formulation *</label>
+              <select id="recipeSelect" onchange="updateBatchYieldPreview()" class="w-full border border-gray-300 rounded-xl px-2.5 py-2 text-xs font-semibold"></select>
             </div>
-
             <div class="md:col-span-2">
-              <label class="block text-xs font-bold text-gray-700 mb-1">Batch Multiplier *</label>
-              <input
-                id="batchMultiplierInput"
-                type="number"
-                step="0.25"
-                min="0.25"
-                max="30"
-                value="1"
-                oninput="updateBatchYieldPreview()"
-                class="w-full border border-gray-300 rounded-xl px-3 py-2 text-xs font-bold font-mono-code"
-              />
+              <label class="block text-[11px] md:text-xs font-bold text-gray-700 mb-1">Multiplier *</label>
+              <input id="batchMultiplierInput" type="number" step="0.25" min="0.25" max="30" value="1" oninput="updateBatchYieldPreview()" class="w-full border border-gray-300 rounded-xl px-2.5 py-2 text-xs font-bold font-mono-code" />
             </div>
-
             <div class="md:col-span-3">
-              <label class="block text-xs font-bold text-gray-700 mb-1">Target Pull-Out Window</label>
-              <select id="targetDeliverySelect" class="w-full border border-gray-300 rounded-xl px-3 py-2 text-xs font-semibold">
-                <option value="04:30 AM Dawn Dispatch">04:30 AM Dawn Dispatch</option>
-                <option value="06:00 AM Morning Pull-Out">06:00 AM Morning Pull-Out</option>
-                <option value="01:00 PM Afternoon Replenishment">01:00 PM Afternoon Replenishment</option>
-                <option value="Immediate Floor Kitting">Immediate Floor Kitting</option>
+              <label class="block text-[11px] md:text-xs font-bold text-gray-700 mb-1">Target Pull-Out</label>
+              <select id="targetDeliverySelect" class="w-full border border-gray-300 rounded-xl px-2.5 py-2 text-xs font-semibold">
+                <option value="04:30 AM">04:30 AM Dawn</option>
+                <option value="06:00 AM">06:00 AM Morning</option>
+                <option value="01:00 PM">01:00 PM Afternoon</option>
+                <option value="Immediate">Immediate</option>
               </select>
             </div>
           </div>
 
-          <div class="bg-[#FAF6EE] p-4 rounded-xl border border-[#C8963E]/40 flex flex-wrap items-center justify-between gap-3">
-            <div class="space-y-1">
-              <span class="text-[10px] font-bold uppercase text-gray-500 block">Quick Batch Multipliers:</span>
-              <div class="flex flex-wrap gap-1.5">
-                <button type="button" onclick="setBatchMultiplier(0.5)" class="px-2.5 py-1 rounded-lg text-xs font-bold bg-white border border-gray-300 hover:bg-gray-100">0.5x (Half Batch)</button>
-                <button type="button" onclick="setBatchMultiplier(1)" class="px-2.5 py-1 rounded-lg text-xs font-bold bg-[#240e32] text-[#E5C585]">1.0x (Standard)</button>
-                <button type="button" onclick="setBatchMultiplier(2)" class="px-2.5 py-1 rounded-lg text-xs font-bold bg-white border border-gray-300 hover:bg-gray-100">2.0x (Double)</button>
-                <button type="button" onclick="setBatchMultiplier(3)" class="px-2.5 py-1 rounded-lg text-xs font-bold bg-white border border-gray-300 hover:bg-gray-100">3.0x (Triple)</button>
-                <button type="button" onclick="setBatchMultiplier(5)" class="px-2.5 py-1 rounded-lg text-xs font-bold bg-white border border-gray-300 hover:bg-gray-100">5.0x (Commercial Run)</button>
-              </div>
+          <div class="bg-[#FAF6EE] p-3 md:p-4 rounded-xl border border-[#C8963E]/40 flex flex-wrap items-center justify-between gap-2">
+            <div class="flex flex-wrap gap-1.5">
+              <button type="button" onclick="setBatchMultiplier(0.5)" class="px-2 py-1 rounded-lg text-[10px] font-bold bg-white border border-gray-300 hover:bg-gray-100">0.5x</button>
+              <button type="button" onclick="setBatchMultiplier(1)" class="px-2 py-1 rounded-lg text-[10px] font-bold bg-[#240e32] text-[#E5C585]">1x</button>
+              <button type="button" onclick="setBatchMultiplier(2)" class="px-2 py-1 rounded-lg text-[10px] font-bold bg-white border border-gray-300 hover:bg-gray-100">2x</button>
+              <button type="button" onclick="setBatchMultiplier(3)" class="px-2 py-1 rounded-lg text-[10px] font-bold bg-white border border-gray-300 hover:bg-gray-100">3x</button>
             </div>
-
             <div class="text-right">
-              <span class="text-[11px] text-gray-500 block">Estimated Piece Yield:</span>
-              <strong id="batchYieldPreviewText" class="text-lg font-extrabold text-[#1E7A3E] font-mono-code">450 pcs</strong>
+              <span class="text-[10px] text-gray-500 block">Est. Yield:</span>
+              <strong id="batchYieldPreviewText" class="text-base font-extrabold text-[#1E7A3E] font-mono-code">0 pcs</strong>
             </div>
           </div>
 
-          <button
-            type="submit"
-            class="w-full py-3 rounded-xl theme-header hover:opacity-95 theme-accent-text font-extrabold text-xs uppercase tracking-wider shadow-lg transition"
-          >
-            🚀 Submit Pre-Scaled Recipe Batch Order to Romeo Malusay (`Form-ORD-001`)
+          <button type="submit" class="w-full py-2.5 md:py-3 rounded-xl theme-header hover:opacity-95 theme-accent-text font-extrabold text-xs uppercase tracking-wider shadow-lg transition">
+            Submit Batch Order to Romeo
           </button>
         </form>
 
-        <form id="view_material" onsubmit="handleMaterialRequestSubmit(event)" class="hidden bg-white rounded-2xl p-5 border border-gray-200 shadow-sm space-y-4">
-          <div class="flex flex-wrap items-center justify-between gap-2 border-b pb-3">
+        <!-- VIEW 2: MATERIAL REQUEST -->
+        <form id="view_material" onsubmit="handleMaterialRequestSubmit(event)" class="hidden bg-white rounded-2xl p-4 md:p-5 border border-gray-200 shadow-sm space-y-4">
+          <div class="flex flex-wrap items-center justify-between gap-2 border-b pb-2.5">
             <div>
-              <h3 class="text-sm md:text-base font-extrabold text-[#240e32]">
-                2. Request Raw Materials (`Form-WAR-001`) — Queues to Jade Dela Cruz
-              </h3>
-              <p class="text-xs text-gray-500">
-                Mix bulk + small quantities on one line — e.g. 1 Tray + 17 pcs Eggs · 1 Box + 2 Cans Creamer
-              </p>
+              <h3 class="text-sm font-extrabold text-[#240e32]">2. Raw Materials</h3>
+              <p class="text-[11px] text-gray-500">Queues to Jade</p>
             </div>
-            <span class="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-900">
-              Supports Tray / Box / Can / Sack
-            </span>
+            <span class="text-[9px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-900">WAR-001</span>
           </div>
 
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
             <div>
-              <label class="block text-xs font-bold text-gray-700 mb-1">
-                Consumption Purpose *
-              </label>
-              <select
-                id="consumptionPurposeSelect"
-                class="w-full border border-gray-300 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:border-[#C8963E]"
-              ></select>
+              <label class="block text-[11px] md:text-xs font-bold text-gray-700 mb-1">Purpose *</label>
+              <select id="consumptionPurposeSelect" class="w-full border border-gray-300 rounded-xl px-2.5 py-2 text-xs font-semibold"></select>
             </div>
-
             <div>
-              <label class="block text-xs font-bold text-gray-700 mb-1">
-                Shift Notes / Justification
-              </label>
-              <input
-                id="materialNotesInput"
-                type="text"
-                placeholder="e.g. Pre-bake door handoff / morning shift top-up..."
-                class="w-full border border-gray-300 rounded-xl px-3 py-2 text-xs"
-              />
+              <label class="block text-[11px] md:text-xs font-bold text-gray-700 mb-1">Notes</label>
+              <input id="materialNotesInput" type="text" placeholder="Shift notes..." class="w-full border border-gray-300 rounded-xl px-2.5 py-2 text-xs" />
             </div>
           </div>
 
-          <div class="bg-[#FAF6EE] p-4 rounded-xl border border-[#C8963E]/40 space-y-3">
-            <div class="flex flex-wrap items-center justify-between gap-2">
-              <span class="text-xs font-extrabold uppercase tracking-wider text-[#240e32]">
-                Select Material & Bulk/Small Unit Preset
-              </span>
-              <span id="convertedSecPreview" class="text-[11px] font-mono-code font-bold text-[#1E7A3E]">
-                Converts to: 25 kg
-              </span>
+          <div class="bg-[#FAF6EE] p-3 md:p-4 rounded-xl border border-[#C8963E]/40 space-y-3">
+            <div class="flex flex-wrap items-center justify-between gap-1">
+              <span class="text-[11px] font-extrabold uppercase text-[#240e32]">Add Material</span>
+              <span id="convertedSecPreview" class="text-[10px] font-mono-code font-bold text-[#1E7A3E]">Available: 0 kg</span>
             </div>
 
-            <div class="grid grid-cols-1 md:grid-cols-12 gap-2.5 items-end">
+            <div class="grid grid-cols-1 md:grid-cols-12 gap-2 items-end">
               <div class="md:col-span-5">
-                <label class="block text-[11px] font-bold text-gray-700 mb-1">Raw Material / Packaging *</label>
-                <select
-                  id="materialSelect"
-                  onchange="handleMaterialItemChange()"
-                  class="w-full border border-gray-300 rounded-lg px-2.5 py-2 text-xs font-semibold bg-white"
-                ></select>
+                <select id="materialSelect" onchange="handleMaterialItemChange()" class="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-[11px] font-semibold bg-white"></select>
               </div>
-
               <div class="md:col-span-3">
-                <label class="block text-[11px] font-bold text-gray-700 mb-1">Unit / Pack Size *</label>
-                <select
-                  id="unitPresetSelect"
-                  onchange="updateMaterialConversionPreview()"
-                  class="w-full border border-gray-300 rounded-lg px-2.5 py-2 text-xs font-bold bg-white text-[#240e32]"
-                ></select>
+                <select id="unitPresetSelect" onchange="updateMaterialConversionPreview()" class="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-[11px] font-bold bg-white"></select>
               </div>
-
               <div class="md:col-span-2">
-                <label id="packQtyLabel" class="block text-[11px] font-bold text-gray-700 mb-1">Qty</label>
-                <input
-                  id="packCountInput"
-                  type="number"
-                  step="0.25"
-                  min="0.25"
-                  value="1"
-                  oninput="updateMaterialConversionPreview()"
-                  class="w-full border border-gray-300 rounded-lg px-2.5 py-2 text-xs font-bold bg-white font-mono-code"
-                />
+                <input id="packCountInput" type="number" step="0.25" min="0.25" value="1" oninput="updateMaterialConversionPreview()" class="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-[11px] font-bold bg-white font-mono-code" />
               </div>
-
               <div class="md:col-span-2">
-                <button
-                  type="button"
-                  onclick="addStagedMaterialItem()"
-                  id="btnAddMaterialLine"
-                  class="w-full py-2 px-3 rounded-lg theme-accent-bg font-extrabold text-xs flex items-center justify-center gap-1 shadow hover:opacity-90 transition"
-                >
-                  + Add Item
+                <button type="button" onclick="addStagedMaterialItem()" id="btnAddMaterialLine" class="w-full py-1.5 px-2 rounded-lg theme-accent-bg font-extrabold text-[11px] flex items-center justify-center gap-1 shadow hover:opacity-90">
+                  + Add
                 </button>
               </div>
             </div>
 
-            <div class="flex flex-wrap items-center gap-1.5 pt-1" id="quickPresetPillsContainer"></div>
-
+            <div class="flex flex-wrap items-center gap-1 pt-1" id="quickPresetPillsContainer"></div>
             <div id="materialCartContainer" class="space-y-1.5 pt-2"></div>
           </div>
 
-          <button
-            type="submit"
-            class="w-full py-3 rounded-xl theme-header hover:opacity-95 theme-accent-text font-extrabold text-xs uppercase tracking-wider shadow-lg transition"
-          >
-            📤 Submit Raw Material Requisition to Jade Dela Cruz's Release Queue (`Form-WAR-001`)
+          <button type="submit" class="w-full py-2.5 md:py-3 rounded-xl theme-header hover:opacity-95 theme-accent-text font-extrabold text-xs uppercase tracking-wider shadow-lg transition">
+            Submit Request to Jade
           </button>
         </form>
 
-        <form id="view_specialty" onsubmit="handleSpecialtyProposalSubmit(event)" class="hidden bg-white rounded-2xl p-5 border border-gray-200 shadow-sm space-y-4">
-          <div class="flex flex-wrap items-center justify-between gap-2 border-b pb-3">
+        <!-- VIEW 3: SPECIALTY R&D -->
+        <form id="view_specialty" onsubmit="handleSpecialtyProposalSubmit(event)" class="hidden bg-white rounded-2xl p-4 md:p-5 border border-gray-200 shadow-sm space-y-4">
+          <div class="flex flex-wrap items-center justify-between gap-2 border-b pb-2.5">
             <div>
-              <h3 class="text-sm md:text-base font-extrabold text-[#240e32]">
-                3. Propose Specialty or Seasonal Formulation (`Form-RND-001`)
-              </h3>
-              <p class="text-xs text-gray-500">
-                Submits directly to Romeo Malusay & Zaphyr Zur Pomicpic in the Specialty Recipe Intake Queue
-              </p>
+              <h3 class="text-sm font-extrabold text-[#240e32]">3. Specialty R&D</h3>
+              <p class="text-[11px] text-gray-500">Queues to Romeo & Zaphyr</p>
             </div>
-            <span class="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-amber-100 text-amber-900">
-              Form-RND-001
-            </span>
+            <span class="text-[9px] font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-900">RND-001</span>
           </div>
 
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div>
-              <label class="block text-xs font-bold text-gray-700 mb-1">Proposed SKU Code *</label>
-              <input id="rndSku" type="text" value="SPC-NEW-001" required class="w-full border border-gray-300 rounded-xl px-3 py-2 text-xs font-mono-code font-bold" />
+              <label class="block text-[11px] md:text-xs font-bold text-gray-700 mb-1">SKU Code *</label>
+              <input id="rndSku" type="text" value="SPC-NEW-001" required class="w-full border border-gray-300 rounded-xl px-2.5 py-2 text-xs font-mono-code font-bold" />
             </div>
             <div class="md:col-span-2">
-              <label class="block text-xs font-bold text-gray-700 mb-1">Specialty Product Title / Name *</label>
-              <input id="rndName" type="text" placeholder="e.g. Durian Cream Cheese Brioche" required class="w-full border border-gray-300 rounded-xl px-3 py-2 text-xs font-semibold" />
+              <label class="block text-[11px] md:text-xs font-bold text-gray-700 mb-1">Product Name *</label>
+              <input id="rndName" type="text" placeholder="e.g. Durian Brioche" required class="w-full border border-gray-300 rounded-xl px-2.5 py-2 text-xs font-semibold" />
             </div>
           </div>
 
-          <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
             <div>
-              <label class="block text-xs font-bold text-gray-700 mb-1">Category</label>
-              <select id="rndCategory" class="w-full border border-gray-300 rounded-xl px-3 py-2 text-xs font-semibold">
-                <option value="Specialty Breads">Specialty Breads</option>
-                <option value="Pastries & Viennoiserie">Pastries & Viennoiserie</option>
-                <option value="Pasalubong Delicacies">Pasalubong Delicacies</option>
-                <option value="Cakes & Confectionary">Cakes & Confectionary</option>
+              <label class="block text-[11px] md:text-xs font-bold text-gray-700 mb-1">Category</label>
+              <select id="rndCategory" class="w-full border border-gray-300 rounded-xl px-2 py-1.5 text-[11px] font-semibold">
+                <option value="Specialty Breads">Breads</option>
+                <option value="Pastries & Viennoiserie">Pastries</option>
+                <option value="Pasalubong Delicacies">Pasalubong</option>
+                <option value="Cakes & Confectionary">Cakes</option>
               </select>
             </div>
             <div>
-              <label class="block text-xs font-bold text-gray-700 mb-1">Flour Basis (kg)</label>
-              <input id="rndFlourKg" type="number" step="0.5" value="12.5" class="w-full border border-gray-300 rounded-xl px-3 py-2 text-xs font-bold" />
+              <label class="block text-[11px] md:text-xs font-bold text-gray-700 mb-1">Flour (kg)</label>
+              <input id="rndFlourKg" type="number" step="0.5" value="12.5" class="w-full border border-gray-300 rounded-xl px-2 py-1.5 text-[11px] font-bold" />
             </div>
             <div>
-              <label class="block text-xs font-bold text-gray-700 mb-1">Piece Yield (pcs)</label>
-              <input id="rndYieldPcs" type="number" value="300" class="w-full border border-gray-300 rounded-xl px-3 py-2 text-xs font-bold" />
+              <label class="block text-[11px] md:text-xs font-bold text-gray-700 mb-1">Yield (pcs)</label>
+              <input id="rndYieldPcs" type="number" value="300" class="w-full border border-gray-300 rounded-xl px-2 py-1.5 text-[11px] font-bold" />
             </div>
             <div>
-              <label class="block text-xs font-bold text-gray-700 mb-1">Target SRP (₱)</label>
-              <input id="rndSrp" type="number" step="0.5" value="15.00" class="w-full border border-gray-300 rounded-xl px-3 py-2 text-xs font-bold" />
+              <label class="block text-[11px] md:text-xs font-bold text-gray-700 mb-1">SRP (₱)</label>
+              <input id="rndSrp" type="number" step="0.5" value="15.00" class="w-full border border-gray-300 rounded-xl px-2 py-1.5 text-[11px] font-bold" />
             </div>
           </div>
 
           <div>
-            <label class="block text-xs font-bold text-gray-700 mb-1">Baker's Mixing Protocol & Thermal Notes *</label>
-            <textarea id="rndNotes" rows="3" placeholder="Specify spiral mixing speeds, dough exit temperature target (26°C–28°C), and oven baking profile..." required class="w-full border border-gray-300 rounded-xl px-3 py-2 text-xs"></textarea>
+            <label class="block text-[11px] md:text-xs font-bold text-gray-700 mb-1">Mixing Protocol *</label>
+            <textarea id="rndNotes" rows="2" placeholder="Mixing speeds, temp targets..." required class="w-full border border-gray-300 rounded-xl px-2.5 py-2 text-xs"></textarea>
           </div>
 
-          <button
-            type="submit"
-            class="w-full py-3 rounded-xl theme-header hover:opacity-95 theme-accent-text font-extrabold text-xs uppercase tracking-wider shadow-lg transition"
-          >
-            ✨ Submit Specialty Formulation Proposal to Scaler Review Queue (`Form-RND-001`)
+          <button type="submit" class="w-full py-2.5 md:py-3 rounded-xl theme-header hover:opacity-95 theme-accent-text font-extrabold text-xs uppercase tracking-wider shadow-lg transition">
+            Submit R&D Proposal
           </button>
         </form>
 
       </div>
     </main>
 
-    <aside id="rightActivityDock" class="w-80 lg:w-96 bg-white border-l border-gray-200 flex flex-col shrink-0 h-full no-print">
+    <!-- 3. RIGHT-HAND LIVE ACTIVITY DOCK (Drawer on mobile, static on lg+) -->
+    <aside id="rightActivityDock" class="fixed inset-y-0 right-0 z-50 w-80 lg:w-96 bg-white border-l border-gray-200 flex flex-col shadow-2xl transform translate-x-full lg:translate-x-0 lg:static lg:shadow-none transition-transform duration-300 no-print">
       <div class="p-3.5 border-b border-gray-200 flex items-center justify-between bg-[#FAF6EE]">
         <div>
           <h3 class="text-xs font-extrabold uppercase tracking-wider text-[#240e32]">
-            ⚡ Live Active Queue & Events
+            ⚡ Live Queue
           </h3>
-          <p class="text-[10px] text-gray-500">
-            Auto-clears when Issued or Cancelled
-          </p>
+          <p class="text-[10px] text-gray-500">Auto-clears upon issue</p>
         </div>
-        <button
-          onclick="pollD1FromKiosk()"
-          class="px-2 py-1 rounded-lg text-[10px] font-bold bg-white border border-gray-300 hover:bg-gray-100"
-          title="Sync now with Cloudflare D1"
-        >
-          ↻ Sync D1
-        </button>
+        <div class="flex items-center gap-2">
+          <button onclick="pollD1FromKiosk()" class="px-2 py-1 rounded-lg text-[10px] font-bold bg-white border border-gray-300 hover:bg-gray-100">↻ Sync</button>
+          <button onclick="toggleActivityDock()" class="lg:hidden p-1 rounded bg-gray-200 text-gray-600 hover:bg-gray-300">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          </button>
+        </div>
       </div>
 
       <div class="grid grid-cols-2 gap-2 p-3 border-b border-gray-100 bg-gray-50/50">
         <div class="p-2.5 rounded-xl bg-amber-50 border border-amber-200">
-          <span class="text-[10px] font-bold text-amber-900 uppercase block">Pending Material Slips</span>
+          <span class="text-[10px] font-bold text-amber-900 uppercase block">Materials</span>
           <strong id="countPendingMat" class="text-lg font-extrabold text-[#240e32] font-mono-code">0</strong>
-          <span class="text-[10px] text-gray-500 block">Awaiting Jade</span>
         </div>
         <div class="p-2.5 rounded-xl bg-purple-50 border border-purple-200">
-          <span class="text-[10px] font-bold text-purple-900 uppercase block">Pending Batch Orders</span>
+          <span class="text-[10px] font-bold text-purple-900 uppercase block">Batches</span>
           <strong id="countPendingBatch" class="text-lg font-extrabold text-[#240e32] font-mono-code">0</strong>
-          <span class="text-[10px] text-gray-500 block">Awaiting Romeo</span>
         </div>
       </div>
 
@@ -601,16 +509,16 @@
     };
 
     const UNIFIED_PRODUCTION_LINES = [
-      { id: 'PDV-COMMUNAL', label: '1. Pan de Verde Outlet (Communal, Davao City)', department: 'Retail Outlet Dispatch', defaultPurpose: 'Daily Outlet Display & Pull-Out Replenishment' },
-      { id: 'LAURICE-BANKEROHAN', label: '2. Laurice Delicacies Outlet (Bankerohan, Davao City)', department: 'Retail Outlet Dispatch', defaultPurpose: 'Daily Outlet Display & Pull-Out Replenishment' },
-      { id: 'IND-BISCOCHO', label: '3. Indangan - Biscocho Commercial Hall', department: 'Production Floor (Dry Room 2)', defaultPurpose: 'Daily Commercial Production Line Issuance' },
-      { id: 'IND-OTAP', label: '4. Indangan - Otap Laminated Hall', department: 'Production Floor (Dry Room 2)', defaultPurpose: 'Daily Commercial Production Line Issuance' },
-      { id: 'IND-HEARTH', label: '5. Indangan - Hearth Bread Production Line', department: 'Production Floor (Main Bake Hall)', defaultPurpose: 'Daily Commercial Production Line Issuance' },
-      { id: 'IND-PASTRY', label: '6. Indangan - Pastry, Cake & Sweets Line', department: 'Finishing & Decorating Room', defaultPurpose: 'Pastry, Cake & Filling Preparation' },
-      { id: 'IND-MESS-HALL', label: '7. Indangan Facility Mess Hall (Staff Meals & Snacks)', department: 'Indangan Facility Mess Hall (Staff Meals & Snacks)', defaultPurpose: 'Facility Mess Hall - Staff Meals & Snacks Consumption' },
-      { id: 'IND-QA-RND', label: '8. QA Laboratory & R&D Kitchen', department: 'Quality Assurance & R&D', defaultPurpose: 'QA Retention Sample & R&D Test Formulation' },
-      { id: 'IND-MAINT', label: '9. Facility Maintenance & Plant Sanitation', department: 'Plant Engineering & Sanitation', defaultPurpose: 'Plant Sanitation, Cleaning & Preventive Maintenance' },
-      { id: 'CUSTOM', label: '10. Custom Write-in Department / Satellite Kiosk...', department: 'Special Operations', defaultPurpose: 'Daily Commercial Production Line Issuance' }
+      { id: 'PDV-COMMUNAL', label: '1. Pan de Verde Outlet', department: 'Retail Outlet', defaultPurpose: 'Daily Outlet Display' },
+      { id: 'LAURICE-BANKEROHAN', label: '2. Laurice Delicacies Outlet', department: 'Retail Outlet', defaultPurpose: 'Daily Outlet Display' },
+      { id: 'IND-BISCOCHO', label: '3. Indangan - Biscocho Hall', department: 'Production Floor', defaultPurpose: 'Daily Commercial Production' },
+      { id: 'IND-OTAP', label: '4. Indangan - Otap Hall', department: 'Production Floor', defaultPurpose: 'Daily Commercial Production' },
+      { id: 'IND-HEARTH', label: '5. Indangan - Hearth Bread', department: 'Production Floor', defaultPurpose: 'Daily Commercial Production' },
+      { id: 'IND-PASTRY', label: '6. Indangan - Pastry Line', department: 'Production Floor', defaultPurpose: 'Pastry & Cake Preparation' },
+      { id: 'IND-MESS-HALL', label: '7. Indangan Facility Mess Hall', department: 'Mess Hall', defaultPurpose: 'Staff Meals' },
+      { id: 'IND-QA-RND', label: '8. QA & R&D Kitchen', department: 'QA', defaultPurpose: 'R&D Testing' },
+      { id: 'IND-MAINT', label: '9. Facility Maintenance', department: 'Sanitation', defaultPurpose: 'Cleaning & Maintenance' },
+      { id: 'CUSTOM', label: '10. Custom Write-in...', department: 'Special', defaultPurpose: 'Daily Commercial Production' }
     ];
 
     const UNIFIED_CONSUMPTION_PURPOSES = [
@@ -625,63 +533,44 @@
       'Plant Sanitation, Cleaning & Preventive Maintenance'
     ];
 
-    // Codes match MASTER_MATERIALS in src/data/materialsData.js — do not rename.
     const KIOSK_CATALOG_MATERIALS = [
-      { code: 'RM-DRY-001', name: 'Fresh Farm Eggs (Grade A - Coop)',          primaryUom: 'Tray',    secondaryUom: 'pcs', conversionFactor: 30,    unitCost: 210,    room: 'Cold Room' },
-      { code: 'RM-DRY-007', name: 'Condensed Creamer (Jersey 390g / 48 Cans per Box)', primaryUom: 'Tin Can', secondaryUom: 'kg', conversionFactor: 0.39, unitCost: 20.28, room: 'Dry Room 2' },
-      { code: 'RM-DRY-003', name: 'Evaporated Milk (Jersey 370ml / 48 Cans per Box)',  primaryUom: 'Tin Can', secondaryUom: 'L',  conversionFactor: 0.37, unitCost: 10.36, room: 'Dry Room 2' },
-      { code: 'RM-DRY-002', name: 'Sweetened Condensed Milk (Master Chef 1kg)',        primaryUom: 'Tin Can', secondaryUom: 'kg', conversionFactor: 1,    unitCost: 65,    room: 'Dry Room 2' },
-      { code: 'RM-DRY-004', name: 'Skimmed Milk Powder (Farmland)',            primaryUom: 'Sack',    secondaryUom: 'kg',  conversionFactor: 25,    unitCost: 3850,   room: 'Dry Room 2' },
-      { code: 'RM-FLR-003', name: '1st Class Hard Wheat Flour (Naga Rossa)',   primaryUom: 'Sack',    secondaryUom: 'kg',  conversionFactor: 25,    unitCost: 1120,   room: 'Dry Room 1' },
-      { code: 'RM-FLR-001', name: 'All Purpose Flour',                         primaryUom: 'Sack',    secondaryUom: 'kg',  conversionFactor: 25,    unitCost: 1050,   room: 'Dry Room 1' },
-      { code: 'RM-FLR-002', name: '3rd Class Soft Wheat Flour (Isla)',         primaryUom: 'Sack',    secondaryUom: 'kg',  conversionFactor: 25,    unitCost: 920,    room: 'Dry Room 1' },
-      { code: 'RM-SWT-002', name: 'Refined White Sugar (Victorias)',           primaryUom: 'Sack',    secondaryUom: 'kg',  conversionFactor: 50,    unitCost: 2650,   room: 'Dry Room 1' },
-      { code: 'RM-SWT-001', name: 'Crystal Brown Sugar',                       primaryUom: 'Sack',    secondaryUom: 'kg',  conversionFactor: 50,    unitCost: 2200,   room: 'Dry Room 1' },
-      { code: 'RM-SWT-003', name: 'Refined Iodized Fine Salt',                 primaryUom: 'Sack',    secondaryUom: 'kg',  conversionFactor: 25,    unitCost: 380,    room: 'Dry Room 2' },
-      { code: 'RM-FAT-001', name: 'Refrigerated Margarine (Buttercup)',        primaryUom: 'Block',   secondaryUom: 'kg',  conversionFactor: 5,     unitCost: 475,    room: 'Cold Room' },
-      { code: 'RM-FAT-001-BUTTER', name: 'Unsalted Butter (Magnolia Gold)',    primaryUom: 'Block',   secondaryUom: 'kg',  conversionFactor: 5,     unitCost: 675,    room: 'Cold Room' },
-      { code: 'RM-FAT-003', name: 'Vegetable Shortening (Sunny Suy)',          primaryUom: 'Laton',   secondaryUom: 'kg',  conversionFactor: 30,    unitCost: 1575,   room: 'Dry Room 1' },
-      { code: 'RM-FAT-006', name: 'Refined Vegetable Cooking Oil',             primaryUom: 'Tin Can', secondaryUom: 'kg',  conversionFactor: 17,    unitCost: 1350,   room: 'Wet Room' },
-      { code: 'RM-LEV-001', name: 'Instant Dry Active Yeast',                  primaryUom: 'Box',     secondaryUom: 'kg',  conversionFactor: 0.5,   unitCost: 120,    room: 'Dry Room 2' },
-      { code: 'RM-LEV-002', name: 'Double Acting Baking Powder',               primaryUom: 'Bag',     secondaryUom: 'kg',  conversionFactor: 14,    unitCost: 1540,   room: 'Dry Room 2' },
-      { code: 'PM-PAP-001', name: 'Glassine Wax Paper (Otap Wrapping)',        primaryUom: 'Rim',     secondaryUom: 'pcs', conversionFactor: 500,   unitCost: 420,    room: 'Dry Room 2' },
-      { code: 'PM-BOX-001', name: 'Master Shipping Carton Box',                primaryUom: 'Rim',     secondaryUom: 'pcs', conversionFactor: 20,    unitCost: 580,    room: 'Dry Room 2' }
+      { code: 'RM-DRY-001', name: 'Fresh Farm Eggs', primaryUom: 'Tray', secondaryUom: 'pcs', conversionFactor: 30, unitCost: 210, room: 'Cold Room' },
+      { code: 'RM-DRY-007', name: 'Condensed Creamer', primaryUom: 'Tin Can', secondaryUom: 'kg', conversionFactor: 0.39, unitCost: 20.28, room: 'Dry Room 2' },
+      { code: 'RM-DRY-003', name: 'Evaporated Milk', primaryUom: 'Tin Can', secondaryUom: 'L', conversionFactor: 0.37, unitCost: 10.36, room: 'Dry Room 2' },
+      { code: 'RM-DRY-002', name: 'Sweetened Condensed Milk', primaryUom: 'Tin Can', secondaryUom: 'kg', conversionFactor: 1, unitCost: 65, room: 'Dry Room 2' },
+      { code: 'RM-DRY-004', name: 'Skimmed Milk Powder', primaryUom: 'Sack', secondaryUom: 'kg', conversionFactor: 25, unitCost: 3850, room: 'Dry Room 2' },
+      { code: 'RM-FLR-003', name: 'Hard Wheat Flour', primaryUom: 'Sack', secondaryUom: 'kg', conversionFactor: 25, unitCost: 1120, room: 'Dry Room 1' },
+      { code: 'RM-FLR-001', name: 'All Purpose Flour', primaryUom: 'Sack', secondaryUom: 'kg', conversionFactor: 25, unitCost: 1050, room: 'Dry Room 1' },
+      { code: 'RM-FLR-002', name: 'Soft Wheat Flour', primaryUom: 'Sack', secondaryUom: 'kg', conversionFactor: 25, unitCost: 920, room: 'Dry Room 1' },
+      { code: 'RM-SWT-002', name: 'Refined White Sugar', primaryUom: 'Sack', secondaryUom: 'kg', conversionFactor: 50, unitCost: 2650, room: 'Dry Room 1' },
+      { code: 'RM-SWT-001', name: 'Crystal Brown Sugar', primaryUom: 'Sack', secondaryUom: 'kg', conversionFactor: 50, unitCost: 2200, room: 'Dry Room 1' },
+      { code: 'RM-SWT-003', name: 'Iodized Fine Salt', primaryUom: 'Sack', secondaryUom: 'kg', conversionFactor: 25, unitCost: 380, room: 'Dry Room 2' },
+      { code: 'RM-FAT-001', name: 'Margarine (Buttercup)', primaryUom: 'Block', secondaryUom: 'kg', conversionFactor: 5, unitCost: 475, room: 'Cold Room' },
+      { code: 'RM-FAT-001-BUTTER', name: 'Unsalted Butter', primaryUom: 'Block', secondaryUom: 'kg', conversionFactor: 5, unitCost: 675, room: 'Cold Room' },
+      { code: 'RM-FAT-003', name: 'Vegetable Shortening', primaryUom: 'Laton', secondaryUom: 'kg', conversionFactor: 30, unitCost: 1575, room: 'Dry Room 1' },
+      { code: 'RM-FAT-006', name: 'Cooking Oil', primaryUom: 'Tin Can', secondaryUom: 'kg', conversionFactor: 17, unitCost: 1350, room: 'Wet Room' },
+      { code: 'RM-LEV-001', name: 'Instant Dry Yeast', primaryUom: 'Box', secondaryUom: 'kg', conversionFactor: 0.5, unitCost: 120, room: 'Dry Room 2' },
+      { code: 'RM-LEV-002', name: 'Baking Powder', primaryUom: 'Bag', secondaryUom: 'kg', conversionFactor: 14, unitCost: 1540, room: 'Dry Room 2' },
+      { code: 'PM-PAP-001', name: 'Glassine Wax Paper', primaryUom: 'Rim', secondaryUom: 'pcs', conversionFactor: 500, unitCost: 420, room: 'Dry Room 2' },
+      { code: 'PM-BOX-001', name: 'Shipping Carton Box', primaryUom: 'Rim', secondaryUom: 'pcs', conversionFactor: 20, unitCost: 580, room: 'Dry Room 2' }
     ];
 
     const KIOSK_MASTER_RECIPES = [
-      { sku: 'BRD-PAN-3KG',  name: 'Classic Pandesal – 3.0 kg 1st Class Flour Basis', yieldPcs: 85   },
-      { sku: 'BRD-PAN-6KG',  name: 'Classic Pandesal – 6.0 kg 1st Class Flour Basis', yieldPcs: 170  },
-      { sku: 'BRD-PAN-001',  name: 'Classic Pandesal – 12.5 kg Flour Blend',          yieldPcs: 450  },
-      { sku: 'BRD-STR-001',  name: 'Star Bread – 6.0 kg Flour Blend',                 yieldPcs: 100  },
-      { sku: 'BRD-SPN-001',  name: 'Spanish Bread – 4.0 kg Flour Blend',              yieldPcs: 130  },
-      { sku: 'BRD-BUN-001',  name: 'Commercial Table Buns – 12.0 kg Flour Basis',     yieldPcs: 340  },
-      { sku: 'BRD-PTK-001',  name: 'Putok Bread – 3.0 kg Flour Blend',                yieldPcs: 70   },
-      { sku: 'BRD-PTS-001',  name: 'Patatas Bread – 3.0 kg 3rd Class Flour Basis',    yieldPcs: 90   },
-      { sku: 'BRD-SWT-001',  name: 'Sweetheart Bread – 3.0 kg Flour Blend',           yieldPcs: 85   },
-      { sku: 'BRD-UBE-001',  name: 'Special Ube Cheese Pandesal – 10.0 kg APF',       yieldPcs: 300  },
-      { sku: 'BRD-MON-001',  name: 'Classic Monay & Sweet Loaf – 12.5 kg APF',        yieldPcs: 250  },
-      { sku: 'BIS-001',      name: 'Biscocho Toasted Bread Delicacy – 25.0 kg',       yieldPcs: 1000 },
-      { sku: 'OTP-001',      name: 'Otap Layered Puff Pastry – 25.0 kg Flour Blend',  yieldPcs: 1200 },
-      { sku: 'PST-ENS-001',  name: 'Special Butter Ensaymada – 6.0 kg',                yieldPcs: 120  },
-      { sku: 'PST-HOP-001',  name: 'Traditional Hopia / Pig-Pie – 2.0 kg',            yieldPcs: 120  },
-      { sku: 'PST-HPN-001',  name: 'Hopia Panet (Mung Bean / Kundol) – 1.0 kg',       yieldPcs: 80   },
-      { sku: 'PST-HMN-001',  name: 'Half Moon Pastry – 3.0 kg 3rd Class Flour',       yieldPcs: 110  },
-      { sku: 'PST-CSB-001',  name: 'Rich Cheese Bar – 2.0 kg APF Basis',              yieldPcs: 100  },
-      { sku: 'FRI-SHK-001',  name: 'Shakoy (Twisted Fried Doughnut) – 5.0 kg',        yieldPcs: 140  },
-      { sku: 'FRI-BNG-001',  name: 'Binangkal (Sesame Cookie) – 3.0 kg',              yieldPcs: 260  },
-      { sku: 'FRI-DGH-001',  name: 'Fried Yeast Doughnut – 5.0 kg APF Basis',         yieldPcs: 150  },
-      { sku: 'CKI-CRK-001',  name: 'Crinkle Cookies – 2.5 kg 3rd Class Flour',        yieldPcs: 220  },
-      { sku: 'DEL-BGB-001',  name: 'Bagong Bayan Reconstituted Delicacy – 12.0 kg',   yieldPcs: 350  },
-      { sku: 'DEL-BGP-001',  name: 'Bagong Bayan Panit (Red Shell) – 3.0 kg',         yieldPcs: 350  },
-      { sku: 'DEL-DBC-001',  name: 'Double Body Coconut Delicacy – 3.0 kg',           yieldPcs: 100  },
-      { sku: 'DEL-DBU-001',  name: 'Double Body Ube Delicacy – 3.0 kg',               yieldPcs: 100  },
-      { sku: 'DEL-PUD-001',  name: 'Reconstituted Bakery Pudding – 15.0 kg',          yieldPcs: 180  },
-      { sku: 'STM-SPO-001',  name: 'Siopao Steamed Bun Dough – 1.5 kg Starch Base',   yieldPcs: 35   },
-      { sku: 'DES-LCH-001',  name: 'Classic Leche Flan – 10 Fresh Eggs Basis',        yieldPcs: 4    },
-      { sku: 'SUB-GLZ-001',  name: 'Biscocho Buttermilk Sweet Glaze – 10.0 kg',       yieldPcs: 1500 }
+      { sku: 'BRD-PAN-3KG',  name: 'Pandesal 3.0 kg', yieldPcs: 85   },
+      { sku: 'BRD-PAN-6KG',  name: 'Pandesal 6.0 kg', yieldPcs: 170  },
+      { sku: 'BRD-PAN-001',  name: 'Pandesal 12.5 kg', yieldPcs: 450  },
+      { sku: 'BIS-001',      name: 'Biscocho 25 kg', yieldPcs: 1000 },
+      { sku: 'OTP-001',      name: 'Otap 25 kg', yieldPcs: 1200 },
+      { sku: 'PST-ENS-001',  name: 'Ensaymada 6.0 kg', yieldPcs: 120  },
+      { sku: 'BRD-STR-001',  name: 'Star Bread 6.0 kg', yieldPcs: 100  },
+      { sku: 'BRD-SPN-001',  name: 'Spanish Bread 4.0 kg', yieldPcs: 130  },
+      { sku: 'BRD-BUN-001',  name: 'Table Buns 12.0 kg', yieldPcs: 340  },
+      { sku: 'BRD-PTK-001',  name: 'Putok 3.0 kg', yieldPcs: 70   },
+      { sku: 'FRI-SHK-001',  name: 'Shakoy 5.0 kg', yieldPcs: 140  },
+      { sku: 'FRI-BNG-001',  name: 'Binangkal 3.0 kg', yieldPcs: 260  },
+      { sku: 'DES-LCH-001',  name: 'Leche Flan (10 Eggs)', yieldPcs: 4    }
     ];
 
-    // Identical to SharedTaxonomy.getMaterialUnitPresets — DO NOT diverge.
     function getMaterialUnitPresets(material = {}) {
       const code = String(material.code || '').toUpperCase();
       const name = String(material.name || '').toLowerCase();
@@ -741,7 +630,6 @@
       ];
     }
 
-    // Primary + secondary availability string, e.g. "5 Sack (125 kg)"
     function formatAvailability(mat) {
       const secQty = Number(mat.currentBalance || 0);
       const secUom = mat.secondaryUom || 'kg';
@@ -763,8 +651,9 @@
     let currentThemeId = 'jjb-gold';
     let currentNavLayout = 'sidebar';
     let sidebarCollapsed = false;
-    let activityDockOpen = true;
-    // Sandbox state lives in localStorage so it syncs across tabs (kiosk + main app).
+    
+    // Set dock open by default on desktop, closed on mobile
+    let activityDockOpen = window.innerWidth >= 1024; 
     let isTestMode = localStorage.getItem(SANDBOX_KEY) === '1';
 
     let catalogMaterials = [...KIOSK_CATALOG_MATERIALS];
@@ -801,24 +690,6 @@
         pendingBatchOrdersQueue = JSON.parse(localStorage.getItem(`${STORAGE_KEY}_batch_orders`) || '[]')
           .filter((o) => o.status === 'PENDING_BATCHING');
       } catch { pendingBatchOrdersQueue = []; }
-
-      // Pull in APPROVED specialty recipes so they appear in the batch dropdown
-      try {
-        const rawSpec = localStorage.getItem('JJB_WMS_LIVE_V4_6_SPECIALTY_RECIPES');
-        if (rawSpec) {
-          const approved = (JSON.parse(rawSpec) || [])
-            .filter((p) => p.status === 'APPROVED')
-            .map((p) => ({
-              sku: p.sku || p.proposalId,
-              name: `${p.name || p.title} (Specialty · ${p.category || 'R&D'})`,
-              yieldPcs: Number(p.unitPieceYield || p.yieldPcs || 100)
-            }));
-          const seen = new Set(catalogRecipes.map((r) => r.sku));
-          approved.forEach((a) => {
-            if (!seen.has(a.sku)) catalogRecipes.push(a);
-          });
-        }
-      } catch {}
     }
 
     function saveUiPrefs() {
@@ -873,8 +744,32 @@
 
     function toggleActivityDock() {
       activityDockOpen = !activityDockOpen;
-      document.getElementById('rightActivityDock').classList.toggle('hidden', !activityDockOpen);
+      const dock = document.getElementById('rightActivityDock');
+      const backdrop = document.getElementById('mobileDockBackdrop');
+      const btn = document.getElementById('btnActivityDock');
+
+      if (activityDockOpen) {
+        dock.classList.remove('translate-x-full');
+        if (window.innerWidth < 1024) backdrop.classList.remove('hidden');
+        btn.className = 'px-2.5 py-1.5 rounded-lg font-bold flex items-center gap-1 border transition theme-accent-bg border-[#E5C585]';
+      } else {
+        dock.classList.add('translate-x-full');
+        backdrop.classList.add('hidden');
+        btn.className = 'px-2.5 py-1.5 rounded-lg font-bold flex items-center gap-1 border transition bg-white/10 text-white border-white/15 hover:bg-white/20';
+      }
     }
+
+    // Handle window resize to fix dock state
+    window.addEventListener('resize', () => {
+      const dock = document.getElementById('rightActivityDock');
+      const backdrop = document.getElementById('mobileDockBackdrop');
+      if (window.innerWidth >= 1024) {
+        backdrop.classList.add('hidden');
+        if (activityDockOpen) dock.classList.remove('translate-x-full');
+      } else {
+        if (!activityDockOpen) dock.classList.add('translate-x-full');
+      }
+    });
 
     function toggleSandboxMode() {
       isTestMode = !isTestMode;
@@ -887,10 +782,10 @@
       const btn = document.getElementById('btnSandboxToggle');
       const txt = document.getElementById('sandboxBtnText');
       if (isTestMode) {
-        btn.className = 'px-2.5 py-1.5 rounded-lg font-bold flex items-center gap-1 text-[11px] bg-amber-400 text-black shadow transition';
-        txt.textContent = 'Sandbox: ON';
+        btn.className = 'px-2 py-1.5 rounded-lg font-bold flex items-center gap-1 text-[10px] md:text-[11px] bg-amber-400 text-black shadow transition border border-amber-500';
+        txt.textContent = 'Sandbox ON';
       } else {
-        btn.className = 'px-2.5 py-1.5 rounded-lg font-bold flex items-center gap-1 text-[11px] bg-white/10 text-amber-200 hover:bg-white/20 border border-white/15 transition';
+        btn.className = 'px-2 py-1.5 rounded-lg font-bold flex items-center gap-1 text-[10px] md:text-[11px] bg-white/10 text-amber-200 hover:bg-white/20 border border-white/15 transition';
         txt.textContent = 'Sandbox';
       }
     }
@@ -917,34 +812,16 @@
         }
         if (topBtn) {
           topBtn.className = isAct
-            ? 'px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap flex items-center gap-1.5 transition shrink-0 theme-accent-bg shadow'
-            : 'px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap flex items-center gap-1.5 transition shrink-0 text-gray-300 hover:bg-white/10';
+            ? 'px-3 py-1.5 rounded-lg text-[11px] font-bold whitespace-nowrap flex items-center gap-1.5 transition shrink-0 theme-accent-bg shadow'
+            : 'px-3 py-1.5 rounded-lg text-[11px] font-bold whitespace-nowrap flex items-center gap-1.5 transition shrink-0 text-gray-300 hover:bg-white/10';
         }
         if (mobBtn) {
           mobBtn.className = isAct
-            ? 'py-2 px-2 rounded-xl text-[11px] font-extrabold transition theme-header theme-accent-text shadow'
-            : 'py-2 px-2 rounded-xl text-[11px] font-extrabold transition text-gray-600 hover:bg-gray-100';
+            ? 'py-2 px-1 rounded-xl text-[10px] font-extrabold transition theme-header theme-accent-text shadow'
+            : 'py-2 px-1 rounded-xl text-[10px] font-extrabold transition text-gray-600 hover:bg-gray-100';
         }
       });
     }
-
-    // Cross-tab live sync — theme, nav layout, sandbox
-    window.addEventListener('storage', (e) => {
-      if (e.key === UI_PREF_KEY) {
-        try {
-          const prefs = JSON.parse(e.newValue || '{}');
-          if (prefs.themeId && prefs.themeId !== currentThemeId) applyTheme(prefs.themeId);
-          if (prefs.navLayout && prefs.navLayout !== currentNavLayout) {
-            currentNavLayout = prefs.navLayout;
-            renderNavLayout();
-          }
-        } catch {}
-      }
-      if (e.key === SANDBOX_KEY) {
-        isTestMode = e.newValue === '1';
-        renderSandboxState();
-      }
-    });
 
     // ========================================================================
     // 3. FORM INITIALIZATION
@@ -962,12 +839,12 @@
 
       const recSel = document.getElementById('recipeSelect');
       recSel.innerHTML = catalogRecipes.map(
-        (r) => `<option value="${r.sku}" data-name="${r.name}" data-yield="${r.yieldPcs || r.baseYieldPcs || 100}">${r.sku} · ${r.name} (${r.yieldPcs || r.baseYieldPcs || 100} pcs)</option>`
+        (r) => `<option value="${r.sku}" data-name="${r.name}" data-yield="${r.yieldPcs || r.baseYieldPcs || 100}">${r.sku} · ${r.name}</option>`
       ).join('');
 
       const matSel = document.getElementById('materialSelect');
       matSel.innerHTML = catalogMaterials.map(
-        (m) => `<option value="${m.code}">${m.code} · ${m.name} — ${formatAvailability(m)}</option>`
+        (m) => `<option value="${m.code}">${m.code} · ${m.name}</option>`
       ).join('');
 
       handleUnifiedLineChange(UNIFIED_PRODUCTION_LINES[0].id);
@@ -1026,20 +903,20 @@
     function renderQuickPresetPills(activeIdx) {
       const container = document.getElementById('quickPresetPillsContainer');
       container.innerHTML =
-        `<span class="text-[10px] font-bold uppercase text-gray-500 mr-1">Quick Pack Choices:</span>` +
+        `<span class="text-[9px] font-bold uppercase text-gray-500 mr-1">Quick:</span>` +
         currentUnitPresets
           .map(
             (p, idx) => `
             <button
               type="button"
               onclick="selectQuickPreset(${idx})"
-              class="px-2.5 py-0.5 rounded-md text-[11px] font-bold border transition ${
+              class="px-2 py-0.5 rounded-md text-[10px] font-bold border transition ${
                 idx === activeIdx
                   ? 'theme-header theme-accent-text border-transparent shadow-sm'
                   : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-100'
               }"
             >
-              ${p.label}
+              ${p.badge}
             </button>`
           )
           .join('');
@@ -1060,17 +937,13 @@
       const packCount = Number(document.getElementById('packCountInput').value || 0);
       const secQty = +(packCount * Number(preset.multiplierInSec || 1)).toFixed(3);
 
-      document.getElementById('packQtyLabel').textContent = `Qty (${preset.badge || 'Units'})`;
       document.getElementById('convertedSecPreview').textContent =
-        `Available: ${formatAvailability(mat)} → Converts to: ${secQty} ${mat.secondaryUom || 'kg'}`;
+        `Avail: ${formatAvailability(mat)} → Adds: ${secQty} ${mat.secondaryUom || 'kg'}`;
       document.getElementById('btnAddMaterialLine').textContent =
-        `+ Add (${secQty} ${mat.secondaryUom || 'kg'})`;
+        `+ Add (${secQty})`;
       renderQuickPresetPills(presetIdx);
     }
 
-    // -------------------------------------------------------------------
-    // Composition builder — multiple units on a single line item
-    // -------------------------------------------------------------------
     function addStagedMaterialItem() {
       const code = document.getElementById('materialSelect').value;
       const mat = catalogMaterials.find((m) => m.code === code) || catalogMaterials[0];
@@ -1150,23 +1023,23 @@
     function renderStagedMaterialCart() {
       const el = document.getElementById('materialCartContainer');
       if (stagedMaterialCart.length === 0) {
-        el.innerHTML = `<p class="text-[11px] text-gray-400 italic">No materials staged yet. Choose a bulk/small unit preset above and click "+ Add". Adding the same material twice (e.g. 1 Tray then 17 pcs Eggs) composes them on one line.</p>`;
+        el.innerHTML = `<p class="text-[10px] text-gray-400 italic">No materials staged. Select above and click "+ Add".</p>`;
         return;
       }
       el.innerHTML = stagedMaterialCart
         .map(
           (it, idx) => `
-          <div class="bg-white px-3 py-2.5 rounded-lg border border-gray-200 shadow-sm space-y-1.5">
+          <div class="bg-white px-2.5 py-2 rounded-lg border border-gray-200 shadow-sm space-y-1">
             <div class="flex items-start justify-between gap-2 text-xs">
               <div class="flex-1 min-w-0">
                 <div>
                   <span class="font-mono-code font-bold text-[#240e32]">${it.materialCode}</span>
                   <span class="text-gray-400 mx-1">·</span>
-                  <span class="font-bold">${it.name}</span>
+                  <span class="font-bold text-[11px]">${it.name}</span>
                 </div>
                 <div class="mt-1 flex flex-wrap items-center gap-1">
                   ${(it.composition || []).map((c, ci) => `
-                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-[#FAF6EE] border border-[#E2D1B8] text-[11px] font-bold text-[#240e32]" title="${c.label}">
+                    <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[#FAF6EE] border border-[#E2D1B8] text-[10px] font-bold text-[#240e32]" title="${c.label}">
                       ${c.count} × ${c.badge}
                       <button type="button" onclick="removeCompositionEntry(${idx}, ${ci})" class="text-red-600 hover:text-red-800 font-bold">×</button>
                     </span>
@@ -1174,9 +1047,9 @@
                 </div>
               </div>
               <div class="text-right shrink-0 space-y-0.5">
-                <div class="font-extrabold text-[#1E7A3E] text-xs">${it.qtyRequestedSec} ${it.secondaryUom}</div>
-                <div class="text-gray-400 text-[11px]">₱${Number(it.estimatedCost || 0).toLocaleString()}</div>
-                <button type="button" onclick="removeStagedMaterialItem(${idx})" class="text-red-600 hover:text-red-800 text-[11px] font-bold">✕ Remove line</button>
+                <div class="font-extrabold text-[#1E7A3E] text-[11px]">${it.qtyRequestedSec} ${it.secondaryUom}</div>
+                <div class="text-gray-400 text-[10px]">₱${Number(it.estimatedCost || 0).toLocaleString()}</div>
+                <button type="button" onclick="removeStagedMaterialItem(${idx})" class="text-red-600 hover:text-red-800 text-[10px] font-bold mt-0.5">✕ Remove</button>
               </div>
             </div>
           </div>`
@@ -1185,13 +1058,13 @@
     }
 
     // ========================================================================
-    // 4. ZERO-RESIDUE EVICTION & D1 CLOUD SYNC ENGINE
+    // 4. CLOUD SYNC & TOAST
     // ========================================================================
     function showToast(msg) {
       const banner = document.getElementById('toastBanner');
       document.getElementById('toastText').textContent = msg;
       banner.classList.remove('hidden');
-      setTimeout(() => banner.classList.add('hidden'), 4500);
+      setTimeout(() => banner.classList.add('hidden'), 4000);
     }
 
     function hideToast() {
@@ -1297,9 +1170,9 @@
 
       try {
         await postToCloudD1('BATCH_ORDER_SAVED', `PORTAL_BATCH_${orderId}_${Date.now()}`, newOrder);
-        showToast(`✅ Batch Order ${orderId} synced to Cloud D1 & Romeo's Workbench!`);
+        showToast(`✅ Batch Order ${orderId} synced to D1!`);
       } catch {
-        showToast(`⚠️ Batch Order ${orderId} queued locally; Cloud D1 will sync when online.`);
+        showToast(`⚠️ Order ${orderId} queued locally.`);
       }
     }
 
@@ -1346,9 +1219,9 @@
 
       try {
         await postToCloudD1('WITHDRAWAL_REQUEST_SUBMITTED', `PORTAL_REQ_${requestId}_${Date.now()}`, queuedRequest);
-        showToast(`✅ Requisition ${requestId} synced to Cloud D1 & Jade's Queue!`);
+        showToast(`✅ Requisition ${requestId} synced to D1!`);
       } catch {
-        showToast(`⚠️ Requisition ${requestId} queued locally; Cloud D1 will sync when online.`);
+        showToast(`⚠️ Requisition ${requestId} saved locally.`);
       }
     }
 
@@ -1388,7 +1261,7 @@
 
       try {
         await postToCloudD1('SPECIALTY_PROPOSAL_SAVED', `SPEC_${proposalId}_${Date.now()}`, proposal);
-        showToast(`✨ Specialty Proposal ${proposalId} (${name}) synced to Romeo's R&D Queue!`);
+        showToast(`✨ R&D Proposal ${proposalId} synced!`);
       } catch {
         showToast(`⚠️ Proposal ${proposalId} saved locally.`);
       }
@@ -1401,7 +1274,7 @@
     // ========================================================================
     async function cancelKioskMaterialRequest(requestId) {
       const reason = window.prompt(
-        `Cancel material requisition ${requestId}?\n\nThis removes the card from the queue and logs the cancellation to the immutable D1 Audit Trail:`,
+        `Cancel material requisition ${requestId}?\n\nReason:`,
         'Cancelled by requesting outlet / line staff'
       );
       if (reason === null) return;
@@ -1422,20 +1295,15 @@
           await postToCloudD1('WITHDRAWAL_REQUEST_CANCELLED', `REQ_CANC_${requestId}_${Date.now()}`, {
             requestId, reason, cancelledBy: actor, timestamp: new Date().toISOString()
           });
-          await postToCloudD1('AUDIT_LOG', `AUDIT_CANC_${requestId}_${Date.now()}`, {
-            action: 'WITHDRAWAL_REQUEST_CANCELLED', actor, role: 'Outlet / Line Requester',
-            details: `Cancelled material requisition ${requestId}: ${reason}`,
-            timestamp: new Date().toISOString().slice(0, 19).replace('T', ' ')
-          });
         } catch {}
-        showToast(`🗑️ Requisition ${requestId} cancelled & logged to Audit Trail.`);
+        showToast(`🗑️ Requisition ${requestId} cancelled.`);
       }, 320);
     }
 
     async function cancelKioskBatchOrder(orderId) {
       const target = pendingBatchOrdersQueue.find((o) => o.orderId === orderId);
       const reason = window.prompt(
-        `Decline / Cancel Ingredient Batching Order ${orderId}?\n\nThis evicts the order from browser storage and records the audit trail in Cloudflare D1:`,
+        `Decline / Cancel Batch Order ${orderId}?\n\nReason:`,
         'Cancelled by requesting outlet / schedule change'
       );
       if (reason === null) return;
@@ -1459,12 +1327,12 @@
             timestamp: new Date().toISOString()
           });
         } catch {}
-        showToast(`🗑️ Batch Order ${orderId} cancelled & logged to D1 Audit Trail.`);
+        showToast(`🗑️ Batch Order ${orderId} cancelled.`);
       }, 320);
     }
 
     // ========================================================================
-    // 6. RIGHT-HAND LIVE QUEUE RENDERER & D1 POLLER
+    // 6. QUEUE RENDERER & D1 POLLER
     // ========================================================================
     function renderRightQueueDock() {
       const matCount = pendingRequestsQueue.length;
@@ -1478,10 +1346,10 @@
       const container = document.getElementById('liveQueueCardsContainer');
       if (total === 0) {
         container.innerHTML = `
-          <div class="text-center py-10 px-4 rounded-2xl border border-dashed border-gray-300 text-xs text-gray-400 space-y-1">
-            <div class="text-lg">✨</div>
-            <div class="font-bold text-gray-600">All Queues Sparkling Clean</div>
-            <div>Submitted requests and batch orders appear here and automatically vanish once Issued or Cancelled.</div>
+          <div class="text-center py-8 px-4 rounded-2xl border border-dashed border-gray-300 text-xs text-gray-400 space-y-1">
+            <div class="text-xl">✨</div>
+            <div class="font-bold text-gray-600">All Queues Clean</div>
+            <div class="text-[10px]">Submitted requests appear here and vanish when processed.</div>
           </div>`;
         return;
       }
@@ -1495,18 +1363,18 @@
           return `
             <div id="qcard_${reqId}" class="p-3 rounded-xl border border-amber-300 bg-amber-50/70 space-y-2 transition-all duration-300">
               <div class="flex items-center justify-between">
-                <span class="font-mono-code font-extrabold text-[11px] px-2 py-0.5 rounded bg-[#240e32] text-[#E5C585]">${reqId}</span>
-                <span class="text-[10px] font-bold text-amber-800 uppercase">⏳ Awaiting Jade</span>
+                <span class="font-mono-code font-extrabold text-[10px] px-1.5 py-0.5 rounded bg-[#240e32] text-[#E5C585]">${reqId}</span>
+                <span class="text-[9px] font-bold text-amber-800 uppercase">⏳ Awaiting Jade</span>
               </div>
               <div class="text-xs font-bold text-[#240e32]">${req.requestingLine}</div>
-              <div class="text-[11px] text-gray-600">${req.purpose}</div>
-              <div class="text-[11px] font-mono-code bg-white p-2 rounded border border-amber-200 text-emerald-900 truncate" title="${itemsSummary}">
+              <div class="text-[10px] text-gray-600">${req.purpose}</div>
+              <div class="text-[10px] font-mono-code bg-white p-1.5 rounded border border-amber-200 text-emerald-900 truncate" title="${itemsSummary}">
                 ${itemsSummary}
               </div>
               <div class="flex justify-between items-center pt-1">
-                <span class="text-[10px] text-gray-500">By: ${req.requisitionedBy}</span>
-                <button type="button" onclick="cancelKioskMaterialRequest('${reqId}')" class="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-red-100 hover:bg-red-600 text-red-700 hover:text-white transition">
-                  ✕ Cancel Request
+                <span class="text-[9px] text-gray-500">By: ${req.requisitionedBy}</span>
+                <button type="button" onclick="cancelKioskMaterialRequest('${reqId}')" class="px-2 py-1 rounded text-[10px] font-bold bg-red-100 hover:bg-red-600 text-red-700 hover:text-white transition">
+                  Cancel
                 </button>
               </div>
             </div>`;
@@ -1518,15 +1386,15 @@
           return `
             <div id="qcard_${ord.orderId}" class="p-3 rounded-xl border border-purple-300 bg-purple-50/70 space-y-2 transition-all duration-300">
               <div class="flex items-center justify-between">
-                <span class="font-mono-code font-extrabold text-[11px] px-2 py-0.5 rounded bg-purple-900 text-white">${ord.orderId}</span>
-                <span class="text-[10px] font-bold text-purple-800 uppercase">🥖 Awaiting Romeo</span>
+                <span class="font-mono-code font-extrabold text-[10px] px-1.5 py-0.5 rounded bg-purple-900 text-white">${ord.orderId}</span>
+                <span class="text-[9px] font-bold text-purple-800 uppercase">🥖 Awaiting Romeo</span>
               </div>
               <div class="text-xs font-bold text-[#240e32]">${ord.recipeName}</div>
-              <div class="text-[11px] text-gray-600">${ord.outletName} · <strong>${ord.requestedQtyPcs} pcs (${ord.batchMultiplier}x)</strong></div>
+              <div class="text-[10px] text-gray-600">${ord.outletName} · <strong>${ord.requestedQtyPcs} pcs</strong></div>
               <div class="flex justify-between items-center pt-1">
-                <span class="text-[10px] text-gray-500">By: ${ord.requisitionedBy || ord.enteredBy || 'Staff'}</span>
-                <button type="button" onclick="cancelKioskBatchOrder('${ord.orderId}')" class="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-red-100 hover:bg-red-600 text-red-700 hover:text-white transition">
-                  ✕ Decline / Cancel
+                <span class="text-[9px] text-gray-500">By: ${ord.requisitionedBy || ord.enteredBy || 'Staff'}</span>
+                <button type="button" onclick="cancelKioskBatchOrder('${ord.orderId}')" class="px-2 py-1 rounded text-[10px] font-bold bg-red-100 hover:bg-red-600 text-red-700 hover:text-white transition">
+                  Cancel
                 </button>
               </div>
             </div>`;
@@ -1545,13 +1413,13 @@
         });
         const text = await res.text();
         if (!res.ok || text.trim().startsWith('<')) {
-          badge.className = 'text-[10px] font-bold px-2 py-0.5 rounded bg-amber-600 text-white';
-          badge.textContent = '● LOCAL CACHE';
+          badge.className = 'text-[9px] md:text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-600 text-white';
+          badge.textContent = '● LOCAL';
           return;
         }
 
-        badge.className = 'text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-700 text-emerald-100';
-        badge.textContent = '● CLOUD D1 ONLINE';
+        badge.className = 'text-[9px] md:text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-700 text-emerald-100';
+        badge.textContent = '● D1 ONLINE';
 
         const data = JSON.parse(text);
         const events = Array.isArray(data.events) ? data.events : [];
@@ -1606,8 +1474,8 @@
 
         if (changed) renderRightQueueDock();
       } catch {
-        badge.className = 'text-[10px] font-bold px-2 py-0.5 rounded bg-amber-600 text-white';
-        badge.textContent = '● OFFLINE QUEUE';
+        badge.className = 'text-[9px] md:text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-600 text-white';
+        badge.textContent = '● OFFLINE';
       }
     }
 
@@ -1621,7 +1489,7 @@
         });
     }, 1000);
 
-    // Boot
+    // Boot Kiosk
     loadSharedState();
     populateSelects();
     applyTheme(currentThemeId);
