@@ -1,81 +1,73 @@
-# JJB-WMS AI Integration Protocol
+# JJB-WMS Architecture & Data Handbook
 
-**Document ID:** JJB-DOC-003  
-**Target:** Automated Bots, Web Scrapers, LLM Agents
-
----
-
-## 1. Overview
-
-The JJB-WMS is designed to be highly readable by automated agents. Any external script interacting with the system should use the central sync API: 
-`POST /api/sync`
+**Document ID:** JJB-DOC-001  
+**Target:** Cloudflare D1 (SQLite) & Edge Functions  
+**Version:** Phase 1.5 through Phase 4.0 (Production Ready)
 
 ---
 
-## 2. Reading System State
+## 1. Database Architecture (Cloudflare D1)
 
-AI agents should **not** attempt to scrape the React UI. They should query the data directly.
+The system relies on a relational SQLite database hosted on Cloudflare D1, scaled at the edge. It consists of **24 tables** categorized into 5 operational groups.
 
-### 2.1 Reading Inventory
-Use the Cloudflare D1 API or SQL console:
-```sql
-SELECT code, name, current_balance, primary_uom 
-FROM materials 
-WHERE is_test_data = 0;
-```
+### 1.1 The `is_test_data` Paradigm
+Every operational table includes an `is_test_data INTEGER DEFAULT 0` column. 
+- When **Sandbox Mode** is enabled in the Admin Panel, the UI sets `is_test_data = 1` on all outgoing events.
+- This allows testing new features on the factory floor without polluting production balances.
+- The Admin Panel can execute an atomic 20-table child-first purge to remove all training data without affecting live production balances.
 
-### 2.2 Reading Active Orders
-```sql
-SELECT order_id, recipe_name, requested_qty_pcs, status 
-FROM batch_orders 
-WHERE is_test_data = 0 AND status != 'RELEASED';
-```
+### 1.2 The FEFO Engine (First-Expired, First-Out)
+Inventory is tracked at the lot level (`material_lots`). When a withdrawal occurs:
+1. `withdrawal_items` are written to the database.
+2. The sync engine decrements `material_lots.qty_sec` starting from the oldest `expiry_date`.
+3. A reconciliation query runs immediately: 
+   `UPDATE materials SET current_balance = COALESCE(SUM(material_lots.qty_sec), 0)`
+4. This ensures the parent `materials` table always reflects the exact sum of the child lots.
 
----
-
-## 3. Writing Data Safely
-
-If an AI needs to inject an order or trigger a notification, it must POST to `/api/sync`.
-
-### 3.1 The Payload Shape
-Every POST must include:
-- `event_type`: The action being performed (e.g., `OUTLET_BATCH_ORDER`).
-- `idempotency_key`: A unique string (UUID or timestamp) to prevent double-processing.
-- `payload`: The actual data payload.
-
-### 3.2 Safe vs Unsafe Events
-
-| Event Type | Safe for AI? | Description |
-|------------|--------------|-------------|
-| `WITHDRAWAL_REQUEST_SUBMITTED` | ✅ **SAFE** | Queues a request for Jade. Does not deduct stock. |
-| `OUTLET_BATCH_ORDER` | ✅ **SAFE** | Queues a batch order for Romeo. |
-| `SPECIALTY_PROPOSAL_CREATED` | ✅ **SAFE** | Proposes a new recipe for QA review. |
-| `WITHDRAWAL_SAVED` | ❌ **UNSAFE** | **DEDUCTS STOCK.** Only allowed via the authenticated Admin UI. |
-| `RECEIVING_SAVED` | ❌ **UNSAFE** | **ADDS STOCK.** Only allowed via the authenticated Admin UI. |
+### 1.3 Table Catalog Overview
+| Group | Tables | Purpose |
+|-------|--------|---------|
+| **A (Master)** | `materials`, `material_lots`, `recipes`, `recipe_ingredients`, `suppliers`, `users` | Static data, formulas, and reference lists. |
+| **B (Transactions)** | `receiving_reports`, `withdrawals`, `batch_orders`, `adjustments`, `quarantine_ncr` | Core operational headers. |
+| **C (Line Items)** | `receiving_items`, `withdrawal_items`, `order_items`, `specialty_recipe_ingredients` | Detail rows that map to Master data. |
+| **D (Audit)** | `audit_log`, `sync_events`, `admin_action_log` | Immutable tracking. |
+| **E (Config)** | `system_config` | Global settings (e.g., EOD email recipients). |
 
 ---
 
-## 4. Example cURL Request
+## 2. The Projection Engine (`functions/api/sync.js`)
 
-To inject a new batch order request from an external script:
+This edge function acts as the central write API. It is designed to be idempotent and fault-tolerant.
 
-```bash
-curl -X POST https://jjb-wms-app.pages.dev/api/sync \
-  -H "Content-Type: application/json" \
-  -d '{
-    "event_type": "OUTLET_BATCH_ORDER",
-    "idempotency_key": "ai-bot-order-20261111-001",
-    "payload": {
-      "orderId": "ORD-BOT-001",
-      "outletName": "Pan de Verde Outlet",
-      "recipeSku": "BRD-PAN-6KG",
-      "recipeName": "Classic Pandesal – 6.0 kg",
-      "requestedQtyPcs": 170,
-      "batchMultiplier": 1.0,
-      "requisitionedBy": "AI Auto-Replenish Bot",
-      "status": "PENDING_BATCHING"
-    }
-  }'
-```
+### 2.1 Shape Detection
+The API accepts two JSON shapes:
+- **Shape A (React):** `{ event_type, idempotency_key, payload: {} }`
+- **Shape B (Kiosk):** `{ eventType, idempotencyKey, ...flatFields }`
 
-After this request, Romeo's Batching Workbench will display the order within 12 seconds (via the polling loop).
+The handler uses a robust extraction block to normalize both shapes into `type`, `key`, and `payload` variables.
+
+### 2.2 Idempotency
+Every request is saved to the `sync_events` table. If a client retries a failed request, the API detects the existing `idempotency_key` and skips double-projection, returning a `200 OK` with the cached result.
+
+### 2.3 The Deduction Gate
+**Critical Security Rule:** 
+The `MATERIAL_WITHDRAWAL` event was intentionally removed from the `HANDLERS` map. 
+- Outlets submit `WITHDRAWAL_REQUEST_SUBMITTED` (no-op handler, only logs to `sync_events`).
+- Only the Admin (`Jade`) can trigger a `WITHDRAWAL_SAVED` event, which is the *only* event authorized to decrement `material_lots`.
+
+---
+
+## 3. UI Synchronization & Cross-Device Polling
+
+The frontend uses a hybrid synchronization model because factory floor kiosks and admin desktops are often on different devices.
+
+### 3.1 Immediate Sync (Same Browser)
+- Uses `localStorage` and `BroadcastChannel`.
+- When a form submits, it immediately updates React state and `localStorage`.
+- Other tabs in the same browser instantly see the change.
+
+### 3.2 Cross-Device Polling (Different Devices)
+- The Main Terminal polls `GET /api/sync?since_id=N` every **12 seconds**.
+- This fetches `WITHDRAWAL_REQUEST_SUBMITTED` and `BATCH_ORDER_SAVED` events from the Kiosk.
+- The client stores the latest `server_max_id` in `localStorage` to prevent duplicate fetches.
+- **Result:** If a phone submits an order, Jade's desktop shows a notification bell within 12 seconds.
