@@ -2,7 +2,8 @@ import React, { useState, useMemo } from 'react';
 import { 
   Search, Filter, AlertTriangle, Package, Clock, Warehouse, 
   ArrowUpRight, ArrowDownRight, Layers, Eye, RefreshCw, Sparkles,
-  FileSpreadsheet, Upload, Download, Store, Scale, FileText, CheckCircle2
+  FileSpreadsheet, Upload, Download, Store, Scale, FileText, CheckCircle2,
+  Users
 } from 'lucide-react';
 
 export default function ExecutiveDashboard({ 
@@ -127,6 +128,14 @@ export default function ExecutiveDashboard({
           >
             <Store size={14} />
             <span>Order Ledger</span>
+          </button>
+
+          <button
+            onClick={() => onQuickAction('customers')}
+            className="bg-white/10 hover:bg-white/20 border border-white/20 px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition"
+          >
+            <Users size={14} className="text-[#E5C585]" />
+            <span>Customers</span>
           </button>
         </div>
       </div>

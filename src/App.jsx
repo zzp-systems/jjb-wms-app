@@ -13,6 +13,7 @@ import InitialDataImportModal from './components/InitialDataImportModal';
 import LoginModal from './components/LoginModal';
 import OutletRequisitionPortal from './components/OutletRequisitionPortal';
 import AdminDatabaseModal from './components/AdminDatabaseModal';
+import Customers from './components/Customers';
 
 import { MASTER_MATERIALS, STORAGE_ROOMS } from './data/materialsData';
 import { MASTER_RECIPES, OUTLETS, getAllMasterRecipes } from './data/recipesData';
@@ -47,12 +48,8 @@ export const UI_PREF_KEY = 'JJB_WMS_UI_PREFS';
 export const WORKER_SYNC_URL = '/api/sync';
 export const GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbwBll5ZKuiBO0wX9WSXGRd-Tua4QpxbfKAcrnWhVmdkjkU_3mnwgI7bX-iiRgjHlkYa/exec';
 
-// Polling cadence (3s = near real-time, reasonable D1 cost)
 export const POLL_INTERVAL_MS = 3000;
 
-// ============================================================================
-// Helpers
-// ============================================================================
 const resolveUserId = (nameOrId, authUserObj = null) => {
   if (authUserObj?.id) {
     const byAuth = AUTH_USERS.find((u) => u.id === authUserObj.id || u.username === authUserObj.username);
@@ -125,7 +122,6 @@ const loadUiPrefs = () => {
 };
 
 export default function App() {
-  // Persistence Helpers
   const getSaved = (key, fallback) => {
     try {
       const saved = localStorage.getItem(`${STORAGE_KEY}_${key}`);
@@ -144,7 +140,6 @@ export default function App() {
     }
   };
 
-  // Main WMS State
   const [inventory, setInventory] = useState(() => getSaved('inventory', MASTER_MATERIALS));
   const [receivingReports, setReceivingReports] = useState(() => getSaved('receiving', INITIAL_RECEIVING_REPORTS));
   const [withdrawals, setWithdrawals] = useState(() => getSaved('withdrawals', INITIAL_WITHDRAWALS));
@@ -154,7 +149,6 @@ export default function App() {
   const [quarantineList, setQuarantineList] = useState(() => getSaved('quarantine', INITIAL_QUARANTINE));
   const [auditLogs, setAuditLogs] = useState(() => getSaved('audit_logs', INITIAL_AUDIT_LOGS));
 
-  // UI Preferences
   const initialUiPrefs = loadUiPrefs();
   const [themeId, setThemeId] = useState(initialUiPrefs.themeId || 'jjb-gold');
   const [navLayout, setNavLayout] = useState(initialUiPrefs.navLayout || 'sidebar');
@@ -165,7 +159,6 @@ export default function App() {
     } catch (e) {}
   }, [navLayout, themeId]);
 
-  // Auth State
   const [authUser, setAuthUser] = useState(() => {
     try {
       const saved = localStorage.getItem('JJB_WMS_AUTH_USER');
@@ -208,17 +201,14 @@ export default function App() {
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [recipes, setRecipes] = useState(() => getAllMasterRecipes());
 
-  // IndexedDB Outbox State
   const [outboxCount, setOutboxCount] = useState(0);
   const [isOutboxModalOpen, setIsOutboxModalOpen] = useState(false);
   const [deadEvents, setDeadEvents] = useState([]);
 
-  // Notification State
   const [unreadNotifications, setUnreadNotifications] = useState([]);
   const lastSeenSyncIdRef = useRef(Number(localStorage.getItem(`${STORAGE_KEY}_last_sync_id`) || 0));
   const initialPollDoneRef = useRef(false);
 
-  // Concurrency Guards
   const flushInFlightRef = useRef(false);
   const flushAgainRef = useRef(false);
   const pollInFlightRef = useRef(false);
@@ -228,9 +218,6 @@ export default function App() {
     setTimeout(() => setToastMessage(null), 4500);
   }, []);
 
-  // ============================================================================
-  // Outbox Diagnostics Logic
-  // ============================================================================
   const loadDeadEvents = useCallback(async () => {
     const events = await getDeadEvents();
     setDeadEvents(events);
@@ -255,9 +242,6 @@ export default function App() {
     }
   };
 
-  // ============================================================================
-  // Cross-Device D1 Poller
-  // ============================================================================
   const pollCrossDeviceEvents = useCallback(async (force = false) => {
     if (isOffline && !force) return;
     if (pollInFlightRef.current) return;
@@ -489,9 +473,6 @@ export default function App() {
     }
   }, [isOffline, showToast]);
 
-  // ============================================================================
-  // Offline-First Outbox Flusher
-  // ============================================================================
   const flushOutbox = useCallback(async () => {
     if (isOffline) return;
     if (flushInFlightRef.current) {
@@ -579,9 +560,6 @@ export default function App() {
     }
   }, [isOffline, pollCrossDeviceEvents, showToast]);
 
-  // ============================================================================
-  // Unified Edge Sync Dispatcher
-  // ============================================================================
   const postSyncEvent = useCallback(async (eventType, idempotencyKey, payloadData = {}) => {
     try {
       const enrichedPayload = {
@@ -595,9 +573,6 @@ export default function App() {
     }
   }, [isTestMode, flushOutbox]);
 
-  // ============================================================================
-  // Boot & Polling Lifecycle
-  // ============================================================================
   useEffect(() => {
     initOfflineDb()
       .then(() => flushOutbox())
@@ -623,9 +598,6 @@ export default function App() {
     }
   }, [isOffline, flushOutbox]);
 
-  // ============================================================================
-  // Existing Workflows
-  // ============================================================================
   const handleApproveSpecialtyRecipe = (proposalId) => {
     try {
       const raw = localStorage.getItem('JJB_WMS_LIVE_V4_6_SPECIALTY_RECIPES');
@@ -693,7 +665,6 @@ export default function App() {
     showToast('Terminal session locked. Please sign in to proceed.');
   };
 
-  // Sync state to LocalStorage
   useEffect(() => { saveToStorage('inventory', inventory); }, [inventory]);
   useEffect(() => { saveToStorage('receiving', receivingReports); }, [receivingReports]);
   useEffect(() => { saveToStorage('withdrawals', withdrawals); }, [withdrawals]);
@@ -703,7 +674,6 @@ export default function App() {
   useEffect(() => { saveToStorage('quarantine', quarantineList); }, [quarantineList]);
   useEffect(() => { saveToStorage('audit_logs', auditLogs); }, [auditLogs]);
 
-  // Real-Time Cross-Tab & Floor Kiosk Synchronization
   useEffect(() => {
     const reloadExternalData = () => {
       try {
@@ -809,7 +779,6 @@ export default function App() {
     );
   };
 
-  // 23:45 PHT NIGHTLY EOD WATCHER
   useEffect(() => {
     const checkEodTime = () => {
       try {
@@ -1551,6 +1520,7 @@ export default function App() {
     if (action === 'batching') setActiveTab('batching');
     if (action === 'orderHistory') setActiveTab('orderHistory');
     if (action === 'portal') setActiveTab('portal');
+    if (action === 'customers') setActiveTab('customers');
   };
 
   const handleResetData = () => {
@@ -1595,7 +1565,6 @@ export default function App() {
     showToast('System backup downloaded!');
   };
 
-  // Counts
   const lowStockCount = inventory.filter((i) => i.currentBalance <= i.threshold).length;
   const pendingBatchCount = batchOrders.filter((b) => b.status === 'PENDING_BATCHING').length;
   const pendingBulkApprovalCount = batchOrders.filter((b) => b.bulkRequestStatus === 'PENDING_JADE_APPROVAL').length;
@@ -1625,10 +1594,9 @@ export default function App() {
         </div>
       )}
 
-      {/* Outbox sync indicator — CLICKABLE to open diagnostics */}
       {outboxCount > 0 && (
-        <button 
-          onClick={() => setIsOutboxModalOpen(true)} 
+        <button
+          onClick={() => setIsOutboxModalOpen(true)}
           className="fixed bottom-4 left-4 z-50 bg-amber-500 hover:bg-amber-600 transition text-[#240e32] text-xs font-extrabold px-3 py-2 rounded-xl shadow-2xl border border-amber-300 flex items-center gap-2"
         >
           <span className="animate-pulse text-base">⚡</span>
@@ -1797,6 +1765,10 @@ export default function App() {
               />
             )}
 
+            {activeTab === 'customers' && (
+              <Customers />
+            )}
+
             {activeTab === 'reports' && (
               <ReportsModule
                 inventory={inventory}
@@ -1845,7 +1817,6 @@ export default function App() {
         </main>
       </div>
 
-      {/* Outbox Diagnostics Modal */}
       {isOutboxModalOpen && (
         <div className="fixed inset-0 z-[60] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border-2 border-[#C8963E] space-y-4">

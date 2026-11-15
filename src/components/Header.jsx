@@ -3,7 +3,7 @@ import {
   LayoutDashboard, PackagePlus, PackageMinus, Scale, SlidersHorizontal,
   FileSpreadsheet, Clock, ShieldCheck, Wifi, WifiOff, Smartphone, Monitor,
   Upload, UserCheck, Store, ClipboardList, LogOut, Database, FlaskConical,
-  Palette, PanelLeft, Activity, Menu, X
+  Palette, PanelLeft, Activity, Menu, X, Users
 } from 'lucide-react';
 
 export const ROLES = [
@@ -43,6 +43,7 @@ export const NAV_CATEGORIES = [
     group: 'Ledgers & Compliance',
     items: [
       { id: 'orderHistory', label: 'Active Queue Ledger', icon: ClipboardList },
+      { id: 'customers', label: 'Customer Directory', icon: Users },
       { id: 'reports', label: 'Reports & POs', icon: FileSpreadsheet },
       { id: 'eod', label: '23:45 EOD Dossier', icon: Clock },
       { id: 'audit', label: 'Immutable Audit Trail', icon: ShieldCheck }
@@ -50,9 +51,6 @@ export const NAV_CATEGORIES = [
   }
 ];
 
-// ---------------------------------------------------------------------------
-// Helper: shared badge resolver (used by both Header topbar + SidebarNavigation)
-// ---------------------------------------------------------------------------
 const resolveBadge = (item, { lowStockCount, pendingBatchCount, pendingBulkApprovalCount }) => {
   if (item.staticBadge) return item.staticBadge;
   if (item.badgeKey === 'lowStock' && lowStockCount > 0) return lowStockCount;
@@ -61,9 +59,6 @@ const resolveBadge = (item, { lowStockCount, pendingBatchCount, pendingBulkAppro
   return null;
 };
 
-// ===========================================================================
-// Default export — Top Header Bar (includes top-nav when navLayout === 'topbar')
-// ===========================================================================
 export default function Header({
   currentRole,
   setCurrentRole,
@@ -345,9 +340,6 @@ export default function Header({
   );
 }
 
-// ===========================================================================
-// Named export — SidebarNavigation (rendered by App.jsx inside a flex-row)
-// ===========================================================================
 export function SidebarNavigation({
   activeTab,
   setActiveTab,
