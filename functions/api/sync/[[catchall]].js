@@ -163,7 +163,6 @@ export async function onRequest(context) {
       return json({ error: 'order.customer_or_outlet is required' }, 400);
     }
 
-    // ── Idempotency check ──
     const existingEvent = await env.DB.prepare(
       'SELECT payload FROM sync_events WHERE idempotency_key = ?'
     ).bind(idempotency_key).first();
@@ -173,62 +172,47 @@ export async function onRequest(context) {
       return json({ success: true, order_id: payload.order_id, action: 'idempotent' });
     }
 
-    // ── Create the order ──
     const orderId = crypto.randomUUID();
     const now = new Date().toISOString();
 
+    // 1. Insert into financial `orders` table
     await env.DB.prepare(
       `INSERT INTO orders (order_id, customer_or_outlet, contact_person, channel, status, order_date, total_cost_centavos, crm_deal_id, source)
        VALUES (?,?,?,?,?,?,?,?,?)`
     ).bind(
-      orderId,
-      order.customer_or_outlet,
-      order.contact_person || null,
-      order.channel || 'CRM-B2B',
-      order.status || 'Pending',
-      now.slice(0, 10),
-      order.total_cost_centavos || 0,
-      order.crm_deal_id || null,
-      order.source || 'crm'
+      orderId, order.customer_or_outlet, order.contact_person || null, order.channel || 'CRM-B2B',
+      order.status || 'Pending', now.slice(0, 10), order.total_cost_centavos || 0,
+      order.crm_deal_id || null, order.source || 'crm'
     ).run();
 
-    // ── Insert line items if provided ──
+    // 2. Insert into `batch_orders` table so it appears in the WMS UI Active Queue Ledger!
+    await env.DB.prepare(
+      `INSERT INTO batch_orders (order_id, outlet_name, recipe_sku, recipe_name_snapshot, requested_qty_pcs, status, crm_deal_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+    ).bind(
+      orderId, 
+      order.customer_or_outlet, 
+      'CRM-B2B', 
+      `CRM Deal: ${order.customer_or_outlet}`, 
+      100, // Default quantity for the UI
+      'PENDING_BATCHING', 
+      order.crm_deal_id || null
+    ).run();
+
+    // 3. Line items
     if (order.line_items?.length) {
       for (const item of order.line_items) {
-        const unitCost = item.unit_cost_centavos || 0;
-        const qty = item.qty || 0;
-        const lineTotal = Math.round(unitCost * qty);
-
         await env.DB.prepare(
           `INSERT INTO order_items (order_id, name, sku, qty, unit_cost_centavos, line_total_centavos)
            VALUES (?,?,?,?,?,?)`
-        ).bind(orderId, item.name || null, item.sku || null, qty, unitCost, lineTotal).run();
+        ).bind(orderId, item.name || null, item.sku || null, item.qty || 0, item.unit_cost_centavos || 0, (item.unit_cost_centavos || 0) * (item.qty || 0)).run();
       }
     }
 
-    // ── Log sync event for idempotency ──
+    // 4. Log sync event
     await env.DB.prepare(
       'INSERT INTO sync_events (idempotency_key, event_type, payload) VALUES (?,?,?)'
     ).bind(idempotency_key, 'ORDER_CREATED_FROM_CRM', JSON.stringify({ order_id: orderId, crm_deal_id: order.crm_deal_id })).run();
-
-    // ── Push order status back to CRM via webhook (fire-and-forget) ──
-    try {
-      const crmUrl = (env.CRM_API_URL || '').replace(/\/$/, '');
-      const syncKey = env.SYNC_API_KEY;
-      if (crmUrl) {
-        await fetch(`${crmUrl}/api/sync/receive-wms`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-Sync-Key': syncKey || '' },
-          body: JSON.stringify({
-            wms_order_id: orderId,
-            status: 'Pending',
-            crm_deal_id: order.crm_deal_id,
-          }),
-        });
-      }
-    } catch (err) {
-      console.error('Webhook back to CRM failed:', err);
-    }
 
     return json({ success: true, order_id: orderId });
   }
