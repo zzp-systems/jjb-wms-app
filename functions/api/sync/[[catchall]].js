@@ -154,28 +154,6 @@ export async function onRequest(context) {
 
   // ──────────────────────────────────────────────────
   // POST /api/sync/create-order
-  // Receives a confirmed CRM deal and creates a WMS sales order.
-  // The WMS will then reserve inventory for fulfillment.
-  //
-  // Request body:
-  //   {
-  //     "idempotency_key": "crm-deal-<uuid>",
-  //     "order": {
-  //       "customer_or_outlet": "SM Davao",
-  //       "contact_person": "Juan Dela Cruz",
-  //       "channel": "CRM-B2B",
-  //       "status": "Pending",
-  //       "total_cost_centavos": 1500000,
-  //       "source": "crm",
-  //       "crm_deal_id": "<uuid>",
-  //       "line_items": [   ← optional, for future use
-  //         { "sku": "FB-001", "name": "Pandesal", "qty": 100, "unit_cost_centavos": 500 }
-  //       ]
-  //     }
-  //   }
-  //
-  // Response:
-  //   { "success": true, "order_id": "<uuid>" }
   // ──────────────────────────────────────────────────
   if (path === '/api/sync/create-order' && request.method === 'POST') {
     const body = await request.json();
@@ -200,16 +178,18 @@ export async function onRequest(context) {
     const now = new Date().toISOString();
 
     await env.DB.prepare(
-      `INSERT INTO orders (order_id, customer_or_outlet, contact_person, channel, status, order_date, total_cost_centavos)
-       VALUES (?,?,?,?,?,?,?)`
+      `INSERT INTO orders (order_id, customer_or_outlet, contact_person, channel, status, order_date, total_cost_centavos, crm_deal_id, source)
+       VALUES (?,?,?,?,?,?,?,?,?)`
     ).bind(
       orderId,
       order.customer_or_outlet,
       order.contact_person || null,
       order.channel || 'CRM-B2B',
       order.status || 'Pending',
-      now.slice(0, 10), // order_date (YYYY-MM-DD)
-      order.total_cost_centavos || 0
+      now.slice(0, 10),
+      order.total_cost_centavos || 0,
+      order.crm_deal_id || null,
+      order.source || 'crm'
     ).run();
 
     // ── Insert line items if provided ──
@@ -222,14 +202,7 @@ export async function onRequest(context) {
         await env.DB.prepare(
           `INSERT INTO order_items (order_id, name, sku, qty, unit_cost_centavos, line_total_centavos)
            VALUES (?,?,?,?,?,?)`
-        ).bind(
-          orderId,
-          item.name || null,
-          item.sku || null,
-          qty,
-          unitCost,
-          lineTotal
-        ).run();
+        ).bind(orderId, item.name || null, item.sku || null, qty, unitCost, lineTotal).run();
       }
     }
 
@@ -239,9 +212,8 @@ export async function onRequest(context) {
     ).bind(idempotency_key, 'ORDER_CREATED_FROM_CRM', JSON.stringify({ order_id: orderId, crm_deal_id: order.crm_deal_id })).run();
 
     // ── Push order status back to CRM via webhook (fire-and-forget) ──
-    // This tells the CRM the order was created successfully
     try {
-      const crmUrl = env.CRM_API_URL;
+      const crmUrl = (env.CRM_API_URL || '').replace(/\/$/, '');
       const syncKey = env.SYNC_API_KEY;
       if (crmUrl) {
         await fetch(`${crmUrl}/api/sync/receive-wms`, {
@@ -254,8 +226,8 @@ export async function onRequest(context) {
           }),
         });
       }
-    } catch {
-      // Webhook failure is non-fatal — order was created
+    } catch (err) {
+      console.error('Webhook back to CRM failed:', err);
     }
 
     return json({ success: true, order_id: orderId });
