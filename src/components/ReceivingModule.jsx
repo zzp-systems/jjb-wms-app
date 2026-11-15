@@ -95,7 +95,7 @@ export default function ReceivingModule({
   const grandTotal = receivingItems.reduce((s, it) => s + (it.totalAmount || 0), 0);
   const totalDamaged = receivingItems.reduce((s, it) => s + (parseFloat(it.qtyDamaged) || 0), 0);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!poNo.trim()) {
       alert('Please provide the Purchase Order (PO) or Delivery Receipt (DR) number.');
@@ -112,15 +112,42 @@ export default function ReceivingModule({
       overallStatus: totalDamaged > 0 ? `PARTIALLY DAMAGED (${totalDamaged} units damaged)` : 'ACCEPTED CLEAN',
       totalPaid: grandTotal,
       qcSignoff: `${currentRole} (Warehouse Supervisor)`,
-      notes: shipmentNotes   // ← NEW
+      notes: shipmentNotes
     };
 
+    // 1. Save to WMS (D1)
     onSaveReceiving(newReport);
+
+    // 2. Sync to ARAP (Z-Books)
+    try {
+      const token = localStorage.getItem('jjb_wms_token'); // Ensure this matches your auth token key
+      const res = await fetch('/api/receiving-sync', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          receiving_id: newReport.reportNo,
+          supplier_name: newReport.supplier,
+          total_amount: newReport.totalPaid,
+          invoice_date: newReport.date,
+          due_date: newReport.date, // Assuming due immediately
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(`✅ Receiving saved. AP Invoice ${data.ap_invoice_number} created in ARAP.`);
+      }
+    } catch (err) {
+      console.error('ARAP receiving sync failed:', err);
+      // Non-fatal, WMS save already succeeded
+    }
 
     // Reset for next shipment
     setReportNo(`RR-${todayStr.replace(/-/g, '')}-${String(receivingReports.length + 2).padStart(3, '0')}`);
     setPoNo(''); setDrNo(''); setInvoiceNo('');
-    setShipmentNotes('');   // ← NEW
+    setShipmentNotes('');
   };
 
   return (

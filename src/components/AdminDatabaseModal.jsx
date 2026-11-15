@@ -52,15 +52,16 @@ export default function AdminDatabaseModal({
   // bodies by checking res.ok BEFORE res.json() — this is the fix for the
   // "Unexpected token '<'" error when the server returns a 500.
   // =========================================================================
-  const adminFetch = useCallback(async (path, options = {}) => {
-    const res = await fetch(path, {
-      ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        'X-JJB-Admin-User': adminId,
-        ...(options.headers || {})
-      }
-    });
+const adminFetch = useCallback(async (path, options = {}) => {
+  // Assume you pass the token as a prop to this modal from App.jsx
+  const res = await fetch(path, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${adminToken}`, // ← SECURED
+      ...(options.headers || {})
+    }
+  });
 
     // Non-2xx responses may be HTML (Cloudflare error pages). Check first,
     // then attempt JSON parse for a structured error message if possible.
@@ -622,10 +623,10 @@ export default function AdminDatabaseModal({
             >
               <div className="flex items-center gap-2.5 text-red-700">
                 <ShieldAlert size={24} />
-                <h3 className="font-extrabold text-base">Confirm 18-Step Test Data Purge</h3>
+                <h3 className="font-extrabold text-base">Confirm 20-Table Test Data Purge</h3>
               </div>
               <p className="text-xs text-gray-600 leading-relaxed">
-                This will execute the FK-safe 18-step child-first delete across all operational tables where{' '}
+                This will execute the FK-safe 20-table child-first purge (child tables first, then parents, then users last) across all operational tables where{' '}
                 <code className="bg-amber-100 px-1 rounded font-bold">is_test_data = 1</code> ({totalTestRows} rows currently flagged) and automatically recalculate{' '}
                 <code>materials.current_balance</code> from surviving production lots.
               </p>

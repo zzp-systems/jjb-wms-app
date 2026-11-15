@@ -264,6 +264,24 @@ export default function OrderHistory({
       if (selectedOrder && selectedOrder.orderId === orderId) {
         setSelectedOrder(prev => ({ ...prev, status: newStatus }));
       }
+
+      // ── NEW: If status updated to Delivered, sync to ARAP ──
+      if (newStatus === 'Delivered') {
+        const token = localStorage.getItem('jjb_wms_token');
+        try {
+          await fetch('/api/delivery-sync', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify({ order_id: orderId, status: 'DELIVERED' }),
+          });
+        } catch (err) {
+          console.error('ARAP delivery sync failed:', err);
+        }
+      }
+
     } catch (err) {
       console.error("Status update error:", err);
     } finally {

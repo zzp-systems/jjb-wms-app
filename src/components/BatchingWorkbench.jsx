@@ -208,6 +208,27 @@ export default function BatchingWorkbench({
     });
   };
 
+  // ── NEW HELPER: Sync Delivery to ARAP ──
+  const syncDeliveryToArap = async (orderId, status, crmDealId) => {
+    const token = localStorage.getItem('jjb_wms_token'); // adjust if your token key is different
+    try {
+      const res = await fetch('/api/delivery-sync', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ order_id: orderId, status, crm_deal_id: crmDealId || null }),
+      });
+      const data = await res.json();
+      if (data.success && data.arap_invoice_found) {
+        console.log(`✅ ARAP AR invoice updated to Delivered for order ${orderId}`);
+      }
+    } catch (err) {
+      console.error('ARAP delivery sync failed:', err);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Title & Overview Banner */}
@@ -503,7 +524,12 @@ export default function BatchingWorkbench({
                       )}
                       {isBatched && (
                         <button
-                          onClick={() => onUpdateOrderStatus(order.orderId, 'RELEASED')}
+                          onClick={async () => {
+                            // 1. Update WMS D1
+                            await onUpdateOrderStatus(order.orderId, 'RELEASED');
+                            // 2. Sync to ARAP
+                            await syncDeliveryToArap(order.orderId, 'RELEASED', order.crm_deal_id);
+                          }}
                           className="bg-[#1E7A3E] text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow flex items-center gap-1"
                         >
                           <Truck size={13} /> Release to Outlet
@@ -644,6 +670,7 @@ export default function BatchingWorkbench({
             </button>
           </div>
         </form>
+        
       )}
     </div>
   );

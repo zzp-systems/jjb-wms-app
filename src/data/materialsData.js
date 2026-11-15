@@ -584,7 +584,7 @@ export const MASTER_MATERIALS = [
     "room": "Dry Room 2",
     "primaryUom": "Rim",
     "secondaryUom": "pcs",
-    "conversionFactor": 500,
+    "conversionFactor": 480,
     "threshold": 500,
     "unitCost": 420,
     "currentBalance": 0,

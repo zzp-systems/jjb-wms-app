@@ -202,7 +202,7 @@ export default function InitialDataImportModal({
             title="Download CSV containing all 69 standard materials pre-populated"
           >
             <Download size={13} className="text-[#C8963E]" />
-            <span>Download CSV Template (69 SKUs)</span>
+            <span>Download CSV Template ({masterMaterials.length} SKUs)</span>
           </button>
         </div>
 
@@ -413,6 +413,21 @@ export default function InitialDataImportModal({
                   </label>
                 </div>
 
+{/* 2027 General Inventory readiness banner */}
+<div className="bg-emerald-50 border border-emerald-300 rounded-xl p-3 text-xs text-emerald-900 space-y-1">
+  <div className="font-extrabold uppercase tracking-wider text-[10px]">
+    📋 Year-Start Physical Inventory Mode
+  </div>
+  <p>
+    For the annual general inventory (e.g. Jan 2027 baseline), select{' '}
+    <strong>Clean Slate Baseline</strong> above and tick the{' '}
+    <strong>"Wipe mock historical demo transactions"</strong> box. This creates one fresh opening lot per material at the physical count you enter — the cleanest state for year-start audits.
+  </p>
+  <p className="text-[11px] text-emerald-800">
+    ⓘ Multi-lot physical counts: this template is one row per material. If a single material sits in multiple lots (e.g. Flour Lot A + Lot B), enter the combined count now, then file a lot-split via{' '}
+    <strong>Adjustments &amp; NCR</strong> after baseline to break out lots. Lot-level accuracy is preserved in D1.
+  </p>
+</div>
                 {importMode === 'FRESH_BASELINE' && (
                   <div className="pt-2 border-t border-gray-100 flex items-center gap-2">
                     <input 
@@ -484,8 +499,8 @@ export default function InitialDataImportModal({
                 <div className="text-center">
                   <h3 className="font-bold text-gray-900 text-base">Reset All Stock to Zero?</h3>
                   <p className="text-xs text-gray-600 mt-1">
-                    This will set all 69 warehouse materials to 0.00 quantity and remove all mock demo lots. You can subsequently enter real deliveries via Inbound Receiving or upload your CSV.
-                  </p>
+  This will set all <strong>{masterMaterials.length}</strong> warehouse materials to 0.00 quantity and remove all mock demo lots. You can subsequently enter real deliveries via Inbound Receiving or upload your CSV.
+</p>
                 </div>
                 <div className="flex gap-2 justify-end pt-2">
                   <button

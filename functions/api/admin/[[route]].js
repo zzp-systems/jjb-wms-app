@@ -57,16 +57,24 @@ function json(body, status = 200) {
   });
 }
 
-async function authorizeAdminRequest(request, env, bodyPayload = null) {
-  const adminUserId =
-    request.headers.get('X-JJB-Admin-User') ||
-    bodyPayload?.adminUserId ||
-    '';
+import { verifyJWT } from '../../utils/authUtils.js';
 
-  if (!adminUserId) {
-    return { ok: false, status: 401, error: 'Missing X-JJB-Admin-User header.' };
+async function authorizeAdminRequest(request, env, bodyPayload = null) {
+  const authHeader = request.headers.get('Authorization');
+  const token = authHeader?.replace('Bearer ', '');
+
+  if (!token) {
+    return { ok: false, status: 401, error: 'Missing Authorization Bearer token.' };
   }
 
+  const secret = env.JWT_SECRET || 'fallback-dev-secret-change-in-prod';
+  const decoded = await verifyJWT(token, secret);
+
+  if (!decoded) {
+    return { ok: false, status: 401, error: 'Invalid or expired token.' };
+  }
+
+  // Check DB to ensure the user still has permission
   const userRow = await env.DB.prepare(`
     SELECT u.id, u.username, u.name, u.password_hash, u.shift_pin_hash, u.role_category,
            r.can_delete_test_data
@@ -74,18 +82,10 @@ async function authorizeAdminRequest(request, env, bodyPayload = null) {
     LEFT JOIN roles r ON r.role_key = u.role_category
     WHERE (u.id = ?1 OR u.username = ?1) AND u.is_active = 1
     LIMIT 1
-  `).bind(adminUserId).first();
+  `).bind(decoded.userId).first();
 
-  if (!userRow) {
-    return { ok: false, status: 403, error: `Admin user '${adminUserId}' not found or inactive in D1.` };
-  }
-
-  if (Number(userRow.can_delete_test_data) !== 1) {
-    return {
-      ok: false,
-      status: 403,
-      error: `Access denied: Role '${userRow.role_category}' does not have can_delete_test_data=1 permission.`
-    };
+  if (!userRow || Number(userRow.can_delete_test_data) !== 1) {
+    return { ok: false, status: 403, error: 'Access denied: Insufficient privileges.' };
   }
 
   return { ok: true, user: userRow };
