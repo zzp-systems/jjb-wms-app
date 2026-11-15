@@ -3,7 +3,7 @@ import {
   LayoutDashboard, PackagePlus, PackageMinus, Scale, SlidersHorizontal,
   FileSpreadsheet, Clock, ShieldCheck, Wifi, WifiOff, Smartphone, Monitor,
   Upload, UserCheck, Store, ClipboardList, LogOut, Database, FlaskConical,
-  Palette, PanelLeft, Activity, Menu, X, Users
+  Palette, PanelLeft, Activity, Menu, X, Users, Package
 } from 'lucide-react';
 
 export const ROLES = [
@@ -36,6 +36,7 @@ export const NAV_CATEGORIES = [
       { id: 'receiving', label: 'Inbound Receiving', icon: PackagePlus },
       { id: 'issuance', label: 'Stock Withdrawal', icon: PackageMinus, badgeKey: 'issuance' },
       { id: 'batching', label: 'Romeo Batching', icon: Scale, badgeKey: 'batching' },
+      { id: 'finished-goods', label: 'Finished Goods & Delivery', icon: Package },
       { id: 'adjustments', label: 'Adjustments & NCR', icon: SlidersHorizontal }
     ]
   },
@@ -51,6 +52,9 @@ export const NAV_CATEGORIES = [
   }
 ];
 
+// ---------------------------------------------------------------------------
+// Helper: shared badge resolver (used by both Header topbar + SidebarNavigation)
+// ---------------------------------------------------------------------------
 const resolveBadge = (item, { lowStockCount, pendingBatchCount, pendingBulkApprovalCount }) => {
   if (item.staticBadge) return item.staticBadge;
   if (item.badgeKey === 'lowStock' && lowStockCount > 0) return lowStockCount;
@@ -59,6 +63,9 @@ const resolveBadge = (item, { lowStockCount, pendingBatchCount, pendingBulkAppro
   return null;
 };
 
+// ===========================================================================
+// Default export — Top Header Bar (includes top-nav when navLayout === 'topbar')
+// ===========================================================================
 export default function Header({
   currentRole,
   setCurrentRole,
@@ -340,6 +347,9 @@ export default function Header({
   );
 }
 
+// ===========================================================================
+// Named export — SidebarNavigation (rendered by App.jsx inside a flex-row)
+// ===========================================================================
 export function SidebarNavigation({
   activeTab,
   setActiveTab,

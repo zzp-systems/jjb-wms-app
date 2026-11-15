@@ -470,7 +470,90 @@ function projectSpecialty(env, p, isTest) {
   }
   return stmts;
 }
+// --------------------------- Finished Goods & Delivery Projections --------
+function projectFgLot(env, p, isTest) {
+  const sku = pick(p, 'product_sku', 'productSku');
+  const lot = pick(p, 'lot_number', 'lotNumber');
+  if (!sku || !lot) throw new Error('MISSING_SKU_OR_LOT');
 
+  return [env.DB.prepare(`
+    INSERT INTO fg_lots
+      (product_sku, lot_number, production_date, expiry_date, qty_pieces, qty_boxes, qa_status, storage_location, is_test_data)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(product_sku, lot_number) DO UPDATE SET
+      qty_pieces = fg_lots.qty_pieces + excluded.qty_pieces,
+      qty_boxes = fg_lots.qty_boxes + excluded.qty_boxes,
+      updated_at = datetime('now')
+  `).bind(
+    sku, lot, isoDate(pick(p, 'production_date', 'productionDate')),
+    isoDate(pick(p, 'expiry_date', 'expiryDate')),
+    num(pick(p, 'qty_pieces', 'qtyPieces')) || 0,
+    num(pick(p, 'qty_boxes', 'qtyBoxes')) || 0,
+    str(p.qa_status) || 'PENDING',
+    str(pick(p, 'storage_location', 'storageLocation')), isTest
+  )];
+}
+
+function projectFgLotQa(env, p, isTest) {
+  const lot = pick(p, 'lot_number', 'lotNumber');
+  if (!lot) throw new Error('MISSING_LOT_NUMBER');
+
+  return [env.DB.prepare(`
+    UPDATE fg_lots 
+    SET qa_status = ?, qa_approved_by = ?, qa_approved_at = datetime('now'), updated_at = datetime('now')
+    WHERE lot_number = ? AND is_test_data = ?
+  `).bind(str(p.qa_status), str(pick(p, 'qa_approved_by', 'qaApprovedBy')), lot, isTest)];
+}
+
+function projectDeliveryShipment(env, p, isTest) {
+  const shipmentId = pick(p, 'shipment_id', 'shipmentId');
+  if (!shipmentId) throw new Error('MISSING_SHIPMENT_ID');
+
+  const stmts = [];
+  stmts.push(env.DB.prepare(`
+    INSERT INTO delivery_shipments
+      (shipment_id, delivery_date, loading_time, vehicle_plate, driver_name, origin_warehouse, destination_type, destination_outlet_id, destination_client_name, recipient_name, status, notes, is_test_data)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(shipment_id) DO UPDATE SET
+      delivery_date=excluded.delivery_date, loading_time=excluded.loading_time,
+      vehicle_plate=excluded.vehicle_plate, driver_name=excluded.driver_name,
+      status=excluded.status, notes=excluded.notes, updated_at=datetime('now')
+  `).bind(
+    shipmentId, isoDate(pick(p, 'delivery_date', 'deliveryDate')),
+    str(pick(p, 'loading_time', 'loadingTime')),
+    str(pick(p, 'vehicle_plate', 'vehiclePlate')),
+    str(pick(p, 'driver_name', 'driverName')),
+    str(pick(p, 'origin_warehouse', 'originWarehouse')) || 'Indangan',
+    str(pick(p, 'destination_type', 'destinationType')),
+    str(pick(p, 'destination_outlet_id', 'destinationOutletId')),
+    str(pick(p, 'destination_client_name', 'destinationClientName')),
+    str(pick(p, 'recipient_name', 'recipientName')),
+    str(p.status) || 'PLANNED', str(p.notes), isTest
+  ));
+
+  const items = p.items || p.lines || [];
+  if (items.length > 0) {
+    stmts.push(env.DB.prepare(`DELETE FROM delivery_items WHERE shipment_id = ?`).bind(shipmentId));
+    for (const item of items) {
+      stmts.push(env.DB.prepare(`
+        INSERT INTO delivery_items (shipment_id, fg_lot_id, qty_loaded, is_test_data)
+        VALUES (?, ?, ?, ?)
+      `).bind(shipmentId, num(pick(item, 'fg_lot_id', 'fgLotId')), num(pick(item, 'qty_loaded', 'qtyLoaded')) || 0, isTest));
+    }
+  }
+  return stmts;
+}
+
+function projectDeliveryStatus(env, p, isTest) {
+  const shipmentId = pick(p, 'shipment_id', 'shipmentId');
+  if (!shipmentId) throw new Error('MISSING_SHIPMENT_ID');
+
+  return [env.DB.prepare(`
+    UPDATE delivery_shipments 
+    SET status = ?, loading_time = COALESCE(?, loading_time), updated_at = datetime('now')
+    WHERE shipment_id = ? AND is_test_data = ?
+  `).bind(str(p.status), str(pick(p, 'loading_time', 'loadingTime')), shipmentId, isTest)];
+}
 // --------------------------- dispatcher -----------------------------------
 const HANDLERS = {
   'RECEIVING_SAVED': projectReceiving,
@@ -495,7 +578,11 @@ const HANDLERS = {
   'QUARANTINE_FILED': projectQuarantine,
   'SPECIALTY_PROPOSAL_SAVED': projectSpecialty,
   'SPECIALTY_PROPOSAL_CREATED': projectSpecialty,
-  'SPECIALTY_PROPOSAL_APPROVED': projectSpecialty
+  'SPECIALTY_PROPOSAL_APPROVED': projectSpecialty,
+  'FG_LOT_CREATED': projectFgLot,
+  'FG_LOT_QA_APPROVED': projectFgLotQa,
+  'DELIVERY_SHIPMENT_CREATED': projectDeliveryShipment,
+  'DELIVERY_STATUS_UPDATED': projectDeliveryStatus
 };
 
 const BALANCE_AFFECTING = new Set([
@@ -636,7 +723,11 @@ export async function onRequestGet({ request, env }) {
     'BATCH_ORDER_CANCELLED',
     'SPECIALTY_PROPOSAL_SAVED',
     'SPECIALTY_PROPOSAL_CREATED',
-    'SPECIALTY_PROPOSAL_APPROVED'
+    'SPECIALTY_PROPOSAL_APPROVED',
+    'FG_LOT_CREATED',
+    'FG_LOT_QA_APPROVED',
+    'DELIVERY_SHIPMENT_CREATED',
+    'DELIVERY_STATUS_UPDATED'
   ];
 
   let events = [];
