@@ -21,7 +21,6 @@ export async function onRequest(context) {
     return json({ error: 'Invalid or missing X-Sync-Key' }, 403);
   }
 
-  // GET /api/sync/products
   if (path === '/api/sync/products' && request.method === 'GET') {
     try {
       const result = await env.DB.prepare(
@@ -39,7 +38,6 @@ export async function onRequest(context) {
     }
   }
 
-  // POST /api/sync/upsert-outlet
   if (path === '/api/sync/upsert-outlet' && request.method === 'POST') {
     try {
       const body = await request.json();
@@ -80,7 +78,6 @@ export async function onRequest(context) {
     }
   }
 
-  // POST /api/sync/create-order
   if (path === '/api/sync/create-order' && request.method === 'POST') {
     try {
       const body = await request.json();
@@ -97,52 +94,44 @@ export async function onRequest(context) {
       const orderId = crypto.randomUUID();
       const now = new Date().toISOString();
 
-      // 1. Insert into financial `orders` table
+      // 1. Insert into `orders` table
       await env.DB.prepare(
-        `INSERT INTO orders (order_id, customer_or_outlet, contact_person, channel, status, order_date, total_cost_centavos, crm_deal_id, source)
-         VALUES (?,?,?,?,?,?,?,?,?)`
+        `INSERT INTO orders (order_id, customer_or_outlet, contact_person, channel, status, order_date, total_cost_centavos, crm_deal_id, source, is_test_data)
+         VALUES (?,?,?,?,?,?,?,?,?,0)`
       ).bind(
         orderId, order.customer_or_outlet, order.contact_person || null, order.channel || 'CRM-B2B',
         order.status || 'Pending', now.slice(0, 10), order.total_cost_centavos || 0,
         order.crm_deal_id || null, order.source || 'crm'
       ).run();
 
-      // 2. Insert into `batch_orders` for UI display
-      // FORENSIC FIX: Get a valid recipe_sku to satisfy Foreign Key constraints
-      let validSku = 'BRD-PAN-001'; // Fallback
+      // 2. Insert into `batch_orders` table for UI display
+      let validSku = 'BRD-PAN-001'; 
       try {
         const defaultRecipe = await env.DB.prepare('SELECT sku FROM recipes LIMIT 1').first();
         if (defaultRecipe && defaultRecipe.sku) validSku = defaultRecipe.sku;
-      } catch (e) {
-        console.warn('Could not find fallback recipe_sku');
-      }
+      } catch (e) {}
 
       await env.DB.prepare(
-        `INSERT INTO batch_orders (order_id, outlet_name, recipe_sku, recipe_name_snapshot, requested_qty_pcs, status, crm_deal_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO batch_orders (order_id, outlet_name, recipe_sku, recipe_name_snapshot, requested_qty_pcs, status, crm_deal_id, is_test_data)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 0)`
       ).bind(
         orderId, order.customer_or_outlet, validSku, `CRM Deal: ${order.customer_or_outlet}`, 
         100, 'PENDING_BATCHING', order.crm_deal_id || null
       ).run();
 
-      // 3. Line items
       if (order.line_items?.length) {
         for (const item of order.line_items) {
           await env.DB.prepare(
-            `INSERT INTO order_items (order_id, name, sku, qty, unit_cost_centavos, line_total_centavos)
-             VALUES (?,?,?,?,?,?)`
+            `INSERT INTO order_items (order_id, name, sku, qty, unit_cost_centavos, line_total_centavos, is_test_data) VALUES (?,?,?,?,?,?,0)`
           ).bind(orderId, item.name || null, item.sku || null, item.qty || 0, item.unit_cost_centavos || 0, (item.unit_cost_centavos || 0) * (item.qty || 0)).run();
         }
       }
 
-      // 4. Log sync event
-      await env.DB.prepare(
-        'INSERT INTO sync_events (idempotency_key, event_type, payload) VALUES (?,?,?)'
-      ).bind(idempotency_key, 'ORDER_CREATED_FROM_CRM', JSON.stringify({ order_id: orderId, crm_deal_id: order.crm_deal_id })).run();
+      await env.DB.prepare('INSERT INTO sync_events (idempotency_key, event_type, payload) VALUES (?,?,?)')
+        .bind(idempotency_key, 'ORDER_CREATED_FROM_CRM', JSON.stringify({ order_id: orderId, crm_deal_id: order.crm_deal_id })).run();
 
       return json({ success: true, order_id: orderId });
     } catch (err) {
-      console.error('WMS create-order failed:', err);
       return json({ error: 'WMS Backend Error: ' + err.message }, 500);
     }
   }

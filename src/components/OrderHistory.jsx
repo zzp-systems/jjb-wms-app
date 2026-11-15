@@ -11,7 +11,7 @@ export default function OrderHistory({
   currentRole,
   batchOrders = [],
   withdrawals = [],
-  pendingRequests = [],   // NEW — optional, backward-compatible
+  pendingRequests = [],
   onUpdateOrderStatus
 }) {
   const [wholesaleOrders, setWholesaleOrders] = useState([]);
@@ -47,7 +47,6 @@ export default function OrderHistory({
     loadWholesaleOrders();
   }, [selectedStatus]);
 
-  // ----- Recipe batch orders -----
   const formattedBatchOrders = useMemo(() => {
     return (batchOrders || []).map(b => {
       const estimatedCost = (b.requestedQtyPcs || 100) * 4.5;
@@ -86,7 +85,6 @@ export default function OrderHistory({
     });
   }, [batchOrders]);
 
-  // ----- Issued withdrawals (already deducted) -----
   const formattedWithdrawals = useMemo(() => {
     return (withdrawals || []).map(w => {
       const isMessHall = (w.requestingEntity || w.requestingLine || '').toLowerCase().includes('mess') ||
@@ -138,7 +136,6 @@ export default function OrderHistory({
     });
   }, [withdrawals]);
 
-  // ----- NEW: Pending requests (queued, not yet issued, no stock deducted) -----
   const formattedPendingRequests = useMemo(() => {
     return (pendingRequests || [])
       .filter(r => r.status === 'PENDING_ISSUANCE')
@@ -187,7 +184,6 @@ export default function OrderHistory({
       });
   }, [pendingRequests]);
 
-  // ----- Combine everything -----
   const allUnifiedOrders = useMemo(() => {
     const wholesaleFormatted = (wholesaleOrders || []).map(o => ({
       ...o,
@@ -265,7 +261,6 @@ export default function OrderHistory({
         setSelectedOrder(prev => ({ ...prev, status: newStatus }));
       }
 
-      // ── NEW: If status updated to Delivered, sync to ARAP ──
       if (newStatus === 'Delivered') {
         const token = localStorage.getItem('jjb_wms_token');
         try {
@@ -367,7 +362,6 @@ export default function OrderHistory({
 
   return (
     <div className="space-y-6">
-      {/* Module Title */}
       <div className="bg-white p-4 md:p-6 rounded-2xl border border-[#E2D1B8] shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <div className="flex items-center gap-2">
@@ -394,7 +388,6 @@ export default function OrderHistory({
         </button>
       </div>
 
-      {/* Summary KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white p-4 rounded-xl border border-[#E2D1B8] shadow-sm border-l-4 border-l-[#C8963E] flex items-center justify-between">
           <div>
@@ -449,7 +442,6 @@ export default function OrderHistory({
         </div>
       </div>
 
-      {/* Filter Channel Tabs */}
       <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
         {[
           { id: 'ALL', label: `All Transactions (${allUnifiedOrders.length})` },
@@ -475,7 +467,6 @@ export default function OrderHistory({
         ))}
       </div>
 
-      {/* Search & Status */}
       <div className="bg-white p-4 rounded-xl border border-[#E2D1B8] shadow-sm flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
         <div className="relative flex-1">
           <Search size={16} className="absolute left-3 top-3 text-gray-400" />
@@ -520,7 +511,6 @@ export default function OrderHistory({
         </div>
       </div>
 
-      {/* Orders Table */}
       <div className="bg-white rounded-xl border border-[#E2D1B8] shadow-sm overflow-hidden">
         <div className="px-6 py-3.5 bg-[#FAF6EE] border-b border-[#E2D1B8] flex justify-between items-center flex-wrap gap-2">
           <div className="flex items-center gap-2">
@@ -667,7 +657,6 @@ export default function OrderHistory({
         )}
       </div>
 
-      {/* Modal */}
       {selectedOrder && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
           <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-[#C8963E]/40 space-y-4 my-8">
@@ -698,7 +687,6 @@ export default function OrderHistory({
               </button>
             </div>
 
-            {/* Pending-request informational banner */}
             {selectedOrder.orderType === 'PENDING_REQUEST' && (
               <div className="bg-blue-50 border border-blue-300 p-3 rounded-xl text-xs text-blue-900 space-y-1">
                 <div className="flex items-center gap-2 font-bold">
@@ -750,7 +738,6 @@ export default function OrderHistory({
                 {renderStatusBadge(selectedOrder.status)}
               </div>
 
-              {/* Only allow status change for non-pending orders */}
               {selectedOrder.orderType !== 'PENDING_REQUEST' && (
                 <div className="flex items-center gap-1.5">
                   <span className="text-gray-500 text-[10px] font-bold">Update State:</span>
