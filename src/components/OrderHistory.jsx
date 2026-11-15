@@ -49,27 +49,41 @@ export default function OrderHistory({
 
   const formattedBatchOrders = useMemo(() => {
     return (batchOrders || []).map(b => {
-      const estimatedCost = (b.requestedQtyPcs || 100) * 4.5;
+      // FIX: Support both camelCase (local outbox) and snake_case (D1 sync)
+      const orderId = b.orderId || b.order_id;
+      const outletName = b.outletName || b.outlet_name;
+      const recipeName = b.recipeName || b.recipe_name_snapshot;
+      const recipeSku = b.recipeSku || b.recipe_sku;
+      const requestedQtyPcs = b.requestedQtyPcs || b.requested_qty_pcs;
+      const requestDate = b.requestDate || b.created_at || new Date().toISOString().slice(0, 10);
+      const targetDate = b.targetDate || b.scheduled_delivery_date;
+      const requestedBy = b.requestedBy || b.entered_by || 'System';
+      const status = b.status;
+      const batchMultiplier = b.batchMultiplier || b.batch_multiplier || 1;
+      const notes = b.notes;
+      const releasedTo = b.releasedTo || b.released_to;
+
+      const estimatedCost = (requestedQtyPcs || 100) * 4.5;
       return {
-        orderId: b.orderId,
+        orderId: orderId || `BORD-UNKNOWN`,
         formType: 'Form-ORD-001',
         orderType: 'RECIPE_BATCH',
-        orderDate: b.requestDate || new Date().toISOString().slice(0, 10),
-        deliveryDate: b.targetDate || 'Same-day Scaling',
-        customerOrOutlet: b.outletName || 'Outlet / Production Line',
-        contactPerson: b.requestedBy || 'Branch Baker',
+        orderDate: requestDate,
+        deliveryDate: targetDate || 'Same-day Scaling',
+        customerOrOutlet: outletName || 'Outlet / Production Line',
+        contactPerson: requestedBy,
         contactNumber: 'Plant Internal Intercom / Dispatch',
         channel: 'Recipe Batched Ingredients (Form-ORD-001)',
-        categoryTag: b.outletName?.toLowerCase().includes('mess') ? 'MESS_HALL' : 'BATCHING',
-        deliveryDriver: b.status === 'RELEASED' ? (b.releasedTo || 'Othniel Tilan / Roberto Blase') : 'Pending Romeo Malusay Kitting',
-        status: b.status === 'BATCHED_KITTED' ? 'Batched / Kitted' :
-                b.status === 'RELEASED' ? 'Delivered' : 'In Production',
-        rawStatus: b.status,
+        categoryTag: outletName?.toLowerCase().includes('mess') ? 'MESS_HALL' : 'BATCHING',
+        deliveryDriver: status === 'RELEASED' ? (releasedTo || 'Othniel Tilan / Roberto Blase') : 'Pending Romeo Malusay Kitting',
+        status: status === 'BATCHED_KITTED' ? 'Batched / Kitted' :
+                status === 'RELEASED' ? 'Delivered' : 'In Production',
+        rawStatus: status,
         items: [
           {
-            sku: b.recipeSku || 'RECIPE-MIX',
-            name: `${b.recipeName} (${b.batchMultiplier || 1.0}x Scale)`,
-            qty: b.requestedQtyPcs || 100,
+            sku: recipeSku || 'RECIPE-MIX',
+            name: `${recipeName || 'Unknown Recipe'} (${batchMultiplier}x Scale)`,
+            qty: requestedQtyPcs || 100,
             unit: 'pcs yield',
             unitPrice: 4.50,
             subtotal: estimatedCost
@@ -79,7 +93,7 @@ export default function OrderHistory({
         logisticsFee: 0,
         paymentTerms: 'Internal Plant Production Allocation',
         paymentStatus: 'Reconciled via Bodega',
-        notes: b.notes || `Requisition for ${b.outletName}`,
+        notes: notes || `Requisition for ${outletName}`,
         sourceData: b
       };
     });
@@ -216,9 +230,9 @@ export default function OrderHistory({
 
       if (searchTerm.trim()) {
         const query = searchTerm.toLowerCase();
-        const matchesId = order.orderId.toLowerCase().includes(query);
-        const matchesTarget = order.customerOrOutlet.toLowerCase().includes(query);
-        const matchesPerson = order.contactPerson.toLowerCase().includes(query);
+        const matchesId = order.orderId?.toLowerCase().includes(query);
+        const matchesTarget = order.customerOrOutlet?.toLowerCase().includes(query);
+        const matchesPerson = order.contactPerson?.toLowerCase().includes(query);
         const matchesItem = order.items.some(it => it.name.toLowerCase().includes(query) || it.sku.toLowerCase().includes(query));
         if (!matchesId && !matchesTarget && !matchesPerson && !matchesItem) return false;
       }

@@ -217,8 +217,6 @@ function projectBatchOrder(env, p, isTest) {
   const orderId = pick(p, 'orderId', 'order_id');
   if (!orderId) throw new Error('MISSING_ORDER_ID');
 
-  // We use COALESCE heavily so that if a payload from a partial update (e.g. releasing)
-  // omits fields, the existing values in D1 are NOT overwritten with NULL.
   return [env.DB.prepare(`
     INSERT INTO batch_orders
       (order_id, outlet_name, recipe_sku, recipe_name_snapshot, requested_qty_pcs,
@@ -660,8 +658,6 @@ export async function onRequestPost({ request, env }) {
           `UPDATE sync_events SET projected_at = datetime('now'), projection_error = ? WHERE idempotency_key = ?`
         ).bind(String(e.message || e), key).run();
         
-        // ⚡ CRITICAL FIX: Return 400 so the client outbox marks this as DEAD.
-        // This prevents the client from purging a failed event from IndexedDB.
         return json({ status: 'error', error: String(e.message || e) }, 400);
       }
     } else {
@@ -727,7 +723,8 @@ export async function onRequestGet({ request, env }) {
     'FG_LOT_CREATED',
     'FG_LOT_QA_APPROVED',
     'DELIVERY_SHIPMENT_CREATED',
-    'DELIVERY_STATUS_UPDATED'
+    'DELIVERY_STATUS_UPDATED',
+    'ORDER_CREATED_FROM_CRM' // <--- FIX: Poll for CRM Orders
   ];
 
   let events = [];

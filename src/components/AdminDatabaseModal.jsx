@@ -47,24 +47,22 @@ export default function AdminDatabaseModal({
   const adminId = authUser?.id || authUser?.username || 'zaphyr';
 
   // =========================================================================
-  // adminFetch — sends the X-JJB-Admin-User header (required by server auth
-  // gate) and Content-Type: application/json. Guards against HTML error
-  // bodies by checking res.ok BEFORE res.json() — this is the fix for the
-  // "Unexpected token '<'" error when the server returns a 500.
+  // adminFetch — sends the Bearer token required by server auth gate.
+  // Guards against HTML error bodies by checking res.ok BEFORE res.json().
   // =========================================================================
-const adminFetch = useCallback(async (path, options = {}) => {
-  // Assume you pass the token as a prop to this modal from App.jsx
-  const res = await fetch(path, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${adminToken}`, // ← SECURED
-      ...(options.headers || {})
-    }
-  });
+  const adminFetch = useCallback(async (path, options = {}) => {
+    // FIX: adminToken was previously undefined, causing crashes.
+    const token = localStorage.getItem('jjb_wms_token') || localStorage.getItem('token');
+    
+    const res = await fetch(path, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`, // ← FIXED
+        ...(options.headers || {})
+      }
+    });
 
-    // Non-2xx responses may be HTML (Cloudflare error pages). Check first,
-    // then attempt JSON parse for a structured error message if possible.
     if (!res.ok) {
       let errMsg = `HTTP ${res.status}`;
       try {
