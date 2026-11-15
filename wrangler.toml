@@ -9,8 +9,9 @@ database_name = "jjb-wms-db"
 database_id = "f6064ec6-8e1a-4cbd-ac35-17c18795d3a3"
 
 # ── R2 Bucket Binding (shared with CRM + ARAP) ──
+# Changed from ASSETS to R2_BUCKET (ASSETS is reserved in Pages)
 [[r2_buckets]]
-binding = "ASSETS"
+binding = "R2_BUCKET"
 bucket_name = "jjb-erp-assets"
 
 # ── Local Preview Environment ──
