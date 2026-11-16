@@ -1,23 +1,24 @@
-// ── WMS User Management (admin only) ──
+// ── User Management (admin only) ──
+// Same code for CRM, WMS, and ARAP — app-agnostic.
+// Requires: _jwt.js (hashPassword), _audit.js (audit)
+// Each app uses its own DB binding and roles table.
+//
+// GET    /api/users           → list all users
+// POST   /api/users           → create user (auto-hashes password with PBKDF2)
+// PUT    /api/users/:id       → update user (optionally re-hash password)
+// DELETE /api/users/:id       → deactivate user (set is_active = 0)
 
-// Self-contained PBKDF2 hasher so we don't depend on _jwt.js paths
-async function hashPassword(password) {
-  const salt = crypto.getRandomValues(new Uint8Array(16));
-  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits']);
-  const hash = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' }, key, 256);
-  return `${[...salt].map(b => b.toString(16).padStart(2,'0')).join('')}:${[...new Uint8Array(hash)].map(b => b.toString(16).padStart(2,'0')).join('')}`;
-}
+import { hashPassword } from './_jwt.js';
+import { audit } from './_audit.js';
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } });
 }
 
 function requireAdmin(data) {
-  // Checks for both 'admin' and 'Administrator' just in case
-  return data?.user?.role === 'admin' || data?.user?.role === 'Administrator'; 
+  return data?.user?.role === 'admin';
 }
 
-// ── GET /api/users ──
 export async function onRequestGet({ env, data }) {
   if (!requireAdmin(data)) return json({ error: 'Admin access required' }, 403);
 
@@ -28,7 +29,6 @@ export async function onRequestGet({ env, data }) {
   return json({ users: result.results });
 }
 
-// ── POST /api/users ──
 export async function onRequestPost({ request, env, data }) {
   if (!requireAdmin(data)) return json({ error: 'Admin access required' }, 403);
 
@@ -46,15 +46,46 @@ export async function onRequestPost({ request, env, data }) {
 
   await env.DB.prepare(
     'INSERT INTO users (id, username, name, email, role_category, password_hash, is_active) VALUES (?,?,?,?,?,?,1)'
-  ).bind(id, body.username, body.name, body.email || null, body.role || 'staff', hash).run();
+  ).bind(id, body.username, body.name, body.email || null, body.role || 'viewer', hash).run();
+
+  await audit(env, data.user, 'CREATE', 'users', id, `Created user: ${body.username} (${body.role || 'viewer'})`);
 
   return json({
     success: true,
-    user: { id, username: body.username, name: body.name, email: body.email, role_category: body.role || 'staff' }
+    user: { id, username: body.username, name: body.name, email: body.email, role_category: body.role || 'viewer' }
   }, 201);
 }
 
-// ── DELETE /api/users/:id ──
+export async function onRequestPut({ request, env, data, params }) {
+  if (!requireAdmin(data)) return json({ error: 'Admin access required' }, 403);
+
+  const body = await request.json();
+  const id = params.id;
+
+  const old = await env.DB.prepare('SELECT * FROM users WHERE id = ?').bind(id).first();
+  if (!old) return json({ error: 'User not found' }, 404);
+
+  let passwordHash = old.password_hash;
+  if (body.password) {
+    passwordHash = await hashPassword(body.password);
+  }
+
+  await env.DB.prepare(
+    'UPDATE users SET name = ?, email = ?, role_category = ?, password_hash = ?, is_active = ? WHERE id = ?'
+  ).bind(
+    body.name ?? old.name,
+    body.email ?? old.email,
+    body.role ?? old.role_category,
+    passwordHash,
+    body.is_active ?? old.is_active,
+    id
+  ).run();
+
+  await audit(env, data.user, 'UPDATE', 'users', id, `Updated user: ${old.username}`);
+
+  return json({ success: true });
+}
+
 export async function onRequestDelete({ env, data, params }) {
   if (!requireAdmin(data)) return json({ error: 'Admin access required' }, 403);
 
@@ -62,6 +93,7 @@ export async function onRequestDelete({ env, data, params }) {
   if (id === data.user.userId) return json({ error: 'Cannot deactivate yourself' }, 400);
 
   await env.DB.prepare('UPDATE users SET is_active = 0 WHERE id = ?').bind(id).run();
+  await audit(env, data.user, 'DEACTIVATE', 'users', id, 'Deactivated user');
 
   return json({ success: true });
 }
