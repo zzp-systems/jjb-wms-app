@@ -14,7 +14,7 @@ const CORS_HEADERS = {
 const PUBLIC_ROUTES = ['/api/auth/login'];
 // Only /api/sync/* routes use X-Sync-Key (server-to-server).
 // receiving-sync and delivery-sync are frontend-facing → require JWT.
-const SYNC_ROUTES = ['/api/sync/'];
+const SYNC_ROUTES = ['/api/sync', '/api/receiving-sync', '/api/delivery-sync'];
 
 export async function onRequest(context) {
   const { request, env, next } = context;

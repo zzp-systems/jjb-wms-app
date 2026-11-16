@@ -3,7 +3,8 @@ import {
   Lock, User, Key, ShieldCheck, CheckCircle2, AlertTriangle, 
   Eye, EyeOff, Sparkles, Building2, ChevronRight, X, Hash
 } from 'lucide-react';
-import { AUTH_USERS, authenticateUser } from '../data/authUsers';
+// We keep AUTH_USERS for the quick-select UI, but we authenticate via the API
+import { AUTH_USERS } from '../data/authUsers';
 
 export const DEFAULT_SHIFT_PIN = "2026";
 
@@ -14,8 +15,8 @@ export default function LoginModal({
   currentUsername = '',
   isMandatoryGate = false
 }) {
-  const [username, setUsername] = useState(currentUsername || AUTH_USERS[0].username);
-  const [authMethod, setAuthMethod] = useState('password'); // 'password' | 'pin'
+  const [username, setUsername] = useState(currentUsername || AUTH_USERS[0]?.username || '');
+  const [authMethod, setAuthMethod] = useState('password'); 
   const [password, setPassword] = useState('');
   const [shiftPin, setShiftPin] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -24,40 +25,51 @@ export default function LoginModal({
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setErrorMsg('');
     setLoading(true);
 
-    setTimeout(() => {
-      let matchedUser = null;
+    try {
+      // If using Shift PIN, we use a default password for the backend
+      // You may need to ensure the backend has a default password for these users
+      const passwordToSend = authMethod === 'password' ? password : DEFAULT_SHIFT_PIN;
 
-      if (authMethod === 'password') {
-        matchedUser = authenticateUser(username, password);
-      } else {
-        // Shift PIN verification
-        if (shiftPin.trim() === DEFAULT_SHIFT_PIN) {
-          matchedUser = AUTH_USERS.find(u => u.username.toLowerCase() === username.trim().toLowerCase());
-        }
+      if (authMethod === 'pin' && shiftPin !== DEFAULT_SHIFT_PIN) {
+        throw new Error(`Invalid 4-digit shift PIN. (Default active shift PIN: ${DEFAULT_SHIFT_PIN})`);
       }
 
-      if (matchedUser) {
-        onLoginSuccess(matchedUser);
-        setPassword('');
-        setShiftPin('');
-        setErrorMsg('');
-      } else {
-        if (authMethod === 'password') {
-          setErrorMsg('Invalid username or password. Please verify your credentials.');
-        } else {
-          setErrorMsg(`Invalid 4-digit shift PIN for ${username}. (Default active shift PIN: ${DEFAULT_SHIFT_PIN})`);
-        }
+      // 🔐 REAL BACKEND AUTHENTICATION
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password: passwordToSend })
+      });
+
+      const text = await res.text();
+      let data = {};
+      try { data = JSON.parse(text); } catch { throw new Error('Server returned an invalid response. Check your JWT_SECRET in Cloudflare.'); }
+
+      if (!res.ok) {
+        throw new Error(data.error || data.detail || 'Invalid credentials');
       }
+
+      // Save the REAL JWT token
+      localStorage.setItem('jjb_wms_token', data.token);
+      
+      // Pass the user data back to the App
+      onLoginSuccess(data.user);
+      
+      setPassword('');
+      setShiftPin('');
+      setErrorMsg('');
+    } catch (err) {
+      setErrorMsg(err.message);
+    } finally {
       setLoading(false);
-    }, 200);
+    }
   };
 
-  // Quick select pre-fills ONLY the username; never auto-fills password
   const handleQuickSelect = (u) => {
     setUsername(u.username);
     setPassword('');
@@ -100,7 +112,7 @@ export default function LoginModal({
           </div>
         </div>
 
-        {/* Quick User Selector Bar (Pre-fills Username ONLY) */}
+        {/* Quick User Selector Bar */}
         <div className="bg-[#FAF6EE] p-3.5 border-b border-[#E2D1B8]">
           <div className="flex items-center justify-between mb-2">
             <p className="text-[10px] font-bold text-gray-600 uppercase tracking-wider">
@@ -132,7 +144,7 @@ export default function LoginModal({
           </div>
         </div>
 
-        {/* Authentication Mode Switcher: Password vs 4-Digit Shift PIN */}
+        {/* Authentication Mode Switcher */}
         <div className="flex border-b border-gray-200 bg-gray-50 text-xs font-semibold">
           <button
             type="button"
@@ -171,12 +183,14 @@ export default function LoginModal({
           )}
 
           <div>
-            <label className="block text-xs font-bold text-gray-700 mb-1">
+            <label htmlFor="username" className="block text-xs font-bold text-gray-700 mb-1">
               Authorized Staff Username
             </label>
             <div className="relative">
               <User size={15} className="absolute left-3 top-3 text-gray-400" />
               <input
+                id="username"
+                name="username"
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
@@ -190,7 +204,7 @@ export default function LoginModal({
           {authMethod === 'password' ? (
             <div>
               <div className="flex justify-between items-center mb-1">
-                <label className="block text-xs font-bold text-gray-700">
+                <label htmlFor="password" className="block text-xs font-bold text-gray-700">
                   Security Password
                 </label>
                 <span className="text-[10px] text-gray-400">Production Auth</span>
@@ -198,6 +212,8 @@ export default function LoginModal({
               <div className="relative">
                 <Key size={15} className="absolute left-3 top-3 text-gray-400" />
                 <input
+                  id="password"
+                  name="password"
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -218,7 +234,7 @@ export default function LoginModal({
           ) : (
             <div>
               <div className="flex justify-between items-center mb-1">
-                <label className="block text-xs font-bold text-gray-700">
+                <label htmlFor="shift_pin" className="block text-xs font-bold text-gray-700">
                   4-Digit Active Shift PIN
                 </label>
                 <span className="text-[10px] text-[#1E7A3E] font-bold">Shift: {DEFAULT_SHIFT_PIN}</span>
@@ -226,11 +242,13 @@ export default function LoginModal({
               <div className="relative">
                 <Hash size={15} className="absolute left-3 top-3 text-gray-400" />
                 <input
+                  id="shift_pin"
+                  name="shift_pin"
                   type="password"
                   maxLength={4}
                   value={shiftPin}
                   onChange={(e) => setShiftPin(e.target.value.replace(/\D/g, ''))}
-                  placeholder="Enter 4-digit shift PIN (e.g. 2026)"
+                  placeholder={`Enter 4-digit shift PIN (e.g. ${DEFAULT_SHIFT_PIN})`}
                   required
                   autoFocus
                   className="w-full pl-9 pr-4 py-2.5 text-xs border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1E7A3E] font-mono tracking-widest text-base font-bold text-center"
