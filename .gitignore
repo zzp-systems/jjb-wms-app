@@ -12,3 +12,6 @@ bun.lock
 payload.json
 seed.sql
 opening-inventory.sql
+
+# Local-only recovery script — never commit
+restore-passwords.mjs
