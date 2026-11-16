@@ -107,27 +107,36 @@ export async function onRequestPost({ request, env }) {
     return json({ error: 'Invalid credentials' }, 401);
   }
 
-  const token = await signJWT(
-    {
-      userId: user.id,
-      id: user.id,
-      username: user.username,
-      name: user.name,
-      email: user.email,
-      role: user.role_category,
-      exp: Math.floor(Date.now() / 1000) + 86400 * 7,
-    },
-    env.JWT_SECRET
-  );
+  // ── Sign JWT ──
+  try {
+    const token = await signJWT(
+      {
+        userId: user.id,
+        id: user.id,
+        username: user.username,
+        name: user.name,
+        email: user.email,
+        role: user.role_category,
+        exp: Math.floor(Date.now() / 1000) + 86400 * 7,
+      },
+      env.JWT_SECRET
+    );
 
-  return json({
-    token,
-    user: {
-      id: user.id,
-      username: user.username,
-      name: user.name,
-      email: user.email,
-      role: user.role_category,
-    },
-  });
+    return json({
+      token,
+      user: {
+        id: user.id,
+        username: user.username,
+        name: user.name,
+        email: user.email,
+        role: user.role_category,
+      },
+    });
+  } catch (e) {
+    console.error('signJWT failed:', e.message);
+    return json(
+      { error: 'Failed to generate authentication token. Check JWT_SECRET is set in Cloudflare Pages environment variables.' },
+      500
+    );
+  }
 }

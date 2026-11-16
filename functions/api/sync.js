@@ -1,6 +1,8 @@
 // ============================================================================
 // JJB WMS — /api/sync  (Phase 1.5 projection + Phase 2.5/2.6 polling + Phase 3 Cutoff)
 // ============================================================================
+// FIX: env.GAS_WEB_APP_URL → env.GAS_URL || env.GAS_WEB_APP_URL
+// The Pages project env var is named GAS_URL, not GAS_WEB_APP_URL.
 
 // --------------------------- helpers -------------------------------------
 const str = v => (v === null || v === undefined ? null : String(v));
@@ -668,10 +670,13 @@ export async function onRequestPost({ request, env }) {
     }
   }
 
+  // ── FIX: Use GAS_URL (the actual env var name) with fallback to GAS_WEB_APP_URL ──
+  const gasUrl = env.GAS_URL || env.GAS_WEB_APP_URL;
+
   let gasOk = !!state?.synced_to_gas;
-  if (!gasOk && env.GAS_WEB_APP_URL) {
+  if (!gasOk && gasUrl) {
     try {
-      const res = await fetch(env.GAS_WEB_APP_URL, {
+      const res = await fetch(gasUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ event_type: type, payload })
@@ -680,7 +685,7 @@ export async function onRequestPost({ request, env }) {
     } catch (e) {
       console.error('gas forward failed', e);
     }
-  } else if (!env.GAS_WEB_APP_URL) {
+  } else if (!gasUrl) {
     gasOk = true;
   }
 
@@ -724,7 +729,7 @@ export async function onRequestGet({ request, env }) {
     'FG_LOT_QA_APPROVED',
     'DELIVERY_SHIPMENT_CREATED',
     'DELIVERY_STATUS_UPDATED',
-    'ORDER_CREATED_FROM_CRM' // <--- FIX: Poll for CRM Orders
+    'ORDER_CREATED_FROM_CRM'
   ];
 
   let events = [];
