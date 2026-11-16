@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Plus, Trash2, X, Clock, AlertTriangle, CheckCircle2, Layers, FileText } from 'lucide-react';
+import { Plus, Trash2, X, AlertTriangle, CheckCircle2, Layers, FileText, Sparkles } from 'lucide-react';
 import {
   UNIFIED_PRODUCTION_LINES,
   UNIFIED_CONSUMPTION_PURPOSES,
@@ -19,6 +19,7 @@ export default function OutletRequisitionPortal({
   recipes = [],
   onSubmitBatchOrder,
   onSubmitMaterialRequest,
+  onSpecialtyRecipeSubmitted,
   currentRole
 }) {
   const [portalMode, setPortalMode] = useState('batch');
@@ -48,6 +49,17 @@ export default function OutletRequisitionPortal({
   const [packCount, setPackCount] = useState(1);
   const [cartItems, setCartItems] = useState([]);
 
+  // -------------------------------------------------------------------------
+  // Tab 3: Specialty R&D Proposal State (Form-RND-001)
+  // -------------------------------------------------------------------------
+  const [rndSku, setRndSku] = useState('SPC-NEW-001');
+  const [rndName, setRndName] = useState('');
+  const [rndCategory, setRndCategory] = useState('Specialty Breads');
+  const [rndFlourKg, setRndFlourKg] = useState(12.5);
+  const [rndYieldPcs, setRndYieldPcs] = useState(300);
+  const [rndSrp, setRndSrp] = useState(15.0);
+  const [rndNotes, setRndNotes] = useState('');
+
   const selectedLineMeta =
     UNIFIED_PRODUCTION_LINES.find((l) => l.id === selectedLineId) || UNIFIED_PRODUCTION_LINES[0];
   const resolvedLocationName =
@@ -56,7 +68,8 @@ export default function OutletRequisitionPortal({
       : selectedLineMeta.label.replace(/^\d+\.\s*/, '');
 
   const selectedRecipeObj =
-    recipes.find((r) => r.sku === selectedRecipeSku) || recipes[0] || { name: 'Commercial Batch', unitPieceYield: 100, ingredients: [] };
+    recipes.find((r) => r.sku === selectedRecipeSku) ||
+    recipes[0] || { name: 'Commercial Batch', unitPieceYield: 100, ingredients: [] };
 
   const liveRecipePreview = useMemo(
     () => computeRecipeBatchBreakdown(selectedRecipeObj, batchMultiplier, inventory),
@@ -65,7 +78,9 @@ export default function OutletRequisitionPortal({
 
   const selectedMatObj = inventory.find((m) => m.code === selectedMatCode) || inventory[0] || {};
   const unitPresets = getMaterialUnitPresets(selectedMatObj);
-  const activePreset = unitPresets[selectedPresetIdx] || unitPresets[0] || { label: 'Base UoM', multiplierInSec: 1, badge: 'UNIT' };
+  const activePreset =
+    unitPresets[selectedPresetIdx] ||
+    unitPresets[0] || { label: 'Base UoM', multiplierInSec: 1, badge: 'UNIT' };
   const computedSecQty = +(Number(packCount || 0) * Number(activePreset.multiplierInSec || 1)).toFixed(3);
   const selectedMatAvailability = formatMaterialAvailability(selectedMatObj);
 
@@ -109,7 +124,6 @@ export default function OutletRequisitionPortal({
     e.preventDefault();
     const freshCutoff = evaluateBatchCutoffPht(new Date());
 
-    // If the user didn't click "+ Add Recipe to Order List" first, stage the currently selected one
     const recipesToSubmit =
       stagedRecipesCart.length > 0
         ? stagedRecipesCart
@@ -273,34 +287,92 @@ export default function OutletRequisitionPortal({
     setNotes('');
   };
 
+  const handleSpecialtySubmit = (e) => {
+    e.preventDefault();
+    if (!rndName.trim()) return;
+    const proposalId = `RND-${Date.now().toString().slice(-6)}`;
+    const flourKg = Number(rndFlourKg || 12.5);
+    const yieldPcs = Number(rndYieldPcs || 300);
+    const srp = Number(rndSrp || 15);
+    const proposal = {
+      proposalId,
+      sku: rndSku.trim() || `SPC-${Date.now().toString().slice(-4)}`,
+      title: rndName.trim(),
+      name: rndName.trim(),
+      category: rndCategory,
+      targetFacility: resolvedLocationName,
+      requestingLocation: resolvedLocationName,
+      bakerName: requisitionedBy,
+      standardBatchFlourKg: flourKg,
+      unitPieceYield: yieldPcs,
+      pieceWeightGrams: 45,
+      unitProductionCost: +(srp * 0.48).toFixed(2),
+      wholesaleTransferPrice: +(srp * 0.75).toFixed(2),
+      srp,
+      grossMarginPct: 52,
+      mixingNotes: rndNotes.trim(),
+      status: 'PENDING_APPROVAL',
+      submittedAt: new Date().toISOString(),
+      ingredients: [
+        { code: 'RM-FLR-001', name: 'All Purpose Flour', pct: 100, gramsPerBatch: flourKg * 1000 }
+      ]
+    };
+
+    try {
+      const raw = localStorage.getItem('JJB_WMS_LIVE_V4_6_SPECIALTY_RECIPES');
+      const list = raw ? JSON.parse(raw) : [];
+      list.unshift(proposal);
+      localStorage.setItem('JJB_WMS_LIVE_V4_6_SPECIALTY_RECIPES', JSON.stringify(list));
+    } catch {}
+
+    if (onSpecialtyRecipeSubmitted) {
+      onSpecialtyRecipeSubmitted(proposal);
+    }
+    setRndName('');
+    setRndNotes('');
+  };
+
   const totalOrderYieldPcs = stagedRecipesCart.reduce((s, r) => s + (r.requestedQtyPcs || 0), 0);
-  const totalOrderEstimatedCost = +stagedRecipesCart.reduce((s, r) => s + (r.estimatedCost || 0), 0).toFixed(2);
+  const totalOrderEstimatedCost = +stagedRecipesCart
+    .reduce((s, r) => s + (r.estimatedCost || 0), 0)
+    .toFixed(2);
 
   return (
     <div className="space-y-5">
       {/* Mode switcher */}
-      <div className="grid grid-cols-2 gap-2 bg-white p-1.5 rounded-2xl border border-gray-200 shadow-sm">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 bg-white p-1.5 rounded-2xl border border-gray-200 shadow-sm">
         <button
           type="button"
           onClick={() => setPortalMode('batch')}
-          className={`py-2.5 px-4 rounded-xl text-xs md:text-sm font-extrabold transition ${
+          className={`py-2.5 px-3 rounded-xl text-xs font-extrabold transition ${
             portalMode === 'batch'
               ? 'bg-[#240e32] text-[#E5C585] shadow'
               : 'text-gray-600 hover:bg-gray-100'
           }`}
         >
-          1. Order Pre-Scaled Recipe Batches (`Form-ORD-001`)
+          1. Order Pre-Scaled Batches (Form-ORD-001)
         </button>
         <button
           type="button"
           onClick={() => setPortalMode('material')}
-          className={`py-2.5 px-4 rounded-xl text-xs md:text-sm font-extrabold transition ${
+          className={`py-2.5 px-3 rounded-xl text-xs font-extrabold transition ${
             portalMode === 'material'
               ? 'bg-[#240e32] text-[#E5C585] shadow'
               : 'text-gray-600 hover:bg-gray-100'
           }`}
         >
-          2. Request Raw Materials (`Form-WAR-001`)
+          2. Request Raw Materials (Form-WAR-001)
+        </button>
+        <button
+          type="button"
+          onClick={() => setPortalMode('specialty')}
+          className={`py-2.5 px-3 rounded-xl text-xs font-extrabold transition flex items-center justify-center gap-1 ${
+            portalMode === 'specialty'
+              ? 'bg-[#240e32] text-[#E5C585] shadow'
+              : 'text-gray-600 hover:bg-gray-100'
+          }`}
+        >
+          <Sparkles size={13} /> 3. R&D Recipe Proposal (Form-RND-001)
         </button>
       </div>
 
@@ -345,7 +417,7 @@ export default function OutletRequisitionPortal({
         </div>
       </div>
 
-      {portalMode === 'batch' ? (
+      {portalMode === 'batch' && (
         <form onSubmit={handleBatchSubmit} className="bg-white rounded-2xl p-5 border border-gray-200 shadow-sm space-y-5">
           {/* 3:00 PM PHT Cut-Off Policy Banner */}
           <div
@@ -580,7 +652,9 @@ export default function OutletRequisitionPortal({
             Submit {stagedRecipesCart.length > 0 ? `${stagedRecipesCart.length} Pre-Scaled Recipe Batch(es)` : 'Pre-Scaled Recipe Batch Order'} to Dry Room 2 Workbench
           </button>
         </form>
-      ) : (
+      )}
+
+      {portalMode === 'material' && (
         <form onSubmit={handleMaterialSubmit} className="bg-white rounded-2xl p-5 border border-gray-200 shadow-sm space-y-4">
           <h3 className="text-sm font-extrabold text-[#240e32] border-b pb-2">
             Form-WAR-001 — Raw Material & Mess Hall Requisition (Queues to Jade Dela Cruz)
@@ -765,6 +839,110 @@ export default function OutletRequisitionPortal({
             className="w-full py-3 rounded-xl bg-[#240e32] hover:bg-black text-[#E5C585] font-extrabold text-xs uppercase tracking-wider shadow-lg"
           >
             Submit Request to Jade Dela Cruz's Pending Issuance Queue
+          </button>
+        </form>
+      )}
+
+      {portalMode === 'specialty' && (
+        <form onSubmit={handleSpecialtySubmit} className="bg-white rounded-2xl p-5 border border-gray-200 shadow-sm space-y-4">
+          <div className="flex items-center justify-between border-b pb-2">
+            <h3 className="text-sm font-extrabold text-[#240e32]">
+              Form-RND-001 — Specialty R&D Formulation Proposal (Queues to Romeo & Zaphyr)
+            </h3>
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-900">RND-001</span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div>
+              <label className="block text-xs font-bold text-gray-700 mb-1">Proposed SKU *</label>
+              <input
+                type="text"
+                value={rndSku}
+                onChange={(e) => setRndSku(e.target.value)}
+                required
+                className="w-full border border-gray-300 rounded-xl px-3 py-2 text-xs font-mono font-bold"
+              />
+            </div>
+            <div className="md:col-span-2">
+              <label className="block text-xs font-bold text-gray-700 mb-1">Product Name *</label>
+              <input
+                type="text"
+                value={rndName}
+                onChange={(e) => setRndName(e.target.value)}
+                placeholder="e.g. Davao Durian Brioche Loaf"
+                required
+                className="w-full border border-gray-300 rounded-xl px-3 py-2 text-xs font-semibold"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div>
+              <label className="block text-xs font-bold text-gray-700 mb-1">Category</label>
+              <select
+                value={rndCategory}
+                onChange={(e) => setRndCategory(e.target.value)}
+                className="w-full border border-gray-300 rounded-xl px-2.5 py-2 text-xs font-semibold"
+              >
+                <option value="Specialty Breads">Specialty Breads</option>
+                <option value="Pastries & Viennoiserie">Pastries & Viennoiserie</option>
+                <option value="Pasalubong Delicacies">Pasalubong Delicacies</option>
+                <option value="Cakes & Confectionary">Cakes & Confectionary</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-700 mb-1">Base Flour (kg)</label>
+              <input
+                type="number"
+                step="0.5"
+                min="0.5"
+                value={rndFlourKg}
+                onChange={(e) => setRndFlourKg(e.target.value)}
+                className="w-full border border-gray-300 rounded-xl px-3 py-2 text-xs font-bold font-mono"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-700 mb-1">Target Yield (pcs)</label>
+              <input
+                type="number"
+                min="1"
+                value={rndYieldPcs}
+                onChange={(e) => setRndYieldPcs(e.target.value)}
+                className="w-full border border-gray-300 rounded-xl px-3 py-2 text-xs font-bold font-mono"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-700 mb-1">Target SRP (₱)</label>
+              <input
+                type="number"
+                step="0.5"
+                min="1"
+                value={rndSrp}
+                onChange={(e) => setRndSrp(e.target.value)}
+                className="w-full border border-gray-300 rounded-xl px-3 py-2 text-xs font-bold font-mono"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-gray-700 mb-1">
+              Mixing Protocol, Hydration & CCP Notes *
+            </label>
+            <textarea
+              rows={3}
+              value={rndNotes}
+              onChange={(e) => setRndNotes(e.target.value)}
+              placeholder="Specify mixing speeds, target dough exit temp, fermentation time, and baking profile..."
+              required
+              className="w-full border border-gray-300 rounded-xl px-3 py-2 text-xs"
+            />
+          </div>
+
+          <button
+            type="submit"
+            className="w-full py-3 rounded-xl bg-[#240e32] hover:bg-black text-[#E5C585] font-extrabold text-xs uppercase tracking-wider shadow-lg"
+          >
+            Submit R&D Formulation Proposal
           </button>
         </form>
       )}

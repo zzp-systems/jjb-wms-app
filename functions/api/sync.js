@@ -1,8 +1,6 @@
 // ============================================================================
 // JJB WMS — /api/sync  (Phase 1.5 projection + Phase 2.5/2.6 polling + Phase 3 Cutoff)
 // ============================================================================
-// FIX: env.GAS_WEB_APP_URL → env.GAS_URL || env.GAS_WEB_APP_URL
-// The Pages project env var is named GAS_URL, not GAS_WEB_APP_URL.
 
 // --------------------------- helpers -------------------------------------
 const str = v => (v === null || v === undefined ? null : String(v));
@@ -46,13 +44,23 @@ function phtTime(ts) {
 }
 
 // --------------------------- projection handlers -------------------------
-function projectReceiving(env, p, isTest) {
+async function projectReceiving(env, p, isTest) {
   const stmts = [];
   const reportNo = pick(p, 'reportNo', 'report_no');
   if (!reportNo) throw new Error('MISSING_REPORT_NO');
 
   const items = p.items || p.lines || [];
   if (items.length === 0) throw new Error('NO_LINE_ITEMS');
+
+  let receivedBy = str(pick(p, 'receivedBy', 'received_by'));
+  if (receivedBy && env.DB) {
+    try {
+      const u = await env.DB.prepare('SELECT id FROM users WHERE id = ?').bind(receivedBy).first();
+      if (!u) receivedBy = null;
+    } catch {
+      receivedBy = null;
+    }
+  }
 
   stmts.push(env.DB.prepare(`
     INSERT INTO receiving_reports
@@ -68,7 +76,7 @@ function projectReceiving(env, p, isTest) {
   `).bind(
     reportNo, str(pick(p, 'poNo', 'po_no')), str(p.supplier),
     cents(pick(p, 'totalPaid', 'total_paid')),
-    str(pick(p, 'receivedBy', 'received_by')),
+    receivedBy,
     isoDate(pick(p, 'date', 'receivedDate', 'received_date')) || phtDate(p.timestamp),
     str(pick(p, 'time', 'receivedTime', 'received_time')) || phtTime(p.timestamp),
     isTest
@@ -111,13 +119,94 @@ function projectReceiving(env, p, isTest) {
   return stmts;
 }
 
-function projectWithdrawal(env, p, isTest) {
+async function projectWithdrawalRequest(env, p, isTest) {
+  const requestId = pick(p, 'requestId', 'withdrawalNo', 'request_id', 'withdrawal_no');
+  if (!requestId) throw new Error('MISSING_REQUEST_ID');
+
+  const items = Array.isArray(p.items) ? p.items : [];
+  if (items.length === 0) throw new Error('NO_LINE_ITEMS');
+
+  return [env.DB.prepare(`
+    INSERT INTO withdrawal_requests
+      (request_id, withdrawal_no, withdrawal_date, submitted_at, requesting_line,
+       department, purpose, requisitioned_by, notes, total_cost_centavos,
+       status, items_json, is_test_data)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(request_id) DO UPDATE SET
+      withdrawal_no=excluded.withdrawal_no,
+      withdrawal_date=excluded.withdrawal_date,
+      requesting_line=excluded.requesting_line,
+      department=excluded.department,
+      purpose=excluded.purpose,
+      requisitioned_by=excluded.requisitioned_by,
+      notes=excluded.notes,
+      total_cost_centavos=excluded.total_cost_centavos,
+      status=excluded.status,
+      items_json=excluded.items_json,
+      is_test_data=excluded.is_test_data,
+      updated_at=datetime('now')
+  `).bind(
+    requestId,
+    str(pick(p, 'withdrawalNo', 'withdrawal_no')) || requestId,
+    isoDate(pick(p, 'withdrawalDate', 'withdrawal_date', 'date')) || phtDate(p.submittedAt || p.timestamp),
+    str(pick(p, 'submittedAt', 'submitted_at', 'timestamp')) || new Date().toISOString(),
+    str(pick(p, 'requestingLine', 'requesting_line', 'requestingEntity')),
+    str(p.department),
+    str(p.purpose),
+    str(pick(p, 'requisitionedBy', 'requisitioned_by', 'requestedBy')),
+    str(p.notes),
+    cents(pick(p, 'totalCost', 'total_cost')) || 0,
+    str(p.status) || 'PENDING_ISSUANCE',
+    JSON.stringify(items),
+    isTest
+  )];
+}
+
+async function projectWithdrawalRequestCancel(env, p, isTest) {
+  const targetId = pick(p, 'requestId', 'sourceRequestId', 'withdrawalNo', 'slipNo');
+  if (!targetId) throw new Error('MISSING_REQUEST_ID');
+
+  const reason = str(p.reason || 'Cancelled');
+  const actor = str(p.cancelledBy || 'Outlet Staff');
+
+  return [
+    env.DB.prepare(`
+      UPDATE withdrawal_requests
+      SET status = 'CANCELLED', cancelled_reason = ?, cancelled_by = ?, updated_at = datetime('now')
+      WHERE request_id = ? OR withdrawal_no = ?
+    `).bind(reason, actor, targetId, targetId),
+    env.DB.prepare(`
+      INSERT INTO audit_log (timestamp, actor, role, action, details, is_test_data)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).bind(
+      str(p.timestamp) || new Date().toISOString(),
+      actor,
+      null,
+      'WITHDRAWAL_REQUEST_CANCELLED',
+      `Material requisition ${targetId} cancelled: ${reason}`,
+      isTest
+    )
+  ];
+}
+
+async function projectWithdrawal(env, p, isTest) {
   const stmts = [];
   const slipNo = pick(p, 'slipNo', 'slip_no', 'issuanceSlipNumber', 'issuance_slip_number');
   if (!slipNo) throw new Error('MISSING_SLIP_NO');
 
   const items = p.items || p.lines || [];
   if (items.length === 0) throw new Error('NO_LINE_ITEMS');
+
+  // Ensure issued_by satisfies users(id) FK if present
+  let issuedBy = str(pick(p, 'issuedBy', 'issued_by'));
+  if (issuedBy && env.DB) {
+    try {
+      const u = await env.DB.prepare('SELECT id FROM users WHERE id = ?').bind(issuedBy).first();
+      if (!u) issuedBy = null;
+    } catch {
+      issuedBy = null;
+    }
+  }
 
   stmts.push(env.DB.prepare(`
     INSERT INTO withdrawals
@@ -140,12 +229,21 @@ function projectWithdrawal(env, p, isTest) {
     str(pick(p, 'requestingEntity', 'requesting_entity')),
     str(p.department), str(p.purpose),
     str(pick(p, 'requestedBy', 'requested_by')),
-    str(pick(p, 'issuedBy', 'issued_by')),
+    issuedBy,
     str(pick(p, 'receivedBy', 'received_by')),
     cents(pick(p, 'totalCost', 'total_cost')),
     str(p.status), str(p.notes),
     str(pick(p, 'sourceChannel', 'source_channel')), isTest
   ));
+
+  const sourceReqId = pick(p, 'sourceRequestId', 'source_request_id');
+  if (sourceReqId) {
+    stmts.push(env.DB.prepare(`
+      UPDATE withdrawal_requests
+      SET status = 'ISSUED', issued_slip_no = ?, updated_at = datetime('now')
+      WHERE request_id = ? OR withdrawal_no = ?
+    `).bind(slipNo, sourceReqId, sourceReqId));
+  }
 
   stmts.push(env.DB.prepare(`DELETE FROM withdrawal_items WHERE slip_no = ?`).bind(slipNo));
 
@@ -181,10 +279,20 @@ function projectWithdrawal(env, p, isTest) {
   return stmts;
 }
 
-function projectAdjustment(env, p, isTest) {
+async function projectAdjustment(env, p, isTest) {
   const stmts = [];
   const materialCode = pick(p, 'materialCode', 'material_code');
   if (!materialCode) throw new Error('MISSING_MATERIAL_CODE');
+
+  let adjustedBy = str(pick(p, 'adjustedBy', 'adjusted_by'));
+  if (adjustedBy && env.DB) {
+    try {
+      const u = await env.DB.prepare('SELECT id FROM users WHERE id = ?').bind(adjustedBy).first();
+      if (!u) adjustedBy = null;
+    } catch {
+      adjustedBy = null;
+    }
+  }
 
   const type = String(p.type || p.adjustmentType || '').toUpperCase();
   const qty = num(pick(p, 'qtySec', 'qty_sec')) || 0;
@@ -198,7 +306,7 @@ function projectAdjustment(env, p, isTest) {
   `).bind(
     materialCode, str(pick(p, 'materialName', 'name')), type || null, qty,
     str(p.uom), str(p.reason),
-    str(pick(p, 'adjustedBy', 'adjusted_by')),
+    adjustedBy,
     str(pick(p, 'adjustedAt', 'adjusted_at')) || str(p.timestamp),
     str(p.notes), isTest
   ));
@@ -215,9 +323,27 @@ function projectAdjustment(env, p, isTest) {
   return stmts;
 }
 
-function projectBatchOrder(env, p, isTest) {
+async function projectBatchOrder(env, p, isTest) {
   const orderId = pick(p, 'orderId', 'order_id');
   if (!orderId) throw new Error('MISSING_ORDER_ID');
+
+  const rawSku = str(pick(p, 'recipeSku', 'recipe_sku'));
+  let validatedSku = rawSku;
+  let notesVal = str(p.notes);
+
+  // Guard against strict FK failure on batch_orders.recipe_sku -> recipes(sku)
+  // if a kiosk/custom formulation hasn't been seeded into D1 recipes yet.
+  if (rawSku && env.DB) {
+    try {
+      const found = await env.DB.prepare('SELECT sku FROM recipes WHERE sku = ?').bind(rawSku).first();
+      if (!found) {
+        validatedSku = null;
+        notesVal = [notesVal, `[SKU:${rawSku}]`].filter(Boolean).join(' | ');
+      }
+    } catch {
+      // Proceed with rawSku if recipes lookup fails
+    }
+  }
 
   return [env.DB.prepare(`
     INSERT INTO batch_orders
@@ -226,7 +352,7 @@ function projectBatchOrder(env, p, isTest) {
        bulk_requested_at, bulk_approved_at, bulk_approved_by, batch_tag_id,
        actual_batched_kg, actual_batched_units, batched_at, batched_by,
        scale_used, sifter_40mesh_checked, released_at, released_to,
-       scheduled_scaling_date, scheduled_delivery_date, is_after_cutoff, 
+       scheduled_scaling_date, scheduled_delivery_date, is_after_cutoff,
        cutoff_status_label, group_order_ref, estimated_cost, notes, is_test_data)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(order_id) DO UPDATE SET
@@ -262,7 +388,7 @@ function projectBatchOrder(env, p, isTest) {
   `).bind(
     orderId,
     str(pick(p, 'outletName', 'outlet_name')),
-    str(pick(p, 'recipeSku', 'recipe_sku')),
+    validatedSku,
     str(pick(p, 'recipeName', 'recipe_name')),
     num(pick(p, 'requestedQtyPcs', 'requested_qty_pcs')),
     num(pick(p, 'batchMultiplier', 'batch_multiplier')),
@@ -287,7 +413,7 @@ function projectBatchOrder(env, p, isTest) {
     str(pick(p, 'cutoffStatusLabel', 'cutoff_status_label')),
     str(pick(p, 'groupOrderRef', 'group_order_ref')),
     cents(pick(p, 'estimatedCost', 'estimated_cost')),
-    str(p.notes),
+    notesVal,
     isTest
   )];
 }
@@ -369,9 +495,19 @@ function projectAudit(env, p, isTest) {
   )];
 }
 
-function projectQuarantine(env, p, isTest) {
+async function projectQuarantine(env, p, isTest) {
   const ncrNo = pick(p, 'ncrNo', 'ncr_no');
   if (!ncrNo) throw new Error('MISSING_NCR_NO');
+
+  let filedBy = str(pick(p, 'filedBy', 'filed_by'));
+  if (filedBy && env.DB) {
+    try {
+      const u = await env.DB.prepare('SELECT id FROM users WHERE id = ?').bind(filedBy).first();
+      if (!u) filedBy = null;
+    } catch {
+      filedBy = null;
+    }
+  }
 
   return [env.DB.prepare(`
     INSERT INTO quarantine_ncr
@@ -394,7 +530,7 @@ function projectQuarantine(env, p, isTest) {
     str(pick(p, 'materialCode', 'material_code')),
     str(pick(p, 'materialName', 'name')),
     num(pick(p, 'qtySec', 'qty_sec')), str(p.reason), str(p.status),
-    str(pick(p, 'filedBy', 'filed_by')),
+    filedBy,
     str(pick(p, 'filedAt', 'filed_at')) || str(p.timestamp),
     str(p.disposition), str(pick(p, 'dispositionBy', 'disposition_by')),
     str(pick(p, 'dispositionAt', 'disposition_at')), isTest
@@ -470,6 +606,7 @@ function projectSpecialty(env, p, isTest) {
   }
   return stmts;
 }
+
 // --------------------------- Finished Goods & Delivery Projections --------
 function projectFgLot(env, p, isTest) {
   const sku = pick(p, 'product_sku', 'productSku');
@@ -499,7 +636,7 @@ function projectFgLotQa(env, p, isTest) {
   if (!lot) throw new Error('MISSING_LOT_NUMBER');
 
   return [env.DB.prepare(`
-    UPDATE fg_lots 
+    UPDATE fg_lots
     SET qa_status = ?, qa_approved_by = ?, qa_approved_at = datetime('now'), updated_at = datetime('now')
     WHERE lot_number = ? AND is_test_data = ?
   `).bind(str(p.qa_status), str(pick(p, 'qa_approved_by', 'qaApprovedBy')), lot, isTest)];
@@ -549,15 +686,18 @@ function projectDeliveryStatus(env, p, isTest) {
   if (!shipmentId) throw new Error('MISSING_SHIPMENT_ID');
 
   return [env.DB.prepare(`
-    UPDATE delivery_shipments 
+    UPDATE delivery_shipments
     SET status = ?, loading_time = COALESCE(?, loading_time), updated_at = datetime('now')
     WHERE shipment_id = ? AND is_test_data = ?
   `).bind(str(p.status), str(pick(p, 'loading_time', 'loadingTime')), shipmentId, isTest)];
 }
+
 // --------------------------- dispatcher -----------------------------------
 const HANDLERS = {
   'RECEIVING_SAVED': projectReceiving,
   'RECEIVING_CREATED': projectReceiving,
+  'WITHDRAWAL_REQUEST_SUBMITTED': projectWithdrawalRequest,
+  'WITHDRAWAL_REQUEST_CANCELLED': projectWithdrawalRequestCancel,
   'WITHDRAWAL_SAVED': projectWithdrawal,
   'WITHDRAWAL_ISSUED': projectWithdrawal,
   'ADJUSTMENT_SAVED': projectAdjustment,
@@ -607,6 +747,10 @@ function buildReconciliationStatement(env) {
 
 // --------------------------- POST handler --------------------------------
 export async function onRequestPost({ request, env }) {
+  if (!env.DB) {
+    return json({ status: 'error', error: 'D1_NOT_CONFIGURED' }, 500);
+  }
+
   let body;
   try {
     body = await request.json();
@@ -648,7 +792,7 @@ export async function onRequestPost({ request, env }) {
     const handler = HANDLERS[type];
     if (handler) {
       try {
-        const stmts = handler(env, payload, isTest);
+        const stmts = await handler(env, payload, isTest);
         if (BALANCE_AFFECTING.has(type)) stmts.push(buildReconciliationStatement(env));
         if (stmts.length > 0) await env.DB.batch(stmts);
         await env.DB.prepare(
@@ -656,11 +800,12 @@ export async function onRequestPost({ request, env }) {
         ).bind(key).run();
         projectionOk = true;
       } catch (e) {
+        const errMsg = String(e.message || e);
         await env.DB.prepare(
-          `UPDATE sync_events SET projected_at = datetime('now'), projection_error = ? WHERE idempotency_key = ?`
-        ).bind(String(e.message || e), key).run();
-        
-        return json({ status: 'error', error: String(e.message || e) }, 400);
+          `UPDATE sync_events SET projection_error = ? WHERE idempotency_key = ?`
+        ).bind(errMsg, key).run();
+
+        return json({ status: 'error', event_type: type, error: errMsg }, 400);
       }
     } else {
       await env.DB.prepare(
@@ -670,7 +815,6 @@ export async function onRequestPost({ request, env }) {
     }
   }
 
-  // ── FIX: Use GAS_URL (the actual env var name) with fallback to GAS_WEB_APP_URL ──
   const gasUrl = env.GAS_URL || env.GAS_WEB_APP_URL;
 
   let gasOk = !!state?.synced_to_gas;
@@ -734,6 +878,7 @@ export async function onRequestGet({ request, env }) {
 
   let events = [];
   let recentBatchOrders = [];
+  let pendingWithdrawalRequests = [];
 
   try {
     const placeholders = POLLED_EVENT_TYPES.map((_, i) => `?${i + 2}`).join(', ');
@@ -755,11 +900,40 @@ export async function onRequestGet({ request, env }) {
       SELECT * FROM batch_orders
       WHERE is_test_data = 0
       ORDER BY rowid DESC
-      LIMIT 25
+      LIMIT 50
     `).all();
     recentBatchOrders = boOut?.results || [];
-  } catch (e) {
+  } catch {
     // Non-fatal
+  }
+
+  try {
+    const wrOut = await env.DB.prepare(`
+      SELECT * FROM withdrawal_requests
+      WHERE is_test_data = 0 AND status = 'PENDING_ISSUANCE'
+      ORDER BY created_at DESC
+      LIMIT 50
+    `).all();
+    pendingWithdrawalRequests = (wrOut?.results || []).map((row) => {
+      let items = [];
+      try { items = JSON.parse(row.items_json || '[]'); } catch {}
+      return {
+        requestId: row.request_id,
+        withdrawalNo: row.withdrawal_no || row.request_id,
+        withdrawalDate: row.withdrawal_date,
+        submittedAt: row.submitted_at,
+        requestingLine: row.requesting_line,
+        department: row.department,
+        purpose: row.purpose,
+        requisitionedBy: row.requisitioned_by,
+        notes: row.notes || '',
+        totalCost: Number(row.total_cost_centavos || 0) / 100,
+        status: row.status,
+        items
+      };
+    });
+  } catch {
+    // Non-fatal if migration-v5 hasn't been applied yet
   }
 
   const serverMaxId = events.length > 0 ? events[events.length - 1].id : sinceId;
@@ -772,7 +946,7 @@ export async function onRequestGet({ request, env }) {
     count: events.length,
     events: events.map((r) => {
       let payload = {};
-      try { payload = JSON.parse(r.payload || '{}'); } catch (e) {}
+      try { payload = JSON.parse(r.payload || '{}'); } catch {}
       return {
         id: r.id,
         key: r.idempotency_key,
@@ -782,6 +956,7 @@ export async function onRequestGet({ request, env }) {
         created_at: r.created_at
       };
     }),
-    batch_orders: recentBatchOrders
+    batch_orders: recentBatchOrders,
+    withdrawal_requests: pendingWithdrawalRequests
   });
 }

@@ -40,9 +40,34 @@
     <button onclick="hideToast()" class="ml-2 font-extrabold hover:opacity-75">✕</button>
   </div>
 
-  <div id="outboxBadge" class="hidden fixed bottom-4 left-4 z-50 bg-amber-500 text-[#240e32] text-xs font-extrabold px-3 py-2 rounded-xl shadow-2xl border border-amber-300 flex items-center gap-2">
+  <!-- Clickable Outbox Badge (shows Pending + Dead/Rejected items) -->
+  <button id="outboxBadge" onclick="openKioskOutboxModal()" class="hidden fixed bottom-4 left-4 z-50 bg-amber-500 hover:bg-amber-600 text-[#240e32] text-xs font-extrabold px-3.5 py-2 rounded-xl shadow-2xl border border-amber-300 flex items-center gap-2 transition cursor-pointer">
     <span class="animate-pulse text-base">⚡</span>
     <span id="outboxBadgeText">Syncing…</span>
+  </button>
+
+  <!-- Kiosk Outbox Diagnostics Modal -->
+  <div id="kioskOutboxModal" class="hidden fixed inset-0 z-[70] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 no-print">
+    <div class="bg-white rounded-2xl max-w-2xl w-full p-5 md:p-6 shadow-2xl border-2 border-[#C8963E] space-y-4">
+      <div class="flex justify-between items-start border-b pb-2.5">
+        <div>
+          <h3 class="font-serif-title text-lg md:text-xl font-extrabold text-[#240e32] flex items-center gap-2">
+            <span>⚠️</span> Kiosk Outbox Diagnostics
+          </h3>
+          <p class="text-xs text-gray-500">Inspect, revive, or discard queued and rejected kiosk submissions.</p>
+        </div>
+        <button onclick="closeKioskOutboxModal()" class="text-gray-400 hover:text-gray-700 font-extrabold text-lg">✕</button>
+      </div>
+      <div id="kioskOutboxList" class="space-y-2.5 max-h-80 overflow-y-auto"></div>
+      <div class="pt-3 border-t flex flex-wrap justify-between items-center gap-2">
+        <button onclick="reviveAllKioskOutbox()" class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs transition">
+          ↻ Revive & Sync All
+        </button>
+        <button onclick="closeKioskOutboxModal()" class="px-5 py-2 rounded-xl bg-[#240e32] text-[#E5C585] font-extrabold text-xs">
+          Close
+        </button>
+      </div>
+    </div>
   </div>
 
   <header class="theme-header text-white shadow-xl border-b-2 theme-border sticky top-0 z-30 transition-colors duration-300 shrink-0 no-print">
@@ -87,9 +112,9 @@
     </div>
     <nav id="topNavBar" class="hidden bg-black/30 border-t border-white/10">
       <div class="max-w-[1600px] mx-auto px-2 flex items-center gap-1.5 overflow-x-auto py-1.5 no-scrollbar">
-        <button onclick="switchKioskTab('batch')" id="topTab_batch" class="px-3 py-1.5 rounded-lg text-[11px] font-bold whitespace-nowrap flex items-center gap-1.5 transition shrink-0">🥖 1. Batch Orders (`ORD-001`)</button>
-        <button onclick="switchKioskTab('material')" id="topTab_material" class="px-3 py-1.5 rounded-lg text-[11px] font-bold whitespace-nowrap flex items-center gap-1.5 transition shrink-0">📦 2. Raw Materials (`WAR-001`)</button>
-        <button onclick="switchKioskTab('specialty')" id="topTab_specialty" class="px-3 py-1.5 rounded-lg text-[11px] font-bold whitespace-nowrap flex items-center gap-1.5 transition shrink-0">✨ 3. R&D Recipe (`RND-001`)</button>
+        <button onclick="switchKioskTab('batch')" id="topTab_batch" class="px-3 py-1.5 rounded-lg text-[11px] font-bold whitespace-nowrap flex items-center gap-1.5 transition shrink-0">🥖 1. Batch Orders (ORD-001)</button>
+        <button onclick="switchKioskTab('material')" id="topTab_material" class="px-3 py-1.5 rounded-lg text-[11px] font-bold whitespace-nowrap flex items-center gap-1.5 transition shrink-0">📦 2. Raw Materials (WAR-001)</button>
+        <button onclick="switchKioskTab('specialty')" id="topTab_specialty" class="px-3 py-1.5 rounded-lg text-[11px] font-bold whitespace-nowrap flex items-center gap-1.5 transition shrink-0">✨ 3. R&D Recipe (RND-001)</button>
       </div>
     </nav>
   </header>
@@ -145,7 +170,7 @@
         <section class="bg-white rounded-2xl p-4 md:p-5 border border-gray-200 shadow-sm space-y-3 md:space-y-4">
           <div class="flex items-center justify-between border-b pb-2.5">
             <h2 class="text-xs font-extrabold uppercase tracking-wider text-[#240e32]">Step 1 — Requester Identity</h2>
-            <span id="selectedDeptBadge" class="text-[9px] md:text-[10px] font-bold px-2 py-1 rounded-full bg-purple-100 text-purple-900 truncate max-w-[120px] md:max-w-none">Retail Outlet</span>
+            <span id="selectedDeptBadge" class="text-[9px] md:text-[10px] font-bold px-2 py-1 rounded-full bg-purple-100 text-purple-900 truncate max-w-[160px] md:max-w-none">Retail Outlet Dispatch</span>
           </div>
           <div class="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
             <div>
@@ -185,9 +210,9 @@
             <div class="md:col-span-3">
               <label class="block text-[11px] md:text-xs font-bold text-gray-700 mb-1">Target Pull-Out</label>
               <select id="targetDeliverySelect" class="w-full border border-gray-300 rounded-xl px-2.5 py-2 text-xs font-semibold">
-                <option value="04:30 AM">04:30 AM Dawn</option>
-                <option value="06:00 AM">06:00 AM Morning</option>
-                <option value="01:00 PM">01:00 PM Afternoon</option>
+                <option value="04:30 AM Dawn Dispatch">04:30 AM Dawn</option>
+                <option value="06:00 AM Morning Pull-Out">06:00 AM Morning</option>
+                <option value="01:00 PM Afternoon Replenishment">01:00 PM Afternoon</option>
                 <option value="Immediate">Immediate</option>
               </select>
             </div>
@@ -322,16 +347,16 @@
     };
 
     const UNIFIED_PRODUCTION_LINES = [
-      { id: 'PDV-COMMUNAL', label: '1. Pan de Verde Outlet', department: 'Retail Outlet', defaultPurpose: 'Daily Outlet Display' },
-      { id: 'LAURICE-BANKEROHAN', label: '2. Laurice Delicacies Outlet', department: 'Retail Outlet', defaultPurpose: 'Daily Outlet Display' },
-      { id: 'IND-BISCOCHO', label: '3. Indangan - Biscocho Hall', department: 'Production Floor', defaultPurpose: 'Daily Commercial Production' },
-      { id: 'IND-OTAP', label: '4. Indangan - Otap Hall', department: 'Production Floor', defaultPurpose: 'Daily Commercial Production' },
-      { id: 'IND-HEARTH', label: '5. Indangan - Hearth Bread', department: 'Production Floor', defaultPurpose: 'Daily Commercial Production' },
-      { id: 'IND-PASTRY', label: '6. Indangan - Pastry Line', department: 'Production Floor', defaultPurpose: 'Pastry & Cake Preparation' },
-      { id: 'IND-MESS-HALL', label: '7. Indangan Facility Mess Hall', department: 'Mess Hall', defaultPurpose: 'Staff Meals' },
-      { id: 'IND-QA-RND', label: '8. QA & R&D Kitchen', department: 'QA', defaultPurpose: 'R&D Testing' },
-      { id: 'IND-MAINT', label: '9. Facility Maintenance', department: 'Sanitation', defaultPurpose: 'Cleaning & Maintenance' },
-      { id: 'CUSTOM', label: '10. Custom Write-in...', department: 'Special', defaultPurpose: 'Daily Commercial Production' }
+      { id: 'PDV-COMMUNAL', label: '1. Pan de Verde Outlet (Communal, Davao City)', department: 'Retail Outlet Dispatch', defaultPurpose: 'Daily Outlet Display & Pull-Out Replenishment' },
+      { id: 'LAURICE-BANKEROHAN', label: '2. Laurice Delicacies Outlet (Bankerohan, Davao City)', department: 'Retail Outlet Dispatch', defaultPurpose: 'Daily Outlet Display & Pull-Out Replenishment' },
+      { id: 'IND-BISCOCHO', label: '3. Indangan - Biscocho Commercial Hall', department: 'Production Floor (Dry Room 2)', defaultPurpose: 'Daily Commercial Production Line Issuance' },
+      { id: 'IND-OTAP', label: '4. Indangan - Otap Laminated Hall', department: 'Production Floor (Dry Room 2)', defaultPurpose: 'Daily Commercial Production Line Issuance' },
+      { id: 'IND-HEARTH', label: '5. Indangan - Hearth Bread Production Line', department: 'Production Floor (Main Bake Hall)', defaultPurpose: 'Daily Commercial Production Line Issuance' },
+      { id: 'IND-PASTRY', label: '6. Indangan - Pastry, Cake & Sweets Line', department: 'Finishing & Decorating Room', defaultPurpose: 'Pastry, Cake & Filling Preparation' },
+      { id: 'IND-MESS-HALL', label: '7. Indangan Facility Mess Hall (Staff Meals & Snacks)', department: 'Indangan Facility Mess Hall (Staff Meals & Snacks)', defaultPurpose: 'Facility Mess Hall - Staff Meals & Snacks Consumption' },
+      { id: 'IND-QA-RND', label: '8. QA Laboratory & R&D Kitchen', department: 'Quality Assurance & R&D', defaultPurpose: 'QA Retention Sample & R&D Test Formulation' },
+      { id: 'IND-MAINT', label: '9. Facility Maintenance & Plant Sanitation', department: 'Plant Engineering & Sanitation', defaultPurpose: 'Plant Sanitation, Cleaning & Preventive Maintenance' },
+      { id: 'CUSTOM', label: '10. Custom Write-in Department / Satellite Kiosk...', department: 'Special Operations', defaultPurpose: 'Daily Commercial Production Line Issuance' }
     ];
 
     const UNIFIED_CONSUMPTION_PURPOSES = [
@@ -347,7 +372,7 @@
     ];
 
     // ============================================================================
-    // EXPANDED MATERIAL CATALOG — all materials referenced by the 30 recipes
+    // EXPANDED MATERIAL CATALOG — all materials referenced by the recipes
     // ============================================================================
     const KIOSK_CATALOG_MATERIALS = [
       { code: 'RM-DRY-001', name: 'Fresh Farm Eggs', primaryUom: 'Tray', secondaryUom: 'pcs', conversionFactor: 30, unitCost: 210, room: 'Cold Room' },
@@ -391,7 +416,7 @@
     ];
 
     // ============================================================================
-    // 30 MASTER RECIPES WITH FULL INGREDIENT BOMs
+    // MASTER RECIPES WITH FULL INGREDIENT BOMs
     // ============================================================================
     const KIOSK_MASTER_RECIPES = [
       {
@@ -867,11 +892,12 @@
           { label: `Direct (${secUom})`, multiplierInSec: 1, badge: 'BASE UOM' }
         ];
       }
-      if (name.includes('condensed') || name.includes('evaporated') || name.includes('evaporada') || name.includes('creamer')) {
+      if (name.includes('condensed') || name.includes('condensada') || name.includes('evaporated') || name.includes('evaporada') || name.includes('creamer')) {
         const singleCanSec = secUom === 'can' || secUom === 'pcs' ? 1 : (conv > 0 && conv <= 2 ? conv : 0.39);
+        const cansPerBox = name.includes('condensada') ? 24 : 48;
         return [
-          { label: `1 Master Box (48 Cans)`, multiplierInSec: +(singleCanSec * 48).toFixed(2), badge: 'BULK BOX' },
-          { label: `1/2 Box (24 Cans)`, multiplierInSec: +(singleCanSec * 24).toFixed(2), badge: 'HALF BOX' },
+          { label: `1 Master Box (${cansPerBox} Cans)`, multiplierInSec: +(singleCanSec * cansPerBox).toFixed(2), badge: 'BULK BOX' },
+          { label: `1/2 Box (${cansPerBox / 2} Cans)`, multiplierInSec: +(singleCanSec * (cansPerBox / 2)).toFixed(2), badge: 'HALF BOX' },
           { label: '4 Cans (Line Pack)', multiplierInSec: +(singleCanSec * 4).toFixed(2), badge: '4-CAN PACK' },
           { label: '1 Can', multiplierInSec: singleCanSec, badge: 'SINGLE CAN' },
           { label: `Direct (${secUom})`, multiplierInSec: 1, badge: 'BASE UOM' }
@@ -1043,7 +1069,7 @@
     }
 
     // ============================================================================
-    // OFFLINE-FIRST OUTBOX (localStorage, poison-pill safe)
+    // OFFLINE-FIRST OUTBOX (localStorage, poison-pill safe + diagnostics modal)
     // ============================================================================
     let kioskFlushInFlight = false;
     let kioskFlushAgain = false;
@@ -1126,12 +1152,103 @@
       if (!badge || !badgeText) return;
       const queue = getOutboxQueue();
       const pending = queue.filter(e => e.status === 'PENDING' || e.status === 'FAILED' || e.status === 'SYNCING');
-      if (pending.length > 0) {
+      const dead = queue.filter(e => e.status === 'DEAD');
+
+      if (dead.length > 0) {
         badge.classList.remove('hidden');
+        badge.className = 'fixed bottom-4 left-4 z-50 bg-red-600 hover:bg-red-700 text-white text-xs font-extrabold px-3.5 py-2 rounded-xl shadow-2xl border border-red-300 flex items-center gap-2 transition cursor-pointer';
+        badgeText.textContent = `⚠️ ${dead.length} Rejected${pending.length > 0 ? ` · ${pending.length} Pending` : ''} — Check Outbox`;
+      } else if (pending.length > 0) {
+        badge.classList.remove('hidden');
+        badge.className = 'fixed bottom-4 left-4 z-50 bg-amber-500 hover:bg-amber-600 text-[#240e32] text-xs font-extrabold px-3.5 py-2 rounded-xl shadow-2xl border border-amber-300 flex items-center gap-2 transition cursor-pointer';
         badgeText.textContent = `Syncing ${pending.length} pending event${pending.length > 1 ? 's' : ''}…`;
       } else {
         badge.classList.add('hidden');
       }
+      renderKioskOutboxModal();
+    }
+
+    function openKioskOutboxModal() {
+      renderKioskOutboxModal();
+      document.getElementById('kioskOutboxModal').classList.remove('hidden');
+    }
+
+    function closeKioskOutboxModal() {
+      document.getElementById('kioskOutboxModal').classList.add('hidden');
+    }
+
+    function renderKioskOutboxModal() {
+      const listEl = document.getElementById('kioskOutboxList');
+      if (!listEl) return;
+      const queue = getOutboxQueue().filter(e => e.status !== 'SYNCED');
+      if (queue.length === 0) {
+        listEl.innerHTML = `<div class="text-center py-8 text-gray-500 text-xs font-semibold">✅ All kiosk events are synced with D1.</div>`;
+        return;
+      }
+      listEl.innerHTML = queue.map(ev => {
+        const isDead = ev.status === 'DEAD';
+        return `
+          <div class="p-3 rounded-xl border ${isDead ? 'border-red-300 bg-red-50' : 'border-amber-300 bg-amber-50'} flex flex-wrap justify-between items-start gap-3">
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="font-mono-code text-[11px] font-extrabold ${isDead ? 'text-red-800' : 'text-amber-900'}">${ev.event_type}</span>
+                <span class="text-[10px] px-1.5 py-0.5 rounded font-bold ${isDead ? 'bg-red-200 text-red-900' : 'bg-amber-200 text-amber-900'}">${ev.status}</span>
+                <span class="text-[10px] text-gray-500">${new Date(ev.created_at).toLocaleString()}</span>
+              </div>
+              <div class="text-[11px] text-gray-700 truncate mt-1"><strong>Key:</strong> ${ev.idempotency_key}</div>
+              ${ev.error ? `<div class="text-[11px] text-red-700 font-bold mt-1">Reason: ${ev.error}</div>` : ''}
+            </div>
+            <div class="flex items-center gap-1.5 shrink-0">
+              <button type="button" onclick="reviveKioskOutboxEvent('${ev.id}')" class="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold">↻ Revive</button>
+              <button type="button" onclick="discardKioskOutboxEvent('${ev.id}')" class="px-2.5 py-1.5 rounded-lg bg-gray-200 hover:bg-gray-300 text-gray-800 text-[11px] font-bold">Discard</button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    async function reviveKioskOutboxEvent(id) {
+      const queue = getOutboxQueue();
+      const ev = queue.find(e => e.id === id);
+      if (!ev) return;
+      ev.status = 'PENDING';
+      ev.attempts = 0;
+      ev.next_retry_at = 0;
+      ev.error = null;
+      ev.updated_at = Date.now();
+      saveOutboxQueue(queue);
+      updateOutboxBadge();
+      await flushKioskOutbox();
+      showToast('↻ Event revived and re-sent to D1.');
+    }
+
+    async function reviveAllKioskOutbox() {
+      const queue = getOutboxQueue();
+      let count = 0;
+      queue.forEach(ev => {
+        if (ev.status !== 'SYNCED') {
+          ev.status = 'PENDING';
+          ev.attempts = 0;
+          ev.next_retry_at = 0;
+          ev.error = null;
+          ev.updated_at = Date.now();
+          count++;
+        }
+      });
+      saveOutboxQueue(queue);
+      updateOutboxBadge();
+      if (count > 0) {
+        await flushKioskOutbox();
+        showToast(`↻ Revived ${count} event(s) and triggered D1 sync.`);
+      }
+    }
+
+    function discardKioskOutboxEvent(id) {
+      if (!window.confirm('Permanently discard this outbox event?')) return;
+      const queue = getOutboxQueue().filter(e => e.id !== id);
+      saveOutboxQueue(queue);
+      updateOutboxBadge();
+      showToast('🗑️ Outbox event discarded.');
     }
 
     async function flushKioskOutbox() {
@@ -1169,19 +1286,25 @@
                 continue;
               }
 
+              let serverDetail = '';
+              try {
+                const errBody = await res.json();
+                if (errBody && errBody.error) serverDetail = `: ${errBody.error}`;
+              } catch {}
+
               const httpStatus = res.status;
               const isClientError = httpStatus >= 400 && httpStatus < 500;
               const isTransient = httpStatus === 429 || httpStatus === 408;
 
               if (isClientError && !isTransient) {
                 updateOutboxStatus(ev.id, 'DEAD', {
-                  errorMsg: `Permanently rejected (HTTP ${httpStatus})`,
+                  errorMsg: `Permanently rejected (HTTP ${httpStatus})${serverDetail}`,
                   httpStatus
                 });
                 deadNewly++;
               } else {
                 updateOutboxStatus(ev.id, 'FAILED', {
-                  errorMsg: `Transient (HTTP ${httpStatus})`,
+                  errorMsg: `Transient (HTTP ${httpStatus})${serverDetail}`,
                   httpStatus
                 });
               }
@@ -1198,7 +1321,7 @@
         } while (kioskFlushAgain);
 
         if (deadNewly > 0) {
-          showToast(`⚠️ ${deadNewly} queued event${deadNewly > 1 ? 's' : ''} permanently rejected.`);
+          showToast(`⚠️ ${deadNewly} queued event${deadNewly > 1 ? 's' : ''} permanently rejected — click Outbox badge.`);
         }
         if (syncedAny) {
           pollD1FromKiosk();
@@ -1207,6 +1330,7 @@
         console.warn('flushKioskOutbox error:', err);
       } finally {
         kioskFlushInFlight = false;
+        updateOutboxBadge();
       }
     }
 
@@ -1215,7 +1339,7 @@
       await flushKioskOutbox();
       const queue = getOutboxQueue();
       const ev = queue.find(e => e.idempotency_key === idempotencyKey);
-      if (!ev) throw new Error('Event vanished from queue');
+      if (!ev) return 'SYNCED'; // Already purged after successful sync
       if (ev.status === 'SYNCED') return 'SYNCED';
       if (ev.status === 'DEAD') throw new Error(ev.error || 'Permanently rejected');
       return 'QUEUED';
@@ -1514,6 +1638,7 @@
       const freshCutoff = evaluateKioskBatchCutoff(new Date());
       const requester = document.getElementById('requisitionedByInput').value.trim() || 'Outlet Staff';
       const { locationName } = getResolvedLineMeta();
+      const targetDelivery = document.getElementById('targetDeliverySelect').value;
       const orderGeneralRemarks = document.getElementById('kioskOrderGeneralRemarks').value.trim();
 
       const recipesToSubmit = stagedKioskRecipesCart.length > 0
@@ -1560,6 +1685,7 @@
           requestedQtyPcs: item.requestedQtyPcs,
           estimatedCost: item.estimatedCost,
           scaledIngredients: item.scaledIngredients,
+          targetDelivery,
           requisitionedBy: requester, enteredBy: requester,
           status: 'PENDING_BATCHING',
           bulkRequestStatus: 'NOT_REQUESTED',
@@ -1589,7 +1715,7 @@
       document.getElementById('stagedKioskRecipesContainer').innerHTML = '';
       document.getElementById('kioskOrderGeneralRemarks').value = '';
       document.getElementById('kioskRecipeItemRemarks').value = '';
-      document.getElementById('kioskRecipeBomPreview').innerHTML = '';
+      updateBatchYieldPreview();
 
       const total = recipesToSubmit.length;
       if (deadCount > 0 && syncedCount + queuedCount === 0) {
@@ -1734,7 +1860,7 @@
       const banner = document.getElementById('toastBanner');
       document.getElementById('toastText').textContent = msg;
       banner.classList.remove('hidden');
-      setTimeout(() => banner.classList.add('hidden'), 4000);
+      setTimeout(() => banner.classList.add('hidden'), 4500);
     }
 
     function hideToast() { document.getElementById('toastBanner').classList.add('hidden'); }
@@ -1829,7 +1955,7 @@
         wholesaleTransferPrice: +(srp * 0.75).toFixed(2),
         srp, grossMarginPct: 52, mixingNotes,
         status: 'PENDING_APPROVAL', submittedAt: new Date().toISOString(),
-        ingredients: [{ code: 'RM-FLR-001', name: 'Hard Wheat Bread Flour', pct: 100, gramsPerBatch: standardBatchFlourKg * 1000 }]
+        ingredients: [{ code: 'RM-FLR-001', name: 'All Purpose Flour', pct: 100, gramsPerBatch: standardBatchFlourKg * 1000 }]
       };
       try {
         const raw = localStorage.getItem('JJB_WMS_LIVE_V4_6_SPECIALTY_RECIPES');
@@ -1864,7 +1990,9 @@
         const actor = document.getElementById('requisitionedByInput').value.trim() || 'Outlet Staff';
         try {
           await postToCloudD1('WITHDRAWAL_REQUEST_CANCELLED', `REQ_CANC_${requestId}_${Date.now()}`, { requestId, reason, cancelledBy: actor, timestamp: new Date().toISOString() });
-        } catch {}
+        } catch (err) {
+          console.warn('Cancellation sync queued/rejected:', err);
+        }
         showToast(`🗑️ Requisition ${requestId} cancelled.`);
       }, 320);
     }
@@ -1886,7 +2014,9 @@
             orderId, recipeName: target?.recipeName || 'Batch Order', outletName: target?.outletName || 'Outlet',
             cancelledBy: actor, cancellationReason: reason, timestamp: new Date().toISOString()
           });
-        } catch {}
+        } catch (err) {
+          console.warn('Batch cancellation sync queued/rejected:', err);
+        }
         showToast(`🗑️ Batch Order ${orderId} cancelled.`);
       }, 320);
     }
@@ -1957,7 +2087,34 @@
         badge.textContent = '● D1 ONLINE';
         const data = JSON.parse(text);
         const events = Array.isArray(data.events) ? data.events : [];
+        const remoteBatchOrders = Array.isArray(data.batch_orders) ? data.batch_orders : [];
+        const remoteWithdrawalRequests = Array.isArray(data.withdrawal_requests) ? data.withdrawal_requests : [];
         let changed = false;
+
+        remoteWithdrawalRequests.forEach((rw) => {
+          const reqId = rw.requestId || rw.withdrawalNo;
+          if (reqId && !pendingRequestsQueue.some((r) => (r.requestId || r.withdrawalNo) === reqId)) {
+            pendingRequestsQueue.unshift(rw);
+            changed = true;
+          }
+        });
+
+        remoteBatchOrders.forEach((ro) => {
+          const oid = ro.order_id || ro.orderId;
+          if (oid && (ro.status || 'PENDING_BATCHING') === 'PENDING_BATCHING' && !pendingBatchOrdersQueue.some((o) => o.orderId === oid)) {
+            pendingBatchOrdersQueue.unshift({
+              orderId: oid,
+              outletName: ro.outlet_name || ro.outletName || 'Outlet',
+              recipeSku: ro.recipe_sku || ro.recipeSku,
+              recipeName: ro.recipe_name_snapshot || ro.recipeName || 'Commercial Batch',
+              requestedQtyPcs: Number(ro.requested_qty_pcs ?? ro.requestedQtyPcs ?? 0),
+              batchMultiplier: Number(ro.batch_multiplier ?? ro.batchMultiplier ?? 1),
+              status: ro.status || 'PENDING_BATCHING'
+            });
+            changed = true;
+          }
+        });
+
         events.forEach((ev) => {
           const type = String(ev.event_type || '').toUpperCase();
           const p = ev.payload || {};
@@ -2009,6 +2166,18 @@
         hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true
       });
     }, 1000);
+
+    // Cross-tab BroadcastChannel listener so Main WMS actions update Kiosk immediately
+    try {
+      if (typeof BroadcastChannel !== 'undefined') {
+        const bc = new BroadcastChannel('JJB_WMS_SYNC_CHANNEL');
+        bc.onmessage = () => {
+          loadSharedState();
+          renderRightQueueDock();
+          pollD1FromKiosk();
+        };
+      }
+    } catch {}
 
     // Boot Kiosk
     loadSharedState();

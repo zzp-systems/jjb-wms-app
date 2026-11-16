@@ -65,14 +65,10 @@ export function initOfflineDb() {
           if (!cursor) return;
           const rec = cursor.value;
 
-          // New fields
           if (rec.next_retry_at == null) rec.next_retry_at = 0;
           if (rec.last_http_status == null) rec.last_http_status = null;
-
-          // Fix attempts inflated by the double-increment bug
           if (typeof rec.attempts !== 'number') rec.attempts = 0;
 
-          // Demote already-exhausted FAILED records to DEAD
           if (rec.status === STATUS.FAILED && rec.attempts >= MAX_ATTEMPTS) {
             rec.status = STATUS.DEAD;
             rec.error = rec.error || 'Exceeded max attempts (migrated from v1)';
@@ -93,7 +89,7 @@ export function initOfflineDb() {
 // ---------------------------------------------------------------------------
 // Queue (size-guarded)
 // ---------------------------------------------------------------------------
-const MAX_PAYLOAD_BYTES = 500_000; // 500 KB — well under D1's 1 MB row limit
+const MAX_PAYLOAD_BYTES = 500_000;
 
 export async function queueEvent(eventType, idempotencyKey, payload) {
   const serialized = JSON.stringify(payload);
@@ -206,7 +202,6 @@ export async function updateEventStatus(id, status, opts = {}) {
       if (errorMsg) rec.error = errorMsg;
       if (httpStatus != null) rec.last_http_status = httpStatus;
 
-      // Attempts increment ONLY on a FAILED transition
       if (status === STATUS.FAILED) {
         rec.attempts = (rec.attempts || 0) + 1;
         rec.next_retry_at = Date.now() + computeBackoffMs(rec.attempts);
@@ -262,6 +257,32 @@ export async function reviveEvent(id) {
       tx.oncomplete = () => resolve(true);
     };
     getReq.onerror = () => reject(getReq.error);
+  });
+}
+
+/** Re-enqueue all DEAD events at once. */
+export async function reviveAllDeadEvents() {
+  const db = await initOfflineDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    const store = tx.objectStore(STORE_NAME);
+    const req = store.getAll();
+    let count = 0;
+    req.onsuccess = () => {
+      (req.result || []).forEach((rec) => {
+        if (rec.status === STATUS.DEAD) {
+          rec.status = STATUS.PENDING;
+          rec.attempts = 0;
+          rec.next_retry_at = 0;
+          rec.error = null;
+          rec.updated_at = Date.now();
+          store.put(rec);
+          count++;
+        }
+      });
+    };
+    tx.oncomplete = () => resolve(count);
+    tx.onerror = () => reject(tx.error);
   });
 }
 

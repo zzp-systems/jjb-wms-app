@@ -1,30 +1,7 @@
 -- ============================================================================
--- JJB WMS — D1 Schema (v3 Path-B / Phase 1)
+-- JJB WMS — D1 Schema (v3 Path-B / Phase 1 + v5 Sync Parity)
 -- Target: Cloudflare D1 (SQLite) · Database: jjb-wms-db
 -- Apply:  npx wrangler d1 execute jjb-wms-db --remote --file=./schema.sql
---
--- Conventions
---   System timestamps (created_at / updated_at)  -> UTC
---   Business date/time fields (received_*, etc.) -> PHT as entered
---   Money                                         -> INTEGER centavos,
---                                                    always per secondary_uom
---   is_test_data                                  -> 1 on operational tables,
---                                                    omitted on roles/system_config
---                                                    and sync_events
---
--- FK policy
---   Master-data junctions (recipe_ingredients, specialty_recipe_ingredients)
---   and master->master links (materials.room, batch_orders.recipe_sku) keep
---   strict FKs by design.
---   Historical transaction data (receiving_items, withdrawal_items,
---   adjustments, quarantine_ncr) uses ON DELETE SET NULL on material_code
---   with a *_name_snapshot column.
---
--- Path-B additions vs Phase 1 baseline
---   * v_material_balance_reconciliation view (from v3.1)
---   * idx_sri_proposal on specialty_recipe_ingredients(proposal_id) (v3.1)
---   * UNIQUE(material_code, lot_number) on material_lots (required by sync.js)
---   * projected_at / projection_error on sync_events (required by sync.js)
 -- ============================================================================
 
 PRAGMA foreign_keys = ON;
@@ -164,7 +141,7 @@ CREATE TABLE IF NOT EXISTS recipes (
 );
 
 -- ---------------------------------------------------------------------------
--- A7 recipe_ingredients  (is_packaging added in Phase 1 / Catch 2)
+-- A7 recipe_ingredients
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS recipe_ingredients (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -230,7 +207,7 @@ CREATE TABLE IF NOT EXISTS receiving_items (
 CREATE INDEX IF NOT EXISTS idx_recv_items_report ON receiving_items(report_no);
 
 -- ---------------------------------------------------------------------------
--- B2 withdrawals + C2 withdrawal_items
+-- B2 withdrawals + C2 withdrawal_items + B2b withdrawal_requests
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS withdrawals (
   slip_no TEXT PRIMARY KEY,
@@ -269,6 +246,29 @@ CREATE TABLE IF NOT EXISTS withdrawal_items (
 );
 CREATE INDEX IF NOT EXISTS idx_wd_items_slip ON withdrawal_items(slip_no);
 
+CREATE TABLE IF NOT EXISTS withdrawal_requests (
+  request_id TEXT PRIMARY KEY,
+  withdrawal_no TEXT,
+  withdrawal_date TEXT,
+  submitted_at TEXT,
+  requesting_line TEXT,
+  department TEXT,
+  purpose TEXT,
+  requisitioned_by TEXT,
+  notes TEXT,
+  total_cost_centavos INTEGER DEFAULT 0,
+  status TEXT DEFAULT 'PENDING_ISSUANCE',
+  items_json TEXT,
+  issued_slip_no TEXT,
+  cancelled_reason TEXT,
+  cancelled_by TEXT,
+  is_test_data INTEGER DEFAULT 0,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_wreq_status ON withdrawal_requests(status);
+CREATE INDEX IF NOT EXISTS idx_wreq_date ON withdrawal_requests(withdrawal_date);
+
 -- ---------------------------------------------------------------------------
 -- B3 batch_orders
 -- ---------------------------------------------------------------------------
@@ -294,11 +294,20 @@ CREATE TABLE IF NOT EXISTS batch_orders (
   sifter_40mesh_checked INTEGER DEFAULT 0,
   released_at TEXT,
   released_to TEXT,
+  scheduled_scaling_date TEXT,
+  scheduled_delivery_date TEXT,
+  is_after_cutoff INTEGER DEFAULT 0,
+  cutoff_status_label TEXT,
+  group_order_ref TEXT,
+  estimated_cost INTEGER DEFAULT 0,
+  notes TEXT,
   is_test_data INTEGER DEFAULT 0,
   created_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_batch_status ON batch_orders(status);
+CREATE INDEX IF NOT EXISTS idx_batch_group_ref ON batch_orders(group_order_ref);
+CREATE INDEX IF NOT EXISTS idx_batch_delivery_date ON batch_orders(scheduled_delivery_date);
 
 -- ---------------------------------------------------------------------------
 -- B4 adjustments
@@ -478,7 +487,7 @@ CREATE TABLE IF NOT EXISTS system_config (
 );
 
 -- ---------------------------------------------------------------------------
--- Analytical View (from v3.1) — Perpetual book balance vs active FEFO lot sum
+-- Analytical View — Perpetual book balance vs active FEFO lot sum
 -- ---------------------------------------------------------------------------
 CREATE VIEW IF NOT EXISTS v_material_balance_reconciliation AS
 SELECT

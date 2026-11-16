@@ -39,8 +39,8 @@ import {
   updateEventStatus,
   clearSyncedEvents,
   reviveEvent,
-  dismissDeadEvent,
-  MAX_ATTEMPTS
+  reviveAllDeadEvents,
+  dismissDeadEvent
 } from './utils/offlineDb';
 import { CheckCircle2, Bell, AlertTriangle, RefreshCw, Trash2 } from 'lucide-react';
 
@@ -70,6 +70,16 @@ const resolveUserId = (nameOrId, authUserObj = null) => {
       raw.toLowerCase().includes(u.name.split(' ')[0].toLowerCase())
   );
   return matched?.id || 'jade';
+};
+
+const broadcastCrossTab = (entityType, origin = 'Main WMS') => {
+  try {
+    if (typeof BroadcastChannel !== 'undefined') {
+      const bc = new BroadcastChannel('JJB_WMS_SYNC_CHANNEL');
+      bc.postMessage({ type: 'NEW_REQUISITION', entityType, origin });
+      bc.close();
+    }
+  } catch {}
 };
 
 const buildNormalizedWithdrawalItems = (rawItems, materialsList) => {
@@ -113,6 +123,7 @@ const buildNormalizedWithdrawalItems = (rawItems, materialsList) => {
       secondaryUom: item.secondaryUom || item.uom || mat.secondaryUom || 'kg',
       storageRoom: item.storageRoom || mat.room || 'Dry Room 1',
       estimatedCost: estimatedCostPhp,
+      composition: Array.isArray(item.composition) ? item.composition : undefined,
       remarks: item.remarks || ''
     };
   });
@@ -122,7 +133,7 @@ const loadUiPrefs = () => {
   try {
     const raw = localStorage.getItem(UI_PREF_KEY);
     if (raw) return JSON.parse(raw);
-  } catch (e) {}
+  } catch {}
   return { navLayout: 'sidebar', themeId: 'jjb-gold' };
 };
 
@@ -132,7 +143,7 @@ export default function App() {
     try {
       const saved = localStorage.getItem(`${STORAGE_KEY}_${key}`);
       return saved ? JSON.parse(saved) : fallback;
-    } catch (e) {
+    } catch {
       return fallback;
     }
   };
@@ -164,7 +175,7 @@ export default function App() {
   useEffect(() => {
     try {
       localStorage.setItem(UI_PREF_KEY, JSON.stringify({ navLayout, themeId }));
-    } catch (e) {}
+    } catch {}
   }, [navLayout, themeId]);
 
   // Auth State
@@ -172,13 +183,13 @@ export default function App() {
     try {
       const saved = localStorage.getItem('JJB_WMS_AUTH_USER');
       if (saved) return JSON.parse(saved);
-    } catch (e) {}
+    } catch {}
     return AUTH_USERS[0];
   });
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
     try {
       return sessionStorage.getItem('JJB_WMS_AUTH_SESSION') === 'ACTIVE';
-    } catch (e) {
+    } catch {
       return false;
     }
   });
@@ -242,21 +253,6 @@ export default function App() {
     if (isOutboxModalOpen) loadDeadEvents();
   }, [isOutboxModalOpen, loadDeadEvents]);
 
-  const handleReviveEvent = async (id) => {
-    await reviveEvent(id);
-    await loadDeadEvents();
-    await flushOutbox();
-    showToast('Event revived and re-queued.');
-  };
-
-  const handleDismissEvent = async (id) => {
-    if (window.confirm('Permanently discard this event? This cannot be undone.')) {
-      await dismissDeadEvent(id);
-      await loadDeadEvents();
-      showToast('Event discarded permanently.');
-    }
-  };
-
   // ============================================================================
   // Cross-Device D1 Poller
   // ============================================================================
@@ -277,6 +273,23 @@ export default function App() {
       const data = JSON.parse(text);
       const incomingEvents = Array.isArray(data.events) ? data.events : [];
       const remoteBatchOrders = Array.isArray(data.batch_orders) ? data.batch_orders : [];
+      const remoteWithdrawalRequests = Array.isArray(data.withdrawal_requests) ? data.withdrawal_requests : [];
+
+      if (remoteWithdrawalRequests.length > 0) {
+        setPendingRequests((prev) => {
+          const map = new Map(prev.map((r) => [r.requestId || r.withdrawalNo, r]));
+          let changed = false;
+          remoteWithdrawalRequests.forEach((rw) => {
+            const reqId = rw.requestId || rw.withdrawalNo;
+            if (!reqId) return;
+            if (!map.has(reqId)) {
+              changed = true;
+              map.set(reqId, rw);
+            }
+          });
+          return changed ? Array.from(map.values()) : prev;
+        });
+      }
 
       if (remoteBatchOrders.length > 0) {
         setBatchOrders((prev) => {
@@ -289,6 +302,13 @@ export default function App() {
               changed = true;
               map.set(oid, {
                 orderId: oid,
+                groupOrderRef: ro.group_order_ref || ro.groupOrderRef || null,
+                scheduledScalingDate: ro.scheduled_scaling_date || ro.scheduledScalingDate || null,
+                targetDate: ro.scheduled_delivery_date || ro.targetDate || null,
+                isAfter3PmCutoff: Boolean(ro.is_after_cutoff ?? ro.isAfter3PmCutoff),
+                cutoffStatusLabel: ro.cutoff_status_label || ro.cutoffStatusLabel || null,
+                estimatedCost: ro.estimated_cost != null ? Number(ro.estimated_cost) / 100 : undefined,
+                notes: ro.notes || '',
                 outletName: ro.outlet_name || ro.outletName || 'Outlet Portal',
                 recipeSku: ro.recipe_sku || ro.recipeSku || 'BRD-PAN-001',
                 recipeName: ro.recipe_name_snapshot || ro.recipeName || 'Commercial Formulation',
@@ -385,14 +405,25 @@ export default function App() {
             if (prev.some((o) => o.orderId === orderId)) return prev;
             const newOrder = {
               orderId,
+              groupOrderRef: p.groupOrderRef || p.group_order_ref || null,
+              requestDate: p.requestDate || null,
+              scheduledScalingDate: p.scheduledScalingDate || p.scheduled_scaling_date || null,
+              targetDate: p.targetDate || p.scheduledDeliveryDate || p.scheduled_delivery_date || null,
+              isAfter3PmCutoff: Boolean(p.isAfter3PmCutoff ?? p.is_after_cutoff),
+              cutoffStatusLabel: p.cutoffStatusLabel || p.cutoff_status_label || null,
+              estimatedCost: p.estimatedCost != null ? Number(p.estimatedCost) : undefined,
+              scaledIngredients: Array.isArray(p.scaledIngredients) ? p.scaledIngredients : undefined,
+              notes: p.notes || '',
               outletName: p.outletName || p.outlet_name || 'Retail Outlet',
               recipeSku: p.recipeSku || p.recipe_sku || 'BRD-PAN-001',
               recipeName: p.recipeName || p.recipe_name || 'Commercial Batch',
               requestedQtyPcs: Number(p.requestedQtyPcs || p.requested_qty_pcs || 0),
               batchMultiplier: Number(p.batchMultiplier || p.batch_multiplier || 1),
               targetDelivery: p.targetDelivery || '05:30 AM Pull-Out',
-              requisitionedBy: p.requisitionedBy || 'Outlet Staff',
-              status: p.status || 'PENDING_BATCHING'
+              requisitionedBy: p.requisitionedBy || p.enteredBy || 'Outlet Staff',
+              enteredBy: p.enteredBy || p.requisitionedBy || 'Outlet Staff',
+              status: p.status || 'PENDING_BATCHING',
+              bulkRequestStatus: p.bulkRequestStatus || 'NOT_REQUESTED'
             };
             if (initialPollDoneRef.current) {
               newNotifs.push({
@@ -484,7 +515,7 @@ export default function App() {
       }
 
       initialPollDoneRef.current = true;
-    } catch (err) {
+    } catch {
       // Silent retry on next interval
     } finally {
       pollInFlightRef.current = false;
@@ -536,19 +567,25 @@ export default function App() {
               continue;
             }
 
+            let serverDetail = '';
+            try {
+              const errBody = await res.json();
+              if (errBody?.error) serverDetail = `: ${errBody.error}`;
+            } catch {}
+
             const httpStatus = res.status;
             const isClientError = httpStatus >= 400 && httpStatus < 500;
             const isTransient429Or408 = httpStatus === 429 || httpStatus === 408;
 
             if (isClientError && !isTransient429Or408) {
               await updateEventStatus(event.id, 'DEAD', {
-                errorMsg: `Payload permanently rejected (HTTP ${httpStatus})`,
+                errorMsg: `Payload permanently rejected (HTTP ${httpStatus})${serverDetail}`,
                 httpStatus
               });
               deadNewly++;
             } else {
               await updateEventStatus(event.id, 'FAILED', {
-                errorMsg: `Transient failure (HTTP ${httpStatus})`,
+                errorMsg: `Transient failure (HTTP ${httpStatus})${serverDetail}`,
                 httpStatus
               });
             }
@@ -580,6 +617,32 @@ export default function App() {
       flushInFlightRef.current = false;
     }
   }, [isOffline, pollCrossDeviceEvents, showToast]);
+
+  const handleReviveEvent = async (id) => {
+    await reviveEvent(id);
+    await loadDeadEvents();
+    await flushOutbox();
+    showToast('Event revived and re-queued.');
+  };
+
+  const handleReviveAllDead = async () => {
+    const count = await reviveAllDeadEvents();
+    await loadDeadEvents();
+    if (count > 0) {
+      await flushOutbox();
+      showToast(`Revived ${count} rejected event(s) and triggered sync.`);
+    }
+  };
+
+  const handleDismissEvent = async (id) => {
+    if (window.confirm('Permanently discard this event? This cannot be undone.')) {
+      await dismissDeadEvent(id);
+      await loadDeadEvents();
+      const remaining = await getPendingEvents();
+      setOutboxCount(remaining.length);
+      showToast('Event discarded permanently.');
+    }
+  };
 
   // ============================================================================
   // Unified Edge Sync Dispatcher
@@ -662,7 +725,7 @@ export default function App() {
   useEffect(() => {
     try {
       localStorage.setItem('JJB_WMS_AUTH_USER', JSON.stringify(authUser));
-    } catch (e) {}
+    } catch {}
   }, [authUser]);
 
   const handleRoleChange = (newRoleName) => {
@@ -678,7 +741,7 @@ export default function App() {
     try {
       sessionStorage.setItem('JJB_WMS_AUTH_SESSION', 'ACTIVE');
       localStorage.setItem('JJB_WMS_AUTH_USER', JSON.stringify(user));
-    } catch (e) {}
+    } catch {}
     setIsLoginModalOpen(false);
     recordAudit(
       'STAFF_LOGIN_AUTHENTICATED',
@@ -690,7 +753,7 @@ export default function App() {
   const handleLogout = () => {
     try {
       sessionStorage.removeItem('JJB_WMS_AUTH_SESSION');
-    } catch (e) {}
+    } catch {}
     setIsAuthenticated(false);
     showToast('Terminal session locked. Please sign in to proceed.');
   };
@@ -773,7 +836,7 @@ export default function App() {
           }
         };
       }
-    } catch (e) {}
+    } catch {}
 
     return () => {
       window.removeEventListener('storage', handleStorageEvent);
@@ -828,7 +891,7 @@ export default function App() {
           );
           showToast('23:45 PHT Nightly EOD Watcher: Ledger balanced & queued for distribution.');
         }
-      } catch (e) {}
+      } catch {}
     };
 
     const timer = setInterval(checkEodTime, 30000);
@@ -980,9 +1043,10 @@ export default function App() {
         qtyRequestedSec: row.requestedQtySec ?? row.qtyRequestedSec,
         qtyIssuedSec: row.requestedQtySec ?? row.qtyIssuedSec,
         secondaryUom: row.secondaryUom || 'kg',
-        lotNumber: 'FEFO-AUTO',
+        lotNumber: row.lotNumber || 'FEFO-AUTO',
         estimatedCost: row.estimatedCost || 0,
-        remarks: `Portal req: ${portalReq.purpose || 'Operation'}`
+        composition: row.composition,
+        remarks: row.remarks || `Portal req: ${portalReq.purpose || 'Operation'}`
       })),
       inventory
     );
@@ -991,15 +1055,19 @@ export default function App() {
       portalReq.totalCost ||
       +normalizedItems.reduce((sum, it) => sum + (Number(it.estimatedCost) || 0), 0).toFixed(2);
 
+    const resolvedDepartment =
+      portalReq.department ||
+      (portalReq.purpose?.includes('Mess Hall')
+        ? 'Indangan Facility Mess Hall (Staff Meals & Snacks)'
+        : 'Production Floor');
+
     const queuedRequest = {
       requestId,
       withdrawalNo: requestId,
       withdrawalDate: portalReq.withdrawalDate || new Date().toISOString().slice(0, 10),
       submittedAt: new Date().toISOString(),
       requestingLine: portalReq.requestingLine || 'Indangan Facility',
-      department: portalReq.purpose?.includes('Mess Hall')
-        ? 'Indangan Facility Mess Hall (Staff Meals & Snacks)'
-        : 'Production Floor',
+      department: resolvedDepartment,
       purpose: portalReq.purpose || 'Material Requisition',
       requisitionedBy: portalReq.requisitionedBy || 'Authorized Staff',
       notes: portalReq.notes || '',
@@ -1009,6 +1077,7 @@ export default function App() {
     };
 
     setPendingRequests((prev) => [queuedRequest, ...prev]);
+    broadcastCrossTab('material requisition', queuedRequest.requestingLine);
 
     recordAudit(
       'WITHDRAWAL_REQUEST_SUBMITTED',
@@ -1057,6 +1126,7 @@ export default function App() {
     setPendingRequests((prev) =>
       prev.filter((r) => r.requestId !== requestId && r.withdrawalNo !== requestId)
     );
+    broadcastCrossTab('issuance', 'Main WMS');
 
     showToast(`Request ${requestId} issued as Slip ${slipNo} & stock deducted!`);
   };
@@ -1065,6 +1135,7 @@ export default function App() {
     setPendingRequests((prev) =>
       prev.filter((r) => r.requestId !== requestId && r.withdrawalNo !== requestId)
     );
+    broadcastCrossTab('cancellation', 'Main WMS');
     recordAudit('WITHDRAWAL_REQUEST_CANCELLED', `Cancelled queued request ${requestId}: ${reason}`);
     postSyncEvent('WITHDRAWAL_REQUEST_CANCELLED', `REQ_CANC_${requestId}_${Date.now()}`, {
       requestId,
@@ -1076,29 +1147,27 @@ export default function App() {
   };
 
   const handleSaveBatchOrder = (newOrder) => {
-    setBatchOrders((prev) => [newOrder, ...prev]);
+    const normalizedOrder = {
+      ...newOrder,
+      status: newOrder.status || 'PENDING_BATCHING',
+      bulkRequestStatus: newOrder.bulkRequestStatus || 'NOT_REQUESTED',
+      timestamp: newOrder.timestamp || new Date().toISOString()
+    };
+    setBatchOrders((prev) => [normalizedOrder, ...prev]);
+    broadcastCrossTab('batch order', normalizedOrder.outletName || 'Main WMS');
 
     recordAudit(
       'OUTLET_ORDER_INTAKE',
-      `Intake batch order ${newOrder.orderId} for ${newOrder.outletName}: ${newOrder.requestedQtyPcs} pcs of ${newOrder.recipeName}`
+      `Intake batch order ${normalizedOrder.orderId} for ${normalizedOrder.outletName}: ${normalizedOrder.requestedQtyPcs} pcs of ${normalizedOrder.recipeName}`
     );
 
     postSyncEvent(
       'BATCH_ORDER_SAVED',
-      `ORDER_${newOrder.orderId}_${Date.now()}`,
-      {
-        orderId: newOrder.orderId,
-        outletName: newOrder.outletName,
-        recipeSku: newOrder.recipeSku,
-        recipeName: newOrder.recipeName,
-        requestedQtyPcs: newOrder.requestedQtyPcs,
-        batchMultiplier: newOrder.batchMultiplier,
-        status: newOrder.status || 'PENDING_BATCHING',
-        timestamp: new Date().toISOString()
-      }
+      `ORDER_${normalizedOrder.orderId}_${Date.now()}`,
+      normalizedOrder
     );
 
-    showToast(`Order ${newOrder.orderId} queued for Romeo Malusay!`);
+    showToast(`Order ${normalizedOrder.orderId} queued for Romeo Malusay!`);
   };
 
   const handleRequestBulkMaterials = (orderId) => {
@@ -1334,10 +1403,11 @@ export default function App() {
 
   // WORKFLOW 4B — Cancel a batch order
   const handleCancelBatchOrder = (orderId, reason = 'Cancelled') => {
-    const targetOrder = batchOrders.find(o => o.orderId === orderId);
+    const targetOrder = batchOrders.find((o) => o.orderId === orderId);
     if (!targetOrder) return;
 
-    setBatchOrders(prev => prev.filter(o => o.orderId !== orderId));
+    setBatchOrders((prev) => prev.filter((o) => o.orderId !== orderId));
+    broadcastCrossTab('batch cancellation', 'Main WMS');
 
     recordAudit(
       'BATCH_ORDER_CANCELLED',
@@ -1644,7 +1714,7 @@ export default function App() {
         >
           <span className="animate-pulse text-base">⚡</span>
           <span>
-            Syncing {outboxCount} pending event{outboxCount > 1 ? 's' : ''}…
+            Outbox: {outboxCount} event{outboxCount > 1 ? 's' : ''} (Click to inspect)
           </span>
         </button>
       )}
@@ -1741,11 +1811,13 @@ export default function App() {
                 onSpecialtyRecipeSubmitted={(newProposal) => {
                   setRecipes(getAllMasterRecipes());
                   if (newProposal) {
+                    broadcastCrossTab('specialty R&D recipe', newProposal.requestingLocation || 'Main WMS');
                     postSyncEvent(
                       'SPECIALTY_PROPOSAL_SAVED',
                       `SPEC_${newProposal.proposalId || Date.now()}`,
                       newProposal
                     );
+                    showToast(`✨ R&D Proposal ${newProposal.proposalId} submitted & queued for sync!`);
                   }
                 }}
                 currentRole={currentRole}
@@ -1910,7 +1982,12 @@ export default function App() {
                 ))}
               </div>
             )}
-            <div className="pt-3 border-t flex justify-end">
+            <div className="pt-3 border-t flex justify-between items-center">
+              {deadEvents.length > 0 ? (
+                <button onClick={handleReviveAllDead} className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5">
+                  <RefreshCw size={13} /> Revive & Sync All ({deadEvents.length})
+                </button>
+              ) : <span />}
               <button onClick={() => setIsOutboxModalOpen(false)} className="px-5 py-2 rounded-xl bg-[#240e32] text-[#E5C585] font-bold text-xs">Close</button>
             </div>
           </div>
@@ -1946,13 +2023,13 @@ export default function App() {
       <footer className="bg-[#240e32] text-white py-3 px-6 text-center text-xs border-t border-[#C8963E]/30 shrink-0">
         <div className="max-w-4xl mx-auto space-y-1">
           <p className="font-semibold text-gray-200">
-            Jang-Jang Bakeshop &amp; Kingdom Confectionary · Manual of Operations Rev. 4.6 WMS Engine
+            Jang-Jang Bakeshop & Kingdom Confectionary · Manual of Operations Rev. 4.6 WMS Engine
           </p>
           <p className="text-[#E5C585] text-[11px]">
             Indangan Subject Site FDA LTO No. 3000013388488 · Sasa Site LTO No. 3000002291335 · Davao City, Philippines
           </p>
           <p className="text-gray-400 text-[10px]">
-            Jade Q. Dela Cruz (Receiving &amp; Withdrawals) · Romeo B. Malusay (Batching &amp; Releasing) · Mariejohn F. Tacuban (Inventory &amp; PO)
+            Jade Q. Dela Cruz (Receiving & Withdrawals) · Romeo B. Malusay (Batching & Releasing) · Mariejohn F. Tacuban (Inventory & PO)
           </p>
         </div>
       </footer>
