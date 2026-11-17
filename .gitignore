@@ -12,6 +12,8 @@ bun.lock
 payload.json
 seed.sql
 opening-inventory.sql
+export-repo.ps1
+repository_dump.txt
 
 # Local-only recovery script — never commit
 restore-passwords.mjs

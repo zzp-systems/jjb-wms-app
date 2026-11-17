@@ -1,11 +1,25 @@
-import React, { useState, useMemo } from 'react';
+// ============================================================================
+// FILE: src/components/ReportsModule.jsx
+// ============================================================================
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
-  FileText, Download, Upload, ShoppingCart, Calendar, 
-  Search, Filter, CheckCircle2, AlertTriangle, Printer,
-  RefreshCw, DollarSign, Package, ArrowDownRight, ArrowUpRight,
-  ShieldCheck, Layers, FileSpreadsheet
+  FileSpreadsheet, Download, Upload, Filter, Search, Printer, CheckCircle2, 
+  AlertTriangle, Layers, Calendar, ChevronRight, FileText, Plus, Trash2, Edit2, ShoppingCart, RefreshCw, Link2
 } from 'lucide-react';
-import { calculateReorderSuggestions, calcSecondaryQty } from '../utils/wmsLogic';
+import { calculateReorderSuggestions } from '../utils/wmsLogic';
+
+const DEFAULT_AUTHORIZED_SUPPLIERS = [
+  'Lucky Roma Trading / JCT Wheat',
+  'Mindanao Packaging & Industrial Box Corp',
+  'P.L. Sebastian Corporation',
+  'JCT Wheat & Sugar Products',
+  'Davao Great Wall Trading, Inc.',
+  'Golden Fortune Trading Incorporated',
+  'Local Poultry Coop',
+  'C-One Packaging Solutions',
+  'Mandaue Libertad Flexible Packaging',
+  "D'Unibuenas Corporation (Solane LPG)"
+];
 
 export default function ReportsModule({
   inventory,
@@ -17,7 +31,9 @@ export default function ReportsModule({
   currentRole,
   onImportInventoryCsv,
   onRecordAudit,
-  onOpenImportModal
+  onOpenImportModal,
+  purchaseOrders = [],
+  onSavePurchaseOrder
 }) {
   const [activeSubTab, setActiveSubTab] = useState('po_generator'); // 'po_generator' | 'ledger' | 'csv_bridge'
   const [timeframe, setTimeframe] = useState('ALL'); // 'ALL' | 'TODAY' | 'WEEK' | 'MONTH' | 'CUSTOM'
@@ -26,38 +42,171 @@ export default function ReportsModule({
   const [ledgerType, setLedgerType] = useState('RECEIVING'); // 'RECEIVING' | 'WITHDRAWALS' | 'BATCHING' | 'ADJUSTMENTS'
   const [searchTerm, setSearchTerm] = useState('');
 
-  // PO Generator State
+  // PO Generator & Purchasing Management State (Mariejohn's Workbench)
   const [selectedSupplier, setSelectedSupplier] = useState('ALL');
-  const [customPoItems, setCustomPoItems] = useState([]);
+  const [isCustomSupplier, setIsCustomSupplier] = useState(false);
+  const [customSupplierName, setCustomSupplierName] = useState('');
+  const [customSupplierContact, setCustomSupplierContact] = useState('');
+  const [customSupplierAddress, setCustomSupplierAddress] = useState('');
   const [poNo, setPoNo] = useState(`PO-2026-${Math.floor(1050 + Math.random() * 50)}`);
+  const [poNotes, setPoNotes] = useState('');
+  const [poDraftItems, setPoDraftItems] = useState([]);
+  const [addMaterialCode, setAddMaterialCode] = useState(inventory[0]?.code || 'RM-FLR-001');
+  const [addQty, setAddQty] = useState(10);
   const [selectedPoPreview, setSelectedPoPreview] = useState(null);
 
   // CSV Import State
   const [csvInputText, setCsvInputText] = useState('');
   const [importStatus, setImportStatus] = useState(null);
 
-  // Low stock suggestions
+  // Low stock suggestions calculation
   const lowStockSuggestions = useMemo(() => {
     return calculateReorderSuggestions(inventory);
   }, [inventory]);
 
-  // Suppliers list from inventory
+  // Combined Authorized Suppliers list
   const suppliers = useMemo(() => {
-    const set = new Set();
-    inventory.forEach(i => { if (i.supplier) set.add(i.supplier); });
+    const set = new Set(DEFAULT_AUTHORIZED_SUPPLIERS);
+    inventory.forEach((i) => { if (i.supplier) set.add(i.supplier); });
     return Array.from(set);
   }, [inventory]);
 
-  // Items for PO based on selected supplier
-  const poItems = useMemo(() => {
-    const base = lowStockSuggestions.filter(s => {
-      if (selectedSupplier === 'ALL') return true;
-      return s.supplier === selectedSupplier;
-    });
-    return base;
-  }, [lowStockSuggestions, selectedSupplier]);
+  // Initialize or re-sync draft items when low-stock suggestions are computed
+  useEffect(() => {
+    if (poDraftItems.length === 0 && lowStockSuggestions.length > 0) {
+      setPoDraftItems(lowStockSuggestions.map((it) => ({ ...it })));
+    }
+  }, [lowStockSuggestions]);
 
-  const poTotalEstimatedCost = poItems.reduce((acc, it) => acc + it.estimatedCost, 0);
+  // Handle supplier filter change
+  const handleSupplierChange = (val) => {
+    if (val === 'NEW_SUPPLIER') {
+      setIsCustomSupplier(true);
+      setSelectedSupplier('NEW_SUPPLIER');
+    } else {
+      setIsCustomSupplier(false);
+      setSelectedSupplier(val);
+      if (val !== 'ALL') {
+        const filtered = lowStockSuggestions.filter((s) => s.supplier === val);
+        if (filtered.length > 0) {
+          setPoDraftItems(filtered.map((it) => ({ ...it })));
+        }
+      } else {
+        setPoDraftItems(lowStockSuggestions.map((it) => ({ ...it })));
+      }
+    }
+  };
+
+  const handleDraftQtyChange = (idx, qtyVal) => {
+    const q = Math.max(0, parseFloat(qtyVal) || 0);
+    setPoDraftItems((prev) => prev.map((item, i) => {
+      if (i !== idx) return item;
+      const factor = Number(item.conversionFactor || 1);
+      const cost = Number(item.unitCost || 0);
+      return {
+        ...item,
+        suggestedPrimaryQty: q,
+        totalSecondaryQty: +(q * factor).toFixed(3),
+        estimatedCost: +(q * cost).toFixed(2)
+      };
+    }));
+  };
+
+  const handleDraftUnitCostChange = (idx, costVal) => {
+    const c = Math.max(0, parseFloat(costVal) || 0);
+    setPoDraftItems((prev) => prev.map((item, i) => {
+      if (i !== idx) return item;
+      const q = Number(item.suggestedPrimaryQty || 0);
+      return {
+        ...item,
+        unitCost: c,
+        estimatedCost: +(q * c).toFixed(2)
+      };
+    }));
+  };
+
+  const handleRemoveDraftItem = (idx) => {
+    setPoDraftItems((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  const handleAddMaterialToDraft = () => {
+    const mat = inventory.find((m) => m.code === addMaterialCode);
+    if (!mat || addQty <= 0) return;
+    const factor = Number(mat.conversionFactor || 1);
+    const cost = Number(mat.unitCost || 1000);
+    const lineTotal = +(addQty * cost).toFixed(2);
+
+    setPoDraftItems((prev) => {
+      const existingIdx = prev.findIndex((it) => it.code === mat.code);
+      if (existingIdx >= 0) {
+        return prev.map((it, i) => {
+          if (i !== existingIdx) return it;
+          const newQ = +(Number(it.suggestedPrimaryQty || 0) + Number(addQty)).toFixed(2);
+          return {
+            ...it,
+            suggestedPrimaryQty: newQ,
+            totalSecondaryQty: +(newQ * factor).toFixed(3),
+            estimatedCost: +(newQ * cost).toFixed(2)
+          };
+        });
+      }
+      return [
+        ...prev,
+        {
+          code: mat.code,
+          name: mat.name,
+          category: mat.category,
+          supplier: mat.supplier || selectedSupplier,
+          room: mat.room || 'Dry Room 1',
+          primaryUom: mat.primaryUom || 'Unit',
+          secondaryUom: mat.secondaryUom || 'kg',
+          conversionFactor: factor,
+          unitCost: cost,
+          currentBalanceSec: mat.currentBalance || 0,
+          thresholdSec: mat.threshold || 0,
+          suggestedPrimaryQty: Number(addQty),
+          totalSecondaryQty: +(addQty * factor).toFixed(3),
+          estimatedCost: lineTotal
+        }
+      ];
+    });
+  };
+
+  const poTotalEstimatedCost = poDraftItems.reduce((acc, it) => acc + (it.estimatedCost || 0), 0);
+
+  const handleSaveAndDispatchPo = () => {
+    if (poDraftItems.length === 0) {
+      alert('Please add at least one material to the Purchase Order.');
+      return;
+    }
+    const resolvedSupplier = isCustomSupplier
+      ? (customSupplierName.trim() || 'Custom Lowest-Offering Vendor')
+      : (selectedSupplier === 'ALL' ? 'Consolidated Vendors' : selectedSupplier);
+
+    const poRecord = {
+      poNo,
+      supplier: resolvedSupplier,
+      supplierContact: isCustomSupplier ? customSupplierContact : '',
+      supplierAddress: isCustomSupplier ? customSupplierAddress : '',
+      date: new Date().toISOString().slice(0, 10),
+      generatedDate: new Date().toISOString().slice(0, 10),
+      items: poDraftItems,
+      totalCost: poTotalEstimatedCost,
+      status: 'PENDING_DELIVERY',
+      preparedBy: `${currentRole} (Purchasing & Inventory Manager)`,
+      notes: poNotes
+    };
+
+    if (onSavePurchaseOrder) {
+      onSavePurchaseOrder(poRecord);
+    }
+
+    alert(`✅ Purchase Order ${poNo} saved and recorded as PENDING. Dock staff (Jade) can now cross-reference deliveries against this PO.`);
+
+    // Reset for next PO
+    setPoNo(`PO-2026-${Math.floor(1050 + Math.random() * 50)}`);
+    setPoNotes('');
+  };
 
   // Filtered Ledger Records
   const filteredLedger = useMemo(() => {
@@ -75,51 +224,31 @@ export default function ReportsModule({
       dataset = adjustments;
     }
 
-    return dataset.filter(row => {
+    return dataset.filter((row) => {
       const rowDate = row[dateField] || row.date;
       if (!rowDate) return true;
 
-      // Timeframe check
       if (timeframe === 'TODAY' && rowDate !== '2026-11-03') return false;
       if (timeframe === 'CUSTOM') {
         if (rowDate < customStartDate || rowDate > customEndDate) return false;
       }
 
-      // Search check
       if (searchTerm.trim()) {
-        const query = searchTerm.toLowerCase();
-        const jsonStr = JSON.stringify(row).toLowerCase();
-        return jsonStr.includes(query);
+        const q = searchTerm.toLowerCase();
+        const searchable = JSON.stringify(row).toLowerCase();
+        return searchable.includes(q);
       }
 
       return true;
     });
-  }, [ledgerType, receivingReports, withdrawals, batchOrders, adjustments, timeframe, customStartDate, customEndDate, searchTerm]);
+  }, [ledgerType, timeframe, customStartDate, customEndDate, searchTerm, receivingReports, withdrawals, batchOrders, adjustments]);
 
-  // CSV Exporter Helper
-  const exportToCsv = (filename, headers, rows) => {
-    const csvContent = "data:text/csv;charset=utf-8," 
-      + [headers.join(","), ...rows.map(e => e.map(val => `"${(val ?? '').toString().replace(/"/g, '""')}"`).join(","))].join("\n");
-    
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `${filename}_${new Date().toISOString().slice(0, 10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-
-    if (onRecordAudit) {
-      onRecordAudit("CSV_EXPORT", `Exported dataset: ${filename}`);
-    }
-  };
-
-  // Export Master Inventory
-  const handleExportInventoryCsv = () => {
-    const headers = ["ItemCode", "Name", "Category", "Supplier", "StorageRoom", "PrimaryUom", "SecondaryUom", "ConversionFactor", "CurrentBalanceSec", "ThresholdSec", "UnitCostPhp", "EstimatedValuationPhp"];
-    const rows = inventory.map(m => [
+  // CSV Export Generators
+  const handleExportMaterialsCsv = () => {
+    const headers = ["ItemCode", "Name", "Category", "Supplier", "StorageRoom", "PrimaryUom", "SecondaryUom", "ConversionFactor", "CurrentBalanceSecondary", "SafetyThresholdSecondary", "UnitCost"];
+    const rows = inventory.map((m) => [
       m.code,
-      m.name,
+      `"${m.name.replace(/"/g, '""')}"`,
       m.category,
       m.supplier,
       m.room,
@@ -128,156 +257,96 @@ export default function ReportsModule({
       m.conversionFactor,
       m.currentBalance,
       m.threshold,
-      m.unitCost,
-      ((m.currentBalance / m.conversionFactor) * m.unitCost).toFixed(2)
+      m.unitCost
     ]);
-    exportToCsv("JJB_MASTER_INVENTORY_FEFO", headers, rows);
+    const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    downloadBlob(csvContent, `JJB_Materials_Master_${new Date().toISOString().slice(0, 10)}.csv`);
   };
 
-  // Export Receiving Log
   const handleExportReceivingCsv = () => {
-    const headers = ["ReportNo", "Date", "PoNo", "Supplier", "InvoiceNo", "MaterialCode", "MaterialName", "PrimaryQty", "PrimaryUom", "SecondaryQty", "SecondaryUom", "LotNo", "ExpiryDate", "Room", "Status", "AmountPhp"];
+    const headers = ["ReportNo", "Date", "PoNo", "Supplier", "InvoiceNo", "MaterialCode", "MaterialName", "PrimaryQty", "PrimaryUom", "SecondaryQty", "SecondaryUom", "UnitPrice", "TotalAmount", "LotNumber", "ExpiryDate"];
     const rows = [];
-    receivingReports.forEach(r => {
-      r.items?.forEach(it => {
+    receivingReports.forEach((r) => {
+      (r.items || []).forEach((it) => {
         rows.push([
           r.reportNo,
           r.date,
           r.poNo,
-          r.supplier,
+          `"${(r.supplier || '').replace(/"/g, '""')}"`,
           r.invoiceNo,
           it.materialCode,
-          it.name,
+          `"${(it.name || '').replace(/"/g, '""')}"`,
           it.primaryQty,
           it.primaryUom,
           it.secondaryQty,
           it.secondaryUom,
+          it.unitPrice,
+          it.totalAmount,
           it.lotNumber,
-          it.expiryDate,
-          it.storageRoom,
-          r.overallStatus,
-          it.totalAmount
+          it.expiryDate
         ]);
       });
     });
-    exportToCsv("JJB_RECEIVING_REPORT_FORM_REC_001", headers, rows);
+    const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    downloadBlob(csvContent, `JJB_Receiving_Ledger_${new Date().toISOString().slice(0, 10)}.csv`);
   };
 
-  // Export Withdrawals Log
   const handleExportWithdrawalsCsv = () => {
-    const headers = ["SlipNo", "Date", "Time", "RequestingEntity", "Department", "Purpose", "MaterialCode", "MaterialName", "QtyIssuedSec", "SecondaryUom", "LotNo", "RequestedBy", "IssuedBy", "ReceivedBy", "Status"];
+    const headers = ["SlipNo", "Date", "RequestingLine", "Department", "Purpose", "MaterialCode", "MaterialName", "LotNumber", "QtyIssuedSecondary", "SecondaryUom", "StorageRoom", "EstimatedCost"];
     const rows = [];
-    withdrawals.forEach(w => {
-      w.items?.forEach(it => {
+    withdrawals.forEach((w) => {
+      (w.items || []).forEach((it) => {
         rows.push([
           w.slipNo,
           w.date,
-          w.time,
-          w.requestingEntity,
-          w.department,
-          w.purpose,
+          `"${(w.requestingEntity || '').replace(/"/g, '""')}"`,
+          `"${(w.department || '').replace(/"/g, '""')}"`,
+          `"${(w.purpose || '').replace(/"/g, '""')}"`,
           it.materialCode,
-          it.name,
+          `"${(it.name || '').replace(/"/g, '""')}"`,
+          it.lotNumber,
           it.qtyIssuedSec,
           it.secondaryUom,
-          it.lotNumber,
-          w.requestedBy,
-          w.issuedBy,
-          w.receivedBy,
-          w.status
+          it.storageRoom,
+          it.estimatedCost
         ]);
       });
     });
-    exportToCsv("JJB_WITHDRAWALS_REPORT_FORM_WAR_001", headers, rows);
+    const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    downloadBlob(csvContent, `JJB_Withdrawals_Ledger_${new Date().toISOString().slice(0, 10)}.csv`);
   };
 
-  // Export Batching Orders Log
-  const handleExportBatchOrdersCsv = () => {
-    const headers = ["OrderId", "RequestDate", "TargetDate", "OutletName", "RecipeSku", "RecipeName", "BatchMultiplier", "RequestedPcs", "Status", "BatchTagId", "ActualBatchedKg", "BatchedBy", "BatchedAt", "ReleasedAt", "ReleasedTo"];
-    const rows = batchOrders.map(b => [
+  const handleExportBatchingCsv = () => {
+    const headers = ["OrderId", "RequestDate", "RecipeSku", "RecipeName", "OutletName", "PlannedBatches", "TotalDoughKg", "Status", "TotalIngredientCost"];
+    const rows = batchOrders.map((b) => [
       b.orderId,
       b.requestDate,
-      b.targetDate,
-      b.outletName,
       b.recipeSku,
-      b.recipeName,
-      b.batchMultiplier,
-      b.requestedQtyPcs,
+      `"${(b.recipeName || '').replace(/"/g, '""')}"`,
+      `"${(b.outletName || '').replace(/"/g, '""')}"`,
+      b.plannedBatches,
+      b.totalDoughKg,
       b.status,
-      b.batchTagId || 'N/A',
-      b.actualBatchedKg || 0,
-      b.batchedBy || 'N/A',
-      b.batchedAt || 'N/A',
-      b.releasedAt || 'N/A',
-      b.releasedTo || 'N/A'
+      b.totalIngredientCost
     ]);
-    exportToCsv("JJB_BATCHING_KITTING_FORM_ING_001", headers, rows);
+    const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    downloadBlob(csvContent, `JJB_Batching_Kits_Ledger_${new Date().toISOString().slice(0, 10)}.csv`);
   };
 
-  // Parse and commit imported CSV
-  const handleProcessCsvImport = () => {
-    if (!csvInputText.trim()) {
-      setImportStatus({ type: 'error', message: 'CSV input is empty.' });
-      return;
-    }
-
-    try {
-      const lines = csvInputText.trim().split('\n');
-      if (lines.length < 2) {
-        setImportStatus({ type: 'error', message: 'CSV must contain a header row and at least 1 data row.' });
-        return;
-      }
-
-      const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, '').toLowerCase());
-      
-      const codeIdx = headers.findIndex(h => h.includes('code') || h === 'itemcode');
-      const balanceIdx = headers.findIndex(h => h.includes('balance') || h.includes('qty'));
-      
-      if (codeIdx === -1 || balanceIdx === -1) {
-        setImportStatus({ 
-          type: 'error', 
-          message: 'Header must contain at least "ItemCode" (or code) and "CurrentBalanceSec" (or balance).' 
-        });
-        return;
-      }
-
-      const updates = [];
-      for (let i = 1; i < lines.length; i++) {
-        const parts = lines[i].split(',').map(p => p.trim().replace(/^"|"$/g, ''));
-        if (parts.length <= Math.max(codeIdx, balanceIdx)) continue;
-        const code = parts[codeIdx];
-        const newBalance = parseFloat(parts[balanceIdx]);
-        if (code && !isNaN(newBalance)) {
-          updates.push({ code, newBalance });
-        }
-      }
-
-      if (updates.length === 0) {
-        setImportStatus({ type: 'error', message: 'No valid data rows found in CSV.' });
-        return;
-      }
-
-      if (onImportInventoryCsv) {
-        onImportInventoryCsv(updates);
-      }
-
-      setImportStatus({ 
-        type: 'success', 
-        message: `Successfully updated stock balances for ${updates.length} items from CSV!` 
-      });
-      setCsvInputText('');
-
-      if (onRecordAudit) {
-        onRecordAudit("CSV_INVENTORY_IMPORT", `Imported balance updates for ${updates.length} materials`);
-      }
-    } catch (e) {
-      setImportStatus({ type: 'error', message: `CSV parse error: ${e.message}` });
-    }
+  const downloadBlob = (content, filename) => {
+    const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", filename);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   return (
     <div className="space-y-6">
-      {/* Title & Header */}
+      {/* Header */}
       <div className="flex justify-between items-start flex-wrap gap-2">
         <div>
           <div className="flex items-center gap-2">
@@ -285,126 +354,255 @@ export default function ReportsModule({
               Form-PUR-002 / REP-001
             </span>
             <h2 className="font-serif text-2xl font-bold text-[#3D1C52]">
-              Reports, Audit Dossiers &amp; Replenishment PO Generator
+              Procurement &amp; Reporting Data Operations Hub
             </h2>
           </div>
           <p className="text-xs text-gray-600 mt-0.5">
-            Dynamic Ledger Audits (Nov 2026+) · Bi-Directional CSV Data Hub · Automated Form-PUR-002 Reorder Replenishment
+            Interactive Form-PUR-002 Purchase Orders · Multi-Supplier Quotations · Bi-Directional CSV Data Hub · Dynamic Audit Ledgers
           </p>
         </div>
 
-        {/* Sub-Tabs Selector */}
-        <div className="flex bg-white p-1 rounded-lg border border-[#E2D1B8] shadow-sm">
+        {/* Sub-Tab Navigation Strip */}
+        <div className="flex bg-[#FAF6EE] p-1 rounded-xl border border-[#C8963E]/40 gap-1">
           <button
             onClick={() => setActiveSubTab('po_generator')}
-            className={`px-3 py-1.5 rounded-md text-xs font-bold transition flex items-center gap-1.5 ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
               activeSubTab === 'po_generator'
-                ? 'bg-[#3D1C52] text-white shadow-sm'
+                ? 'bg-[#3D1C52] text-white shadow'
                 : 'text-gray-600 hover:text-gray-900'
             }`}
           >
-            <ShoppingCart size={14} /> PO Replenishment ({lowStockSuggestions.length} Low)
+            <Printer size={13} /> Form-PUR-002 PO Generator &amp; Register ({purchaseOrders.length})
           </button>
           <button
             onClick={() => setActiveSubTab('ledger')}
-            className={`px-3 py-1.5 rounded-md text-xs font-bold transition flex items-center gap-1.5 ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
               activeSubTab === 'ledger'
-                ? 'bg-[#5B2E7A] text-white shadow-sm'
+                ? 'bg-[#3D1C52] text-white shadow'
                 : 'text-gray-600 hover:text-gray-900'
             }`}
           >
-            <FileText size={14} /> Historical Ledgers &amp; Audits
+            <Calendar size={13} /> Historical Transaction Ledgers
           </button>
           <button
             onClick={() => setActiveSubTab('csv_bridge')}
-            className={`px-3 py-1.5 rounded-md text-xs font-bold transition flex items-center gap-1.5 ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
               activeSubTab === 'csv_bridge'
-                ? 'bg-[#1E7A3E] text-white shadow-sm'
+                ? 'bg-[#3D1C52] text-white shadow'
                 : 'text-gray-600 hover:text-gray-900'
             }`}
           >
-            <FileSpreadsheet size={14} /> CSV Hub &amp; Import
+            <FileSpreadsheet size={13} /> Bi-Directional CSV Data Bridge
           </button>
         </div>
       </div>
 
       {/* SUB-TAB 1: PO REPLENISHMENT GENERATOR (Form-PUR-002) */}
       {activeSubTab === 'po_generator' && (
-        <div className="space-y-5">
-          {/* Top Control Strip */}
-          <div className="bg-white p-4 rounded-xl border border-[#E2D1B8] shadow-sm flex flex-wrap justify-between items-center gap-3">
-            <div className="flex items-center gap-3 flex-wrap">
+        <div className="space-y-6">
+          {/* Top Control & Supplier Strip */}
+          <div className="bg-white p-5 rounded-2xl border border-[#E2D1B8] shadow-sm space-y-4">
+            <div className="flex justify-between items-center border-b pb-3 flex-wrap gap-2">
+              <h3 className="font-serif font-bold text-[#3D1C52] text-sm flex items-center gap-2">
+                <ShoppingCart size={17} className="text-[#C8963E]" />
+                Mariejohn's Purchase Order Replenishment Workbench (`Form-PUR-002`)
+              </h3>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPoDraftItems(lowStockSuggestions.map((it) => ({ ...it })))}
+                  className="text-xs px-2.5 py-1 rounded bg-[#FAF6EE] text-[#5B2E7A] border border-[#C8963E]/40 font-bold hover:bg-[#E2D1B8] flex items-center gap-1"
+                >
+                  <RefreshCw size={12} /> Reload Low-Stock Suggestions
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPoDraftItems([])}
+                  className="text-xs px-2.5 py-1 rounded bg-gray-100 text-gray-600 font-bold hover:bg-gray-200"
+                >
+                  Clear Draft
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs">
               <div>
-                <label className="block text-[11px] font-bold text-gray-600 mb-0.5">Filter by Vendor / Supplier:</label>
+                <label className="block font-bold text-gray-700 mb-1">Target Vendor / Supplier *</label>
                 <select
                   value={selectedSupplier}
-                  onChange={(e) => setSelectedSupplier(e.target.value)}
-                  className="p-1.5 text-xs border rounded bg-white font-medium"
+                  onChange={(e) => handleSupplierChange(e.target.value)}
+                  className="w-full p-2 border rounded bg-white font-medium focus:ring-2 focus:ring-[#C8963E]"
                 >
                   <option value="ALL">All Authorized Suppliers ({suppliers.length})</option>
-                  {suppliers.map(s => (
+                  {suppliers.map((s) => (
                     <option key={s} value={s}>{s}</option>
                   ))}
+                  <option value="NEW_SUPPLIER">+ Add New / Lowest-Offering Supplier...</option>
                 </select>
               </div>
 
               <div>
-                <label className="block text-[11px] font-bold text-gray-600 mb-0.5">Assigned PO Number:</label>
+                <label className="block font-bold text-gray-700 mb-1">Assigned PO Number *</label>
                 <input
                   type="text"
                   value={poNo}
                   onChange={(e) => setPoNo(e.target.value)}
-                  className="p-1.5 text-xs border rounded font-mono font-bold text-[#5B2E7A] w-36"
+                  className="w-full p-2 border rounded font-mono font-bold text-[#5B2E7A] focus:ring-2 focus:ring-[#C8963E]"
                 />
+              </div>
+
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">Purchaser / Buyer</label>
+                <input
+                  type="text"
+                  value="Mariejohn F. Tacuban (Purchasing Manager)"
+                  readOnly
+                  className="w-full p-2 border rounded bg-gray-50 text-gray-600 font-medium"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">Est. Procurement Total</label>
+                <div className="p-2 border rounded bg-[#FAF6EE] font-mono font-bold text-base text-[#1E7A3E]">
+                  ₱{poTotalEstimatedCost.toLocaleString('en-PH', { minimumFractionDigits: 2 })}
+                </div>
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-gray-600 font-semibold">
-                Est. Procurement Total: <strong className="text-[#1E7A3E] font-mono text-sm">₱{poTotalEstimatedCost.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</strong>
+            {/* Custom / New Supplier Input Row */}
+            {isCustomSupplier && (
+              <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 space-y-2 text-xs">
+                <span className="font-bold text-amber-900 block">
+                  New Vendor Quotation Details (Record Lowest Market Offering):
+                </span>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                  <input
+                    type="text"
+                    placeholder="New Supplier Business Name *"
+                    value={customSupplierName}
+                    onChange={(e) => setCustomSupplierName(e.target.value)}
+                    className="p-2 border rounded bg-white font-bold"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Contact Person / Phone (e.g. +63 917 123 4567)"
+                    value={customSupplierContact}
+                    onChange={(e) => setCustomSupplierContact(e.target.value)}
+                    className="p-2 border rounded bg-white"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Warehouse / Depot Address"
+                    value={customSupplierAddress}
+                    onChange={(e) => setCustomSupplierAddress(e.target.value)}
+                    className="p-2 border rounded bg-white"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Add Custom Item Row */}
+            <div className="bg-[#FAF6EE] p-3 rounded-xl border border-[#C8963E]/40 flex flex-wrap items-center justify-between gap-2 text-xs">
+              <span className="font-bold text-[#240e32]">
+                + Add Any Inventory Material / Packaging SKU to this PO:
               </span>
-              <button
-                onClick={() => setSelectedPoPreview({
-                  poNo,
-                  supplier: selectedSupplier === 'ALL' ? 'Consolidated Vendors' : selectedSupplier,
-                  items: poItems,
-                  totalCost: poTotalEstimatedCost,
-                  generatedDate: new Date().toISOString().slice(0, 10),
-                  preparedBy: currentRole
-                })}
-                disabled={poItems.length === 0}
-                className={`text-xs px-4 py-2 rounded-lg font-bold flex items-center gap-1.5 shadow transition ${
-                  poItems.length > 0 
-                    ? 'bg-[#C8963E] hover:bg-[#b08030] text-[#240e32]' 
-                    : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                }`}
-              >
-                <Printer size={14} /> Generate &amp; Print `Form-PUR-002`
-              </button>
+              <div className="flex items-center gap-2 flex-wrap">
+                <select
+                  value={addMaterialCode}
+                  onChange={(e) => setAddMaterialCode(e.target.value)}
+                  className="p-1.5 border rounded bg-white font-medium"
+                >
+                  {inventory.map((m) => (
+                    <option key={m.code} value={m.code}>{m.code} · {m.name} ({m.primaryUom})</option>
+                  ))}
+                </select>
+                <div className="flex items-center gap-1">
+                  <input
+                    type="number"
+                    min="1"
+                    value={addQty}
+                    onChange={(e) => setAddQty(parseFloat(e.target.value) || 1)}
+                    className="w-16 p-1.5 border rounded font-mono font-bold text-right"
+                  />
+                  <span className="font-semibold text-gray-500">
+                    {inventory.find((m) => m.code === addMaterialCode)?.primaryUom || 'Units'}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleAddMaterialToDraft}
+                  className="px-3 py-1.5 rounded bg-[#240e32] text-[#E5C585] font-bold hover:bg-[#3D1C52] transition"
+                >
+                  + Add Item to PO
+                </button>
+              </div>
+            </div>
+
+            {/* Actions Toolbar */}
+            <div className="flex justify-between items-center pt-2 border-t flex-wrap gap-2">
+              <div className="text-xs text-gray-600">
+                Draft SKUs: <strong className="text-[#3D1C52] font-mono">{poDraftItems.length}</strong> · Quantities and Unit Prices are editable directly in the table below.
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleSaveAndDispatchPo}
+                  disabled={poDraftItems.length === 0}
+                  className={`text-xs px-4 py-2 rounded-lg font-bold flex items-center gap-1.5 shadow transition ${
+                    poDraftItems.length > 0
+                      ? 'bg-[#1E7A3E] hover:bg-emerald-800 text-white'
+                      : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                  }`}
+                >
+                  <CheckCircle2 size={14} /> Save &amp; Record PO (Mark PENDING)
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setSelectedPoPreview({
+                    poNo,
+                    supplier: isCustomSupplier
+                      ? (customSupplierName.trim() || 'New Supplier')
+                      : (selectedSupplier === 'ALL' ? 'Consolidated Vendors' : selectedSupplier),
+                    items: poDraftItems,
+                    totalCost: poTotalEstimatedCost,
+                    generatedDate: new Date().toISOString().slice(0, 10),
+                    preparedBy: 'Mariejohn F. Tacuban'
+                  })}
+                  disabled={poDraftItems.length === 0}
+                  className={`text-xs px-4 py-2 rounded-lg font-bold flex items-center gap-1.5 shadow transition ${
+                    poDraftItems.length > 0 
+                      ? 'bg-[#C8963E] hover:bg-[#b08030] text-[#240e32]' 
+                      : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                  }`}
+                >
+                  <Printer size={14} /> Preview &amp; Print `Form-PUR-002`
+                </button>
+              </div>
             </div>
           </div>
 
-          {/* Low Stock Items List */}
+          {/* Draft Items Interactive Table */}
           <div className="bg-white rounded-xl border border-[#E2D1B8] shadow-sm overflow-hidden">
             <div className="p-4 bg-[#FAF6EE] border-b border-[#E2D1B8] flex justify-between items-center">
               <div>
                 <h3 className="font-serif font-bold text-[#3D1C52] text-sm">
-                  Recommended Replenishment Pull List (Trigger: Current Balance ≤ Safety Threshold)
+                  Active PO Material Specification &amp; Unit Cost Quotation
                 </h3>
                 <p className="text-[11px] text-gray-500">
-                  Target Inventory Level = 2× Safety Threshold · Quantities rounded up to whole bulk packages (sacks, blocks, tins, rims)
+                  Update primary order quantity or negotiated unit cost. Secondary quantity and line total update in real-time.
                 </p>
               </div>
               <span className="text-xs font-bold px-2.5 py-1 bg-amber-100 text-[#D68910] rounded-full">
-                {poItems.length} Low-Stock SKUs Found
+                {poDraftItems.length} Materials Queued
               </span>
             </div>
 
-            {poItems.length === 0 ? (
+            {poDraftItems.length === 0 ? (
               <div className="p-8 text-center text-gray-500">
                 <CheckCircle2 size={32} className="mx-auto text-green-600 mb-2" />
-                <p className="font-semibold text-sm">All raw material inventory balances are currently above safety thresholds!</p>
-                <p className="text-xs text-gray-400 mt-1">Select "All Authorized Suppliers" or simulate withdrawals to view reorder recommendations.</p>
+                <p className="font-semibold text-sm">PO Draft is empty!</p>
+                <p className="text-xs text-gray-400 mt-1">Click "Reload Low-Stock Suggestions" or use the material selector above to add items.</p>
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -413,17 +611,17 @@ export default function ReportsModule({
                     <tr>
                       <th className="p-2.5">Material SKU</th>
                       <th className="p-2.5">Item Name &amp; Room</th>
-                      <th className="p-2.5">Authorized Vendor</th>
-                      <th className="p-2.5 text-right">Current Balance</th>
-                      <th className="p-2.5 text-right">Safety Threshold</th>
-                      <th className="p-2.5 text-right font-bold text-[#E5C585]">Suggested Order (Primary)</th>
-                      <th className="p-2.5 text-right">Net Qty (Secondary)</th>
-                      <th className="p-2.5 text-right">Unit Price</th>
+                      <th className="p-2.5">Vendor / Source</th>
+                      <th className="p-2.5 text-right">Current Stock</th>
+                      <th className="p-2.5 text-right font-bold text-[#E5C585]">Order Qty (Primary Bulk)</th>
+                      <th className="p-2.5 text-right">Net Equivalent</th>
+                      <th className="p-2.5 text-right font-bold text-[#E5C585]">Unit Price (PHP)</th>
                       <th className="p-2.5 text-right">Estimated Line Total</th>
+                      <th className="p-2.5 text-center">Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
-                    {poItems.map((item, idx) => (
+                    {poDraftItems.map((item, idx) => (
                       <tr key={idx} className="hover:bg-gray-50">
                         <td className="p-2.5 font-mono font-bold text-[#5B2E7A]">{item.code}</td>
                         <td className="p-2.5">
@@ -431,23 +629,139 @@ export default function ReportsModule({
                           <span className="block text-[10px] text-gray-500">{item.room}</span>
                         </td>
                         <td className="p-2.5 font-medium text-gray-700">{item.supplier}</td>
-                        <td className="p-2.5 text-right font-mono font-bold text-red-600">
+                        <td className="p-2.5 text-right font-mono text-gray-500">
                           {item.currentBalanceSec} {item.secondaryUom}
                         </td>
-                        <td className="p-2.5 text-right font-mono text-gray-500">
-                          {item.thresholdSec} {item.secondaryUom}
-                        </td>
-                        <td className="p-2.5 text-right font-mono font-bold text-[#1E7A3E] bg-green-50/50">
-                          {item.suggestedPrimaryQty} {item.primaryUom}s
+                        <td className="p-2.5 text-right">
+                          <div className="inline-flex items-center gap-1 justify-end">
+                            <input
+                              type="number"
+                              min="0"
+                              step="any"
+                              value={item.suggestedPrimaryQty}
+                              onChange={(e) => handleDraftQtyChange(idx, e.target.value)}
+                              className="w-16 p-1 border rounded text-right font-mono font-bold text-[#1E7A3E] bg-green-50/50"
+                            />
+                            <span className="font-semibold text-gray-600">{item.primaryUom}s</span>
+                          </div>
                         </td>
                         <td className="p-2.5 text-right font-mono text-gray-700">
-                          {item.totalSecondaryQty.toLocaleString()} {item.secondaryUom}
+                          {Number(item.totalSecondaryQty || 0).toLocaleString()} {item.secondaryUom}
                         </td>
-                        <td className="p-2.5 text-right font-mono text-gray-600">
-                          ₱{item.unitCost?.toLocaleString()} / {item.primaryUom}
+                        <td className="p-2.5 text-right">
+                          <div className="inline-flex items-center gap-1 justify-end">
+                            <span className="text-gray-500">₱</span>
+                            <input
+                              type="number"
+                              min="0"
+                              step="any"
+                              value={item.unitCost}
+                              onChange={(e) => handleDraftUnitCostChange(idx, e.target.value)}
+                              className="w-20 p-1 border rounded text-right font-mono text-gray-800"
+                            />
+                          </div>
                         </td>
                         <td className="p-2.5 text-right font-mono font-bold text-gray-900">
-                          ₱{item.estimatedCost?.toLocaleString('en-PH', { minimumFractionDigits: 2 })}
+                          ₱{Number(item.estimatedCost || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}
+                        </td>
+                        <td className="p-2.5 text-center">
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveDraftItem(idx)}
+                            className="text-red-500 hover:text-red-700 p-1"
+                            title="Remove from PO"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot className="bg-[#FAF6EE] font-bold">
+                    <tr>
+                      <td colSpan={7} className="p-2.5 text-right text-gray-700">Total Purchase Commitment:</td>
+                      <td className="p-2.5 text-right font-mono text-sm text-[#1E7A3E]">
+                        ₱{poTotalEstimatedCost.toLocaleString('en-PH', { minimumFractionDigits: 2 })}
+                      </td>
+                      <td></td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* PO REGISTER & DELIVERY TRACKER TABLE */}
+          <div className="bg-white rounded-xl border border-[#E2D1B8] shadow-sm overflow-hidden">
+            <div className="p-4 bg-[#FAF6EE] border-b border-[#E2D1B8] flex justify-between items-center">
+              <div>
+                <h3 className="font-serif font-bold text-[#3D1C52] text-sm">
+                  Active &amp; Historical Purchase Orders Register (`Form-PUR-002`)
+                </h3>
+                <p className="text-[11px] text-gray-500">
+                  Track pending orders, dock delivery receipts, and verification statuses cross-referenced by Jade.
+                </p>
+              </div>
+              <span className="text-xs font-mono font-bold text-[#5B2E7A]">
+                {purchaseOrders.length} Recorded POs
+              </span>
+            </div>
+
+            {purchaseOrders.length === 0 ? (
+              <div className="p-6 text-center text-gray-400 text-xs italic">
+                No purchase orders recorded yet. Generate a PO above and click "Save &amp; Record PO".
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-[#240e32] text-[#E5C585]">
+                    <tr>
+                      <th className="p-2.5">PO Number</th>
+                      <th className="p-2.5">Order Date</th>
+                      <th className="p-2.5">Supplier / Vendor</th>
+                      <th className="p-2.5 text-right">SKUs</th>
+                      <th className="p-2.5 text-right">Commitment (PHP)</th>
+                      <th className="p-2.5">Delivery Status</th>
+                      <th className="p-2.5">Cross-Ref Ingest Report</th>
+                      <th className="p-2.5 text-center">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {purchaseOrders.map((po, i) => (
+                      <tr key={i} className="hover:bg-gray-50">
+                        <td className="p-2.5 font-mono font-bold text-[#5B2E7A]">{po.poNo}</td>
+                        <td className="p-2.5 font-mono text-gray-600">{po.date}</td>
+                        <td className="p-2.5 font-medium">{po.supplier}</td>
+                        <td className="p-2.5 text-right font-mono">{po.items?.length || 0}</td>
+                        <td className="p-2.5 text-right font-mono font-bold text-[#1E7A3E]">
+                          ₱{(po.totalCost || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}
+                        </td>
+                        <td className="p-2.5">
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                            po.status === 'RECEIVED'
+                              ? 'bg-green-100 text-green-800'
+                              : po.status === 'RECEIVED_WITH_CHANGES'
+                              ? 'bg-amber-100 text-amber-800'
+                              : 'bg-blue-100 text-blue-800'
+                          }`}>
+                            {po.status === 'RECEIVED' ? '✓ RECEIVED CLEAN' : po.status === 'RECEIVED_WITH_CHANGES' ? '⚠️ RECEIVED W/ CHANGES' : '⏳ PENDING DELIVERY'}
+                          </span>
+                        </td>
+                        <td className="p-2.5 font-mono text-gray-600">
+                          {po.receivingReportNo ? (
+                            <span className="text-emerald-700 font-bold">{po.receivingReportNo}</span>
+                          ) : (
+                            <span className="text-gray-400 italic">Awaiting Dock</span>
+                          )}
+                        </td>
+                        <td className="p-2.5 text-center">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedPoPreview(po)}
+                            className="text-xs text-[#5B2E7A] hover:underline font-bold"
+                          >
+                            View Form
+                          </button>
                         </td>
                       </tr>
                     ))}
@@ -472,7 +786,7 @@ export default function ReportsModule({
                   { id: 'WITHDRAWALS', label: 'Stock Withdrawals (Form-WAR-001)', count: withdrawals.length },
                   { id: 'BATCHING', label: 'Outlet Kitting (Form-ING-001)', count: batchOrders.length },
                   { id: 'ADJUSTMENTS', label: 'Adjustments & NCR', count: adjustments.length + quarantineList.length }
-                ].map(d => (
+                ].map((d) => (
                   <button
                     key={d.id}
                     onClick={() => setLedgerType(d.id)}
@@ -498,86 +812,93 @@ export default function ReportsModule({
                   className="p-1.5 text-xs border rounded bg-white font-medium"
                 >
                   <option value="ALL">All Records</option>
-                  <option value="TODAY">Today Only (Nov 03, 2026)</option>
-                  <option value="CUSTOM">Custom Date Window</option>
+                  <option value="TODAY">Today (Nov 3 Baseline)</option>
+                  <option value="CUSTOM">Custom Date Window...</option>
                 </select>
               </div>
             </div>
 
-            {/* Custom Date Range Picker */}
-            {timeframe === 'CUSTOM' && (
-              <div className="flex items-center gap-3 pt-2 border-t text-xs">
-                <span>From Date:</span>
+            {/* Custom Range & Search Bar */}
+            <div className="flex flex-wrap justify-between items-center gap-3 pt-2 border-t">
+              <div className="flex items-center gap-2">
+                {timeframe === 'CUSTOM' && (
+                  <div className="flex items-center gap-1 text-xs">
+                    <input
+                      type="date"
+                      value={customStartDate}
+                      onChange={(e) => setCustomStartDate(e.target.value)}
+                      className="p-1 border rounded"
+                    />
+                    <span className="text-gray-500 font-bold">to</span>
+                    <input
+                      type="date"
+                      value={customEndDate}
+                      onChange={(e) => setCustomEndDate(e.target.value)}
+                      className="p-1 border rounded"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Free-text Filter */}
+              <div className="relative w-64">
+                <Search size={14} className="absolute left-2.5 top-2.5 text-gray-400" />
                 <input
-                  type="date"
-                  value={customStartDate}
-                  onChange={(e) => setCustomStartDate(e.target.value)}
-                  className="p-1 border rounded"
-                />
-                <span>To Date:</span>
-                <input
-                  type="date"
-                  value={customEndDate}
-                  onChange={(e) => setCustomEndDate(e.target.value)}
-                  className="p-1 border rounded"
+                  type="text"
+                  placeholder="Search by lot number, material code, supplier, driver, slip number, or recipe..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-8 p-1.5 text-xs border rounded bg-gray-50 focus:bg-white"
                 />
               </div>
-            )}
-
-            {/* Search Input */}
-            <div className="relative">
-              <Search size={14} className="absolute left-3 top-2.5 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search by lot number, material code, supplier, driver, slip number, or recipe..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 border rounded-lg text-xs"
-              />
             </div>
           </div>
 
           {/* Ledger Table */}
           <div className="bg-white rounded-xl border border-[#E2D1B8] shadow-sm overflow-hidden">
             <div className="p-3 bg-[#FAF6EE] border-b border-[#E2D1B8] flex justify-between items-center text-xs">
-              <span className="font-bold text-[#3D1C52]">
-                Displaying {filteredLedger.length} filtered audit records
+              <span className="font-bold text-gray-700">
+                Displaying <strong>{filteredLedger.length}</strong> immutable transaction records
               </span>
-              <span className="text-gray-500">Live Bodega Audit Trail</span>
+              <span className="font-mono text-gray-500">Chronological Sort (Descending)</span>
             </div>
 
-            <div className="overflow-x-auto max-h-[500px]">
+            <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
-                <thead className="bg-[#3D1C52] text-white sticky top-0 z-10">
+                <thead className="bg-[#5B2E7A] text-white">
                   <tr>
-                    <th className="p-2.5">Record ID / Slip #</th>
-                    <th className="p-2.5">Date / Time</th>
-                    <th className="p-2.5">Primary Entity / Entity</th>
-                    <th className="p-2.5">Key Description &amp; Materials</th>
-                    <th className="p-2.5">Authorized Signoff</th>
-                    <th className="p-2.5 text-center">Status</th>
+                    <th className="p-2.5">Record ID / Ref #</th>
+                    <th className="p-2.5">Date &amp; Time</th>
+                    <th className="p-2.5">Entity / Requester / Outlet</th>
+                    <th className="p-2.5">Specific Detail / Description</th>
+                    <th className="p-2.5 text-right">Items / Lines</th>
+                    <th className="p-2.5 text-right">Valuation / Cost</th>
+                    <th className="p-2.5">Status &amp; Verification</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
-                  {filteredLedger.map((row, i) => {
-                    const id = row.reportNo || row.slipNo || row.orderId || row.id || `REC-${i}`;
-                    const date = row.date || row.requestDate || row.timestamp;
+                  {filteredLedger.map((row, idx) => {
+                    const id = row.reportNo || row.slipNo || row.orderId || row.id || `TX-${idx}`;
+                    const date = row.date || row.requestDate || row.timestamp || '2026-11-03';
+                    const time = row.time || '';
                     const entity = row.supplier || row.requestingEntity || row.outletName || row.reason;
-                    const desc = row.items 
-                      ? row.items.map(it => `${it.name} (${it.qtyIssuedSec || it.secondaryQty || ''} ${it.secondaryUom || ''})`).join(', ')
-                      : (row.recipeName || row.type || row.action);
-                    const signoff = row.receiver || row.issuedBy || row.batchedBy || row.author || row.actor;
-                    const status = row.overallStatus || row.status || 'LOGGED';
+                    const detail = row.invoiceNo ? `Invoice: ${row.invoiceNo}` : row.recipeName ? `${row.recipeName} (${row.plannedBatches} batches)` : row.purpose || row.type || 'Standard Ledger Entry';
+                    const lines = Array.isArray(row.items) ? row.items.length : (row.plannedBatches ? `${row.totalDoughKg} kg dough` : 1);
+                    const val = row.totalPaid || row.totalCost || row.totalIngredientCost || 0;
+                    const status = row.overallStatus || row.status || 'COMMITTED';
 
                     return (
-                      <tr key={i} className="hover:bg-gray-50">
-                        <td className="p-2.5 font-mono font-bold text-[#5B2E7A]">{id}</td>
-                        <td className="p-2.5 text-gray-600 whitespace-nowrap">{date}</td>
-                        <td className="p-2.5 font-medium text-gray-900">{entity}</td>
-                        <td className="p-2.5 text-gray-700 max-w-xs truncate" title={desc}>{desc}</td>
-                        <td className="p-2.5 text-gray-600">{signoff}</td>
-                        <td className="p-2.5 text-center">
-                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-green-100 text-[#1E7A3E]">
+                      <tr key={idx} className="hover:bg-gray-50 font-mono">
+                        <td className="p-2.5 font-bold text-[#5B2E7A]">{id}</td>
+                        <td className="p-2.5 text-gray-600">{date} {time}</td>
+                        <td className="p-2.5 font-sans font-medium text-gray-900">{entity}</td>
+                        <td className="p-2.5 font-sans text-gray-700">{detail}</td>
+                        <td className="p-2.5 text-right font-bold">{lines}</td>
+                        <td className="p-2.5 text-right font-bold text-[#1E7A3E]">
+                          ₱{val ? val.toLocaleString('en-PH', { minimumFractionDigits: 2 }) : '0.00'}
+                        </td>
+                        <td className="p-2.5">
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-green-100 text-green-800">
                             {status}
                           </span>
                         </td>
@@ -591,121 +912,82 @@ export default function ReportsModule({
         </div>
       )}
 
-      {/* SUB-TAB 3: CSV DATA BRIDGE & INVENTORY IMPORT */}
+      {/* SUB-TAB 3: BI-DIRECTIONAL CSV DATA BRIDGE */}
       {activeSubTab === 'csv_bridge' && (
         <div className="space-y-6">
-          {/* Quick Export Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
-            <div className="bg-white p-4 rounded-xl border border-[#E2D1B8] shadow-sm flex flex-col justify-between space-y-3">
-              <div>
-                <p className="font-bold text-sm text-[#3D1C52]">Master Inventory CSV</p>
-                <p className="text-[11px] text-gray-500 mt-1">69 authentic raw material SKUs with lots, thresholds, and conversion factors.</p>
-              </div>
-              <button
-                onClick={handleExportInventoryCsv}
-                className="bg-[#3D1C52] hover:bg-[#240e32] text-white text-xs font-bold py-2 px-3 rounded flex items-center justify-center gap-1.5 transition"
-              >
-                <Download size={13} /> Export Master CSV
-              </button>
-            </div>
-
-            <div className="bg-white p-4 rounded-xl border border-[#E2D1B8] shadow-sm flex flex-col justify-between space-y-3">
-              <div>
-                <p className="font-bold text-sm text-[#1E7A3E]">Receiving Log (`Form-REC-001`)</p>
-                <p className="text-[11px] text-gray-500 mt-1">Complete inbound delivery records, QA gates, temperatures, and supplier invoices.</p>
-              </div>
-              <button
-                onClick={handleExportReceivingCsv}
-                className="bg-[#1E7A3E] hover:bg-[#165c2f] text-white text-xs font-bold py-2 px-3 rounded flex items-center justify-center gap-1.5 transition"
-              >
-                <Download size={13} /> Export Receiving CSV
-              </button>
-            </div>
-
-            <div className="bg-white p-4 rounded-xl border border-[#E2D1B8] shadow-sm flex flex-col justify-between space-y-3">
-              <div>
-                <p className="font-bold text-sm text-[#5B2E7A]">Withdrawals Log (`Form-WAR-001`)</p>
-                <p className="text-[11px] text-gray-500 mt-1">Stock-out records for Biscocho, Otap, and outlet dough mix releases.</p>
-              </div>
-              <button
-                onClick={handleExportWithdrawalsCsv}
-                className="bg-[#5B2E7A] hover:bg-[#3D1C52] text-white text-xs font-bold py-2 px-3 rounded flex items-center justify-center gap-1.5 transition"
-              >
-                <Download size={13} /> Export Issuance CSV
-              </button>
-            </div>
-
-            <div className="bg-white p-4 rounded-xl border border-[#E2D1B8] shadow-sm flex flex-col justify-between space-y-3">
-              <div>
-                <p className="font-bold text-sm text-[#C8963E]">Batching Log (`Form-ING-001`)</p>
-                <p className="text-[11px] text-gray-500 mt-1">Outlet kitting records, actual scaled kg by Romeo, and release handoff timestamps.</p>
-              </div>
-              <button
-                onClick={handleExportBatchOrdersCsv}
-                className="bg-[#C8963E] hover:bg-[#b08030] text-[#240e32] text-xs font-bold py-2 px-3 rounded flex items-center justify-center gap-1.5 transition"
-              >
-                <Download size={13} /> Export Batching CSV
-              </button>
-            </div>
-          </div>
-
-          {/* CSV Import Interface */}
-          <div className="bg-white p-5 rounded-xl border border-[#E2D1B8] shadow-sm space-y-4">
-            <div className="border-b pb-2 flex justify-between items-center flex-wrap gap-2">
-              <div>
-                <h3 className="font-serif font-bold text-base text-[#3D1C52] flex items-center gap-2">
-                  <Upload size={16} /> Live CSV Inventory Stock Balance Import
-                </h3>
-                <p className="text-xs text-gray-500">
-                  Update stock levels directly by uploading or pasting a CSV file with updated physical counts
-                </p>
-              </div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <button
-                  type="button"
-                  onClick={onOpenImportModal}
-                  className="bg-[#C8963E] hover:bg-[#b08030] text-[#240e32] text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm flex items-center gap-1.5 transition"
-                >
-                  <FileSpreadsheet size={14} /> Launch Full CSV Baseline Import Wizard
-                </button>
-                <span className="text-[11px] font-mono text-[#5B2E7A] bg-purple-50 px-2 py-0.5 rounded border border-purple-200">
-                  Format: ItemCode, CurrentBalanceSec
-                </span>
-              </div>
-            </div>
-
-            {importStatus && (
-              <div className={`p-3 rounded-lg text-xs font-semibold flex items-center gap-2 ${
-                importStatus.type === 'success' ? 'bg-green-100 text-[#1E7A3E]' : 'bg-red-100 text-red-800'
-              }`}>
-                {importStatus.type === 'success' ? <CheckCircle2 size={16} /> : <AlertTriangle size={16} />}
-                <span>{importStatus.message}</span>
-              </div>
-            )}
-
+          <div className="bg-white p-5 rounded-2xl border border-[#E2D1B8] shadow-sm space-y-4">
             <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1">
-                Paste CSV Contents or Type Stock Count Updates:
-              </label>
-              <textarea
-                rows={6}
-                value={csvInputText}
-                onChange={(e) => setCsvInputText(e.target.value)}
-                placeholder="ItemCode, CurrentBalanceSec&#10;RM-FLR-001, 1500&#10;RM-FLR-002, 12000&#10;RM-SWT-001, 450"
-                className="w-full p-3 border rounded-lg font-mono text-xs text-gray-800 bg-gray-50"
-              />
+              <h3 className="font-serif font-bold text-[#3D1C52] text-base">
+                Bi-Directional CSV Data Hub (Legacy Accounting, ERP &amp; Excel Bridge)
+              </h3>
+              <p className="text-xs text-gray-600 mt-1">
+                Export current operational state into RFC-4180 compliant CSV formats or import warehouse opening counts.
+              </p>
             </div>
 
-            <div className="flex justify-between items-center pt-2">
-              <span className="text-[11px] text-gray-500">
-                Tip: Copy from Excel or Google Sheets and paste here directly.
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 pt-2">
+              <div className="border p-3.5 rounded-xl bg-gray-50 space-y-2 flex flex-col justify-between">
+                <div>
+                  <h4 className="font-bold text-xs text-[#5B2E7A]">Master Materials Register</h4>
+                  <p className="text-[11px] text-gray-500 mt-1">76 authentic raw materials &amp; packaging SKUs with dual UoM factors.</p>
+                </div>
+                <button
+                  onClick={handleExportMaterialsCsv}
+                  className="w-full bg-white hover:bg-gray-100 text-[#3D1C52] font-bold text-xs py-2 px-3 rounded-lg border flex items-center justify-center gap-1.5 shadow-sm"
+                >
+                  <Download size={13} /> Export Materials (.CSV)
+                </button>
+              </div>
+
+              <div className="border p-3.5 rounded-xl bg-gray-50 space-y-2 flex flex-col justify-between">
+                <div>
+                  <h4 className="font-bold text-xs text-[#1E7A3E]">Inbound Receiving Reports</h4>
+                  <p className="text-[11px] text-gray-500 mt-1">Complete inbound delivery records, QA gates, temperatures &amp; lot allocations.</p>
+                </div>
+                <button
+                  onClick={handleExportReceivingCsv}
+                  className="w-full bg-white hover:bg-gray-100 text-[#1E7A3E] font-bold text-xs py-2 px-3 rounded-lg border flex items-center justify-center gap-1.5 shadow-sm"
+                >
+                  <Download size={13} /> Export Receiving (.CSV)
+                </button>
+              </div>
+
+              <div className="border p-3.5 rounded-xl bg-gray-50 space-y-2 flex flex-col justify-between">
+                <div>
+                  <h4 className="font-bold text-xs text-[#C8963E]">Stock Withdrawals Ledger</h4>
+                  <p className="text-[11px] text-gray-500 mt-1">SOP-WAR-002 material requisitions, production lines &amp; FEFO lot audits.</p>
+                </div>
+                <button
+                  onClick={handleExportWithdrawalsCsv}
+                  className="w-full bg-white hover:bg-gray-100 text-[#C8963E] font-bold text-xs py-2 px-3 rounded-lg border flex items-center justify-center gap-1.5 shadow-sm"
+                >
+                  <Download size={13} /> Export Withdrawals (.CSV)
+                </button>
+              </div>
+
+              <div className="border p-3.5 rounded-xl bg-gray-50 space-y-2 flex flex-col justify-between">
+                <div>
+                  <h4 className="font-bold text-xs text-purple-700">Commercial Batching Orders</h4>
+                  <p className="text-[11px] text-gray-500 mt-1">Form-ING-001 outlet requisitions, scaled recipes &amp; kitting records.</p>
+                </div>
+                <button
+                  onClick={handleExportBatchingCsv}
+                  className="w-full bg-white hover:bg-gray-100 text-purple-700 font-bold text-xs py-2 px-3 rounded-lg border flex items-center justify-center gap-1.5 shadow-sm"
+                >
+                  <Download size={13} /> Export Batching (.CSV)
+                </button>
+              </div>
+            </div>
+
+            <div className="border-t pt-4 flex justify-between items-center flex-wrap gap-2">
+              <span className="text-xs text-gray-500">
+                Looking to import external counts from Excel? Open the batch importer modal.
               </span>
               <button
-                type="button"
-                onClick={handleProcessCsvImport}
-                className="bg-[#1E7A3E] hover:bg-[#165c2f] text-white text-xs font-bold px-6 py-2.5 rounded-lg shadow flex items-center gap-1.5 transition"
+                onClick={onOpenImportModal}
+                className="bg-[#240e32] hover:bg-[#3D1C52] text-[#E5C585] text-xs font-bold py-2 px-4 rounded-xl flex items-center gap-1.5 shadow"
               >
-                <CheckCircle2 size={14} /> Commit CSV Balance Updates to Perpetual Inventory
+                <Upload size={13} /> Launch Opening Inventory CSV Importer
               </button>
             </div>
           </div>
@@ -736,7 +1018,7 @@ export default function ReportsModule({
             {/* Metadata */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs bg-[#FAF6EE] p-3 rounded border border-[#E2D1B8]">
               <div><strong>Vendor:</strong> {selectedPoPreview.supplier}</div>
-              <div><strong>Date:</strong> {selectedPoPreview.generatedDate}</div>
+              <div><strong>Date:</strong> {selectedPoPreview.generatedDate || selectedPoPreview.date}</div>
               <div><strong>Facility:</strong> Indangan Central Plant</div>
               <div><strong>Buyer / Pre-Approver:</strong> {selectedPoPreview.preparedBy}</div>
             </div>
@@ -762,13 +1044,13 @@ export default function ReportsModule({
                       {it.suggestedPrimaryQty} {it.primaryUom}s
                     </td>
                     <td className="p-2 text-right font-mono text-gray-600">
-                      {it.totalSecondaryQty.toLocaleString()} {it.secondaryUom}
+                      {Number(it.totalSecondaryQty || 0).toLocaleString()} {it.secondaryUom}
                     </td>
                     <td className="p-2 text-right font-mono">
                       ₱{it.unitCost?.toLocaleString()}
                     </td>
                     <td className="p-2 text-right font-mono font-bold">
-                      ₱{it.estimatedCost?.toLocaleString('en-PH', { minimumFractionDigits: 2 })}
+                      ₱{Number(it.estimatedCost || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}
                     </td>
                   </tr>
                 ))}

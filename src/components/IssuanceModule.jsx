@@ -1,7 +1,10 @@
+// ============================================================================
+// FILE: src/components/IssuanceModule.jsx
+// ============================================================================
 import React, { useState } from 'react';
 import {
   PackageMinus, Plus, Trash2, CheckCircle2, XCircle, Clock,
-  Layers, X, FileText
+  Layers, X, FileText, Edit3, Sliders, AlertTriangle
 } from 'lucide-react';
 import {
   UNIFIED_PRODUCTION_LINES,
@@ -22,6 +25,7 @@ export default function IssuanceModule({
   pendingRequests = [],
   onIssuePendingRequest,
   onCancelPendingRequest,
+  onUpdatePendingRequest,
   batchOrders = [],
   onApprovePendingWithdrawal,
   onDeclineBulkWithdrawal,
@@ -30,6 +34,7 @@ export default function IssuanceModule({
 }) {
   const [exitingIds, setExitingIds] = useState({});
 
+  // Form State for manual creation
   const [selectedLineId, setSelectedLineId] = useState(UNIFIED_PRODUCTION_LINES[4].id);
   const [customLineName, setCustomLineName] = useState('');
   const [consumptionPurpose, setConsumptionPurpose] = useState(UNIFIED_CONSUMPTION_PURPOSES[1]);
@@ -43,6 +48,11 @@ export default function IssuanceModule({
   const [selectedPresetIdx, setSelectedPresetIdx] = useState(0);
   const [packCount, setPackCount] = useState(1);
   const [lineItems, setLineItems] = useState([]);
+
+  // Requisition Editing State (Jade adjusting queued withdrawal slip)
+  const [editingRequest, setEditingRequest] = useState(null);
+  const [editAddMaterialCode, setEditAddMaterialCode] = useState(inventory[0]?.code || 'RM-FLR-001');
+  const [editAddQty, setEditAddQty] = useState(1);
 
   const selectedMatObj = inventory.find((m) => m.code === selectedMaterialCode) || inventory[0] || {};
   const unitPresets = getMaterialUnitPresets(selectedMatObj);
@@ -114,64 +124,44 @@ export default function IssuanceModule({
         }
       ];
     });
+
+    setPackCount(1);
   };
 
-  const handleRemoveCompositionEntry = (materialCode, entryIdx) => {
-    setLineItems((prev) =>
-      prev
-        .map((item) => {
-          if (item.materialCode !== materialCode) return item;
-          const newComp = [...(item.composition || [])];
-          newComp.splice(entryIdx, 1);
-          if (newComp.length === 0) return null;
-          return {
-            ...item,
-            composition: newComp,
-            qtyRequestedSec: +newComp.reduce((s, c) => s + c.qtyInSec, 0).toFixed(3),
-            qtyIssuedSec: +newComp.reduce((s, c) => s + c.qtyInSec, 0).toFixed(3),
-            estimatedCost: +newComp.reduce((s, c) => s + c.estCost, 0).toFixed(2),
-            remarks: composeSummary(newComp)
-          };
-        })
-        .filter(Boolean)
-    );
+  const handleRemoveLineItem = (idx) => {
+    setLineItems((prev) => prev.filter((_, i) => i !== idx));
   };
 
-  const handleRemoveLineItem = (code) => {
-    setLineItems((prev) => prev.filter((i) => i.materialCode !== code));
-  };
+  const grandTotalCost = +lineItems.reduce((sum, it) => sum + (it.estimatedCost || 0), 0).toFixed(2);
 
-  const handleSubmitDirectSlip = (e) => {
+  const handleSubmit = (e) => {
     e.preventDefault();
     if (lineItems.length === 0) {
-      alert('Please add at least one raw material line item to issue.');
+      alert('Add at least one material to issue.');
       return;
     }
 
-    const lineMeta = UNIFIED_PRODUCTION_LINES.find((l) => l.id === selectedLineId) || UNIFIED_PRODUCTION_LINES[0];
-    const resolvedEntity =
-      selectedLineId === 'CUSTOM'
-        ? customLineName.trim() || 'Custom Production Line'
-        : lineMeta.label.replace(/^\d+\.\s*/, '');
+    const lineObj = UNIFIED_PRODUCTION_LINES.find((l) => l.id === selectedLineId);
+    const resolvedLineName = selectedLineId === 'CUSTOM' ? customLineName : (lineObj?.name || 'Production Floor');
 
-    const totalCost = +lineItems.reduce((sum, it) => sum + (Number(it.estimatedCost) || 0), 0).toFixed(2);
     const slipNo = `WS-${Date.now().toString().slice(-6)}`;
-
-    onSaveWithdrawal({
+    const newWithdrawal = {
       slipNo,
       date: new Date().toISOString().slice(0, 10),
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      requestingEntity: resolvedEntity,
-      department: lineMeta.department,
+      requestingEntity: resolvedLineName,
+      department: lineObj?.dept || 'Production Floor',
       purpose: consumptionPurpose,
       requestedBy,
       issuedBy: `${currentRole} (Warehouse Custodian)`,
-      receivedBy: receivedBy || requestedBy,
+      receivedBy,
       items: lineItems,
-      totalCost,
+      totalCost: grandTotalCost,
       status: 'ISSUED & RECONCILED',
       notes
-    });
+    };
+
+    onSaveWithdrawal(newWithdrawal);
 
     setLineItems([]);
     setNotes('');
@@ -189,6 +179,132 @@ export default function IssuanceModule({
     }, 320);
   };
 
+  // Requisition Editing Handlers
+  const openEditModal = (req) => {
+    const cloned = JSON.parse(JSON.stringify(req));
+    if (Array.isArray(cloned.items)) {
+      cloned.items = cloned.items.map((it) => {
+        const mat = inventory.find((m) => m.code === (it.materialCode || it.itemCode)) || {};
+        const q = Number(it.qtyRequestedSec ?? it.requestedQtySec ?? it.qty ?? 0);
+        const unitCostPerSec = mat.unitCost && mat.conversionFactor
+          ? Number(mat.unitCost) / Number(mat.conversionFactor)
+          : Number(mat.unitCost || 0);
+        return {
+          ...it,
+          materialCode: it.materialCode || it.itemCode || mat.code,
+          name: it.name || it.description || mat.name || 'Material Item',
+          secondaryUom: it.secondaryUom || mat.secondaryUom || 'kg',
+          qtyRequestedSec: q,
+          qtyIssuedSec: q,
+          estimatedCost: it.estimatedCost != null ? Number(it.estimatedCost) : +(q * unitCostPerSec).toFixed(2)
+        };
+      });
+    } else {
+      cloned.items = [];
+    }
+    const computedCost = +cloned.items.reduce((s, it) => s + (Number(it.estimatedCost) || 0), 0).toFixed(2);
+    cloned.totalCost = computedCost;
+    setEditingRequest(cloned);
+  };
+
+  const handleEditItemQty = (idx, newQty) => {
+    if (!editingRequest) return;
+    const qty = Math.max(0, parseFloat(newQty) || 0);
+    setEditingRequest((prev) => {
+      const updatedItems = [...prev.items];
+      const cur = updatedItems[idx];
+      const mat = inventory.find((m) => m.code === cur.materialCode) || {};
+      const unitCostPerSec = mat.unitCost && mat.conversionFactor
+        ? Number(mat.unitCost) / Number(mat.conversionFactor)
+        : Number(mat.unitCost || 0);
+      const estCost = +(qty * unitCostPerSec).toFixed(2);
+      updatedItems[idx] = {
+        ...cur,
+        qtyRequestedSec: qty,
+        qtyIssuedSec: qty,
+        estimatedCost: estCost
+      };
+      const totalCost = +updatedItems.reduce((s, it) => s + (Number(it.estimatedCost) || 0), 0).toFixed(2);
+      return { ...prev, items: updatedItems, totalCost };
+    });
+  };
+
+  const handleRemoveEditItem = (idx) => {
+    if (!editingRequest) return;
+    setEditingRequest((prev) => {
+      const updatedItems = prev.items.filter((_, i) => i !== idx);
+      const totalCost = +updatedItems.reduce((s, it) => s + (Number(it.estimatedCost) || 0), 0).toFixed(2);
+      return { ...prev, items: updatedItems, totalCost };
+    });
+  };
+
+  const handleAddEditItem = () => {
+    if (!editingRequest || !editAddMaterialCode || editAddQty <= 0) return;
+    const mat = inventory.find((m) => m.code === editAddMaterialCode);
+    if (!mat) return;
+
+    const unitCostPerSec = mat.unitCost && mat.conversionFactor
+      ? Number(mat.unitCost) / Number(mat.conversionFactor)
+      : Number(mat.unitCost || 0);
+    const addedCost = +(Number(editAddQty) * unitCostPerSec).toFixed(2);
+
+    setEditingRequest((prev) => {
+      const updatedItems = [...prev.items];
+      const existingIdx = updatedItems.findIndex((it) => it.materialCode === mat.code);
+      if (existingIdx >= 0) {
+        const cur = updatedItems[existingIdx];
+        const newQty = +(Number(cur.qtyRequestedSec || 0) + Number(editAddQty)).toFixed(3);
+        updatedItems[existingIdx] = {
+          ...cur,
+          qtyRequestedSec: newQty,
+          qtyIssuedSec: newQty,
+          estimatedCost: +(newQty * unitCostPerSec).toFixed(2)
+        };
+      } else {
+        updatedItems.push({
+          materialCode: mat.code,
+          name: mat.name,
+          secondaryUom: mat.secondaryUom || 'kg',
+          qtyRequestedSec: Number(editAddQty),
+          qtyIssuedSec: Number(editAddQty),
+          estimatedCost: addedCost,
+          remarks: `Added by Jade (${currentRole})`
+        });
+      }
+      const totalCost = +updatedItems.reduce((s, it) => s + (Number(it.estimatedCost) || 0), 0).toFixed(2);
+      return { ...prev, items: updatedItems, totalCost };
+    });
+
+    setEditAddQty(1);
+  };
+
+  const handleSaveEditedRequest = () => {
+    if (!editingRequest) return;
+    const reqKey = editingRequest.requestId || editingRequest.withdrawalNo;
+    if (onUpdatePendingRequest) {
+      onUpdatePendingRequest(reqKey, {
+        items: editingRequest.items,
+        totalCost: editingRequest.totalCost,
+        notes: editingRequest.notes,
+        receivedBy: editingRequest.receivedBy
+      });
+    }
+    setEditingRequest(null);
+  };
+
+  const handleSaveAndIssueEditedRequest = () => {
+    if (!editingRequest) return;
+    const reqKey = editingRequest.requestId || editingRequest.withdrawalNo;
+    const overrides = {
+      items: editingRequest.items,
+      totalCost: editingRequest.totalCost,
+      notes: editingRequest.notes,
+      receivedBy: editingRequest.receivedBy
+    };
+    setEditingRequest(null);
+    triggerAnimatedAction(reqKey, () => onIssuePendingRequest(reqKey, overrides));
+  };
+
   const pendingPortalList = pendingRequests.filter((r) => r.status === 'PENDING_ISSUANCE');
   const pendingBulkOrders = batchOrders.filter((b) => b.bulkRequestStatus === 'PENDING_JADE_APPROVAL');
 
@@ -204,7 +320,7 @@ export default function IssuanceModule({
               </h2>
             </div>
             <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900">
-              Cards auto-clear upon Issue or Cancel
+              Review, Edit Quantities, or Add/Remove Items Before Issue
             </span>
           </div>
 
@@ -231,21 +347,34 @@ export default function IssuanceModule({
                       <strong>Purpose:</strong> {req.purpose} · <strong>By:</strong> {req.requisitionedBy}
                     </p>
                     <ul className="mt-2 space-y-1 bg-white p-2.5 rounded-lg border border-amber-200 text-xs">
-                      {(req.items || []).map((it, i) => (
-                        <li key={i} className="flex justify-between font-medium">
-                          <span>
-                            <code className="font-bold text-[#240e32]">{it.materialCode || it.itemCode}</code> · {it.name || it.description}
-                            {it.composition && it.composition.length > 0 && (
-                              <span className="ml-1 text-emerald-700 text-[11px]">
-                                ({it.composition.map((c) => `${c.count} × ${c.badge}`).join(' + ')})
+                      {(req.items || []).map((it, i) => {
+                        const mat = inventory.find((m) => m.code === (it.materialCode || it.itemCode));
+                        const currentBal = mat?.currentBalance != null ? mat.currentBalance : null;
+                        const reqQty = Number(it.qtyRequestedSec ?? it.requestedQtySec ?? 0);
+                        const isShort = currentBal !== null && currentBal < reqQty;
+                        return (
+                          <li key={i} className="flex justify-between items-center font-medium gap-1">
+                            <span>
+                              <code className="font-bold text-[#240e32]">{it.materialCode || it.itemCode}</code> · {it.name || it.description}
+                              {it.composition && it.composition.length > 0 && (
+                                <span className="ml-1 text-emerald-700 text-[11px]">
+                                  ({it.composition.map((c) => `${c.count} × ${c.badge}`).join(' + ')})
+                                </span>
+                              )}
+                            </span>
+                            <div className="text-right">
+                              <span className={`font-bold ${isShort ? 'text-red-700 bg-red-50 px-1 rounded' : 'text-emerald-800'}`}>
+                                {reqQty} {it.secondaryUom || 'kg'}
                               </span>
-                            )}
-                          </span>
-                          <span className="font-bold text-emerald-800">
-                            {it.qtyRequestedSec ?? it.requestedQtySec} {it.secondaryUom || 'kg'}
-                          </span>
-                        </li>
-                      ))}
+                              {isShort && (
+                                <span className="block text-[9px] font-bold text-red-600">
+                                  Shortage! (Bal: {currentBal} {it.secondaryUom || 'kg'})
+                                </span>
+                              )}
+                            </div>
+                          </li>
+                        );
+                      })}
                     </ul>
                     {req.notes && (
                       <p className="mt-2 text-[11px] text-gray-600 italic bg-white px-2 py-1 rounded border border-amber-200 whitespace-pre-line">
@@ -254,7 +383,15 @@ export default function IssuanceModule({
                     )}
                   </div>
 
-                  <div className="flex items-center justify-end gap-2 pt-2 border-t border-amber-200">
+                  <div className="flex items-center justify-end gap-2 pt-2 border-t border-amber-200 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => openEditModal(req)}
+                      className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-[#C8963E]/20 hover:bg-[#C8963E] text-[#240e32] flex items-center gap-1 transition"
+                      title="Adjust quantities, add items, or remove out-of-stock items"
+                    >
+                      <Edit3 size={13} /> Edit / Adjust Slip
+                    </button>
                     {onCancelPendingRequest && (
                       <button
                         type="button"
@@ -267,9 +404,9 @@ export default function IssuanceModule({
                             triggerAnimatedAction(reqKey, () => onCancelPendingRequest(reqKey, reason));
                           }
                         }}
-                        className="px-3 py-1.5 rounded-lg text-xs font-bold bg-red-100 hover:bg-red-600 text-red-700 hover:text-white flex items-center gap-1 transition"
+                        className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-red-100 hover:bg-red-600 text-red-700 hover:text-white flex items-center gap-1 transition"
                       >
-                        <XCircle size={14} /> Decline & Cancel
+                        <XCircle size={13} /> Decline
                       </button>
                     )}
                     {onIssuePendingRequest && (
@@ -278,7 +415,7 @@ export default function IssuanceModule({
                         onClick={() => triggerAnimatedAction(reqKey, () => onIssuePendingRequest(reqKey))}
                         className="px-3.5 py-1.5 rounded-lg text-xs font-extrabold bg-[#1E7A3E] hover:bg-emerald-800 text-white flex items-center gap-1.5 shadow transition"
                       >
-                        <CheckCircle2 size={14} /> Issue & Deduct Stock
+                        <CheckCircle2 size={13} /> Issue & Deduct Stock
                       </button>
                     )}
                   </div>
@@ -289,6 +426,200 @@ export default function IssuanceModule({
         </section>
       )}
 
+      {/* JADE REQUISITION EDITING MODAL */}
+      {editingRequest && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border-2 border-[#C8963E] space-y-4 max-h-[92vh] overflow-y-auto">
+            <div className="flex justify-between items-start border-b pb-3">
+              <div>
+                <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-[#240e32] text-[#E5C585]">
+                  {editingRequest.requestId || editingRequest.withdrawalNo}
+                </span>
+                <h3 className="font-serif font-bold text-lg text-[#240e32] mt-1">
+                  Adjust Withdrawal Request — Warehouse Floor Review
+                </h3>
+                <p className="text-xs text-gray-500">
+                  {editingRequest.requestingLine} · Requested By: <strong>{editingRequest.requisitionedBy}</strong>
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingRequest(null)}
+                className="text-gray-400 hover:text-gray-600 font-bold text-lg"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Line Items Table with Edit Inputs */}
+            <div className="space-y-2">
+              <label className="block text-xs font-bold text-gray-700">Requisitioned Materials (Edit Quantities or Remove Out-of-Stock SKUs):</label>
+              {editingRequest.items.length === 0 ? (
+                <p className="text-xs text-gray-400 italic p-3 bg-gray-50 rounded border text-center">
+                  All items removed from this requisition. Add materials below.
+                </p>
+              ) : (
+                <div className="overflow-x-auto border rounded-xl">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-[#FAF6EE] text-[#240e32] border-b font-bold">
+                      <tr>
+                        <th className="p-2">Material SKU</th>
+                        <th className="p-2">Item Name</th>
+                        <th className="p-2 text-right">Floor Stock</th>
+                        <th className="p-2 text-right">Qty to Issue</th>
+                        <th className="p-2 text-right">Est. Cost</th>
+                        <th className="p-2 text-center">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                      {editingRequest.items.map((it, idx) => {
+                        const mat = inventory.find((m) => m.code === it.materialCode);
+                        const curBal = mat?.currentBalance != null ? mat.currentBalance : 0;
+                        const isShort = curBal < (it.qtyRequestedSec || 0);
+                        return (
+                          <tr key={idx} className={isShort ? 'bg-red-50/50' : ''}>
+                            <td className="p-2 font-mono font-bold text-[#240e32]">{it.materialCode}</td>
+                            <td className="p-2 font-medium">{it.name}</td>
+                            <td className={`p-2 text-right font-mono font-bold ${isShort ? 'text-red-600' : 'text-gray-600'}`}>
+                              {curBal} {it.secondaryUom}
+                            </td>
+                            <td className="p-2 text-right">
+                              <div className="inline-flex items-center gap-1 justify-end">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={it.qtyRequestedSec}
+                                  onChange={(e) => handleEditItemQty(idx, e.target.value)}
+                                  className="w-20 p-1 border rounded font-mono font-bold text-right text-xs bg-white focus:ring-1 focus:ring-[#C8963E]"
+                                />
+                                <span className="font-semibold text-gray-500">{it.secondaryUom}</span>
+                              </div>
+                            </td>
+                            <td className="p-2 text-right font-mono font-bold text-gray-700">
+                              ₱{Number(it.estimatedCost || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}
+                            </td>
+                            <td className="p-2 text-center">
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveEditItem(idx)}
+                                className="text-red-500 hover:text-red-700 p-1 rounded hover:bg-red-50"
+                                title="Remove item"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* Add New Material to this Requisition */}
+            <div className="bg-[#FAF6EE] p-3 rounded-xl border border-[#C8963E]/40 space-y-2">
+              <span className="text-[11px] font-extrabold uppercase tracking-wider text-[#240e32]">
+                + Add Substitute or Additional Material:
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center">
+                <div className="sm:col-span-7">
+                  <select
+                    value={editAddMaterialCode}
+                    onChange={(e) => setEditAddMaterialCode(e.target.value)}
+                    className="w-full p-1.5 border rounded text-xs bg-white font-medium"
+                  >
+                    {inventory.map((m) => (
+                      <option key={m.code} value={m.code}>
+                        {m.code} · {m.name} (Bal: {m.currentBalance} {m.secondaryUom})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="sm:col-span-3">
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="number"
+                      min="0.1"
+                      step="0.1"
+                      value={editAddQty}
+                      onChange={(e) => setEditAddQty(parseFloat(e.target.value) || 0)}
+                      className="w-full p-1.5 border rounded text-xs font-mono font-bold"
+                      placeholder="Qty"
+                    />
+                    <span className="text-[11px] font-semibold text-gray-500">
+                      {inventory.find((m) => m.code === editAddMaterialCode)?.secondaryUom || 'kg'}
+                    </span>
+                  </div>
+                </div>
+                <div className="sm:col-span-2">
+                  <button
+                    type="button"
+                    onClick={handleAddEditItem}
+                    className="w-full bg-[#240e32] text-[#E5C585] text-xs font-bold py-1.5 px-2 rounded hover:bg-[#3D1C52] transition"
+                  >
+                    + Add
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Custodian Remarks / Adjustment Reason */}
+            <div>
+              <label className="block text-xs font-bold text-gray-700 mb-1">
+                Custodian Adjustment Notes / Remarks:
+              </label>
+              <textarea
+                value={editingRequest.notes || ''}
+                onChange={(e) => setEditingRequest((prev) => ({ ...prev, notes: e.target.value }))}
+                placeholder="Specify reason for adjustments (e.g. Flour reduced from 50kg to 25kg due to floor stock shortage)..."
+                rows={2}
+                className="w-full p-2 border rounded-lg text-xs"
+              />
+            </div>
+
+            {/* Summary & Actions */}
+            <div className="flex justify-between items-center pt-2 border-t text-xs">
+              <div>
+                <span className="text-gray-500 font-semibold">Total Adjusted Valuation: </span>
+                <strong className="text-[#1E7A3E] font-mono text-sm">
+                  ₱{editingRequest.totalCost.toLocaleString('en-PH', { minimumFractionDigits: 2 })}
+                </strong>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingRequest(null)}
+                  className="px-3 py-1.5 text-xs text-gray-500 hover:text-gray-700 font-semibold"
+                >
+                  Cancel
+                </button>
+                {onUpdatePendingRequest && (
+                  <button
+                    type="button"
+                    onClick={handleSaveEditedRequest}
+                    className="px-3 py-1.5 rounded-lg text-xs font-bold bg-gray-200 hover:bg-gray-300 text-gray-800 transition"
+                  >
+                    Save Changes to Queue
+                  </button>
+                )}
+                {onIssuePendingRequest && (
+                  <button
+                    type="button"
+                    onClick={handleSaveAndIssueEditedRequest}
+                    disabled={editingRequest.items.length === 0}
+                    className="px-4 py-1.5 rounded-lg text-xs font-extrabold bg-[#1E7A3E] hover:bg-emerald-800 text-white shadow transition"
+                  >
+                    Save &amp; Issue Slip Now
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {pendingBulkOrders.length > 0 && (
         <section className="bg-white rounded-2xl p-5 border-2 border-purple-500 shadow-lg space-y-3">
           <div className="flex items-center justify-between border-b pb-2">
@@ -297,7 +628,7 @@ export default function IssuanceModule({
               Romeo's Bulk Batching Requisitions ({pendingBulkOrders.length})
             </h2>
             <span className="text-[11px] font-semibold text-purple-700">
-              Unlocks Dry Room 2 Scale & Kit upon approval
+              Unlocks Dry Room 2 Scale &amp; Kit upon approval
             </span>
           </div>
 
@@ -313,25 +644,30 @@ export default function IssuanceModule({
                 >
                   <div>
                     <div className="flex justify-between items-center text-xs mb-1">
-                      <span className="font-mono font-bold bg-purple-900 text-white px-2 py-0.5 rounded">
-                        {ord.bulkRequisitionSlipNo || ord.orderId}
+                      <span className="font-mono font-bold bg-purple-900 text-purple-100 px-2 py-0.5 rounded">
+                        {ord.orderId}
                       </span>
-                      <span className="text-gray-500 font-mono">{ord.bulkRequestedAt}</span>
+                      <span className="text-[11px] text-gray-500 font-mono">{ord.requestDate}</span>
                     </div>
-                    <h3 className="font-bold text-sm text-[#240e32]">
-                      {ord.recipeName} ({ord.requestedQtyPcs} pcs · {ord.batchMultiplier}x Batch)
+                    <h3 className="font-extrabold text-sm text-purple-950">
+                      {ord.recipeName} · <span className="text-purple-800">{ord.plannedBatches} Commercial Batches</span>
                     </h3>
-                    <p className="text-xs text-gray-600">Destination: {ord.outletName}</p>
+                    <p className="text-xs text-gray-600 mt-1">
+                      Requested by <strong>{ord.bakerName || 'Baker'}</strong> ({ord.outletName || 'Production'})
+                    </p>
+                    <p className="text-[11px] text-purple-900 font-semibold mt-1">
+                      Allocates bulk flour &amp; shortening from Dry Room 1.
+                    </p>
                   </div>
 
-                  <div className="flex justify-end gap-2 pt-2 border-t border-purple-200">
+                  <div className="flex items-center justify-end gap-2 pt-2 border-t border-purple-200">
                     {onDeclineBulkWithdrawal && (
                       <button
                         type="button"
                         onClick={() => {
                           const reason = window.prompt(
-                            `Decline bulk requisition for ${ord.orderId}? Enter audit reason:`,
-                            'Insufficient lot stock / rescheduled batch'
+                            `Decline bulk withdrawal for ${ord.orderId}? Enter audit reason:`,
+                            'Insufficient bulk stock at central warehouse'
                           );
                           if (reason !== null) {
                             triggerAnimatedAction(ord.orderId, () => onDeclineBulkWithdrawal(ord.orderId, reason));
@@ -339,16 +675,18 @@ export default function IssuanceModule({
                         }}
                         className="px-3 py-1.5 rounded-lg text-xs font-bold bg-red-100 hover:bg-red-600 text-red-700 hover:text-white flex items-center gap-1 transition"
                       >
-                        <XCircle size={14} /> Decline Request
+                        <XCircle size={14} /> Decline
                       </button>
                     )}
-                    <button
-                      type="button"
-                      onClick={() => triggerAnimatedAction(ord.orderId, () => onApprovePendingWithdrawal(ord.orderId))}
-                      className="px-3.5 py-1.5 rounded-lg text-xs font-extrabold bg-purple-800 hover:bg-purple-950 text-white flex items-center gap-1.5 shadow transition"
-                    >
-                      <CheckCircle2 size={14} /> Authorize Bulk Release
-                    </button>
+                    {onApprovePendingWithdrawal && (
+                      <button
+                        type="button"
+                        onClick={() => triggerAnimatedAction(ord.orderId, () => onApprovePendingWithdrawal(ord.orderId))}
+                        className="px-3.5 py-1.5 rounded-lg text-xs font-extrabold bg-purple-800 hover:bg-purple-900 text-white flex items-center gap-1.5 shadow transition"
+                      >
+                        <CheckCircle2 size={14} /> Approve Bulk Deduction
+                      </button>
+                    )}
                   </div>
                 </div>
               );
@@ -357,37 +695,36 @@ export default function IssuanceModule({
         </section>
       )}
 
-      <form
-        onSubmit={handleSubmitDirectSlip}
-        className="bg-white rounded-2xl p-5 border border-gray-200 shadow-sm space-y-5"
-      >
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-3">
+      {/* MANUAL ISSUANCE FORM */}
+      <form onSubmit={handleSubmit} className="bg-white rounded-2xl p-6 border border-[#E2D1B8] shadow-sm space-y-5">
+        <div className="flex justify-between items-start border-b pb-4 flex-wrap gap-2">
           <div>
-            <h2 className="text-base font-extrabold text-[#240e32] flex items-center gap-2">
-              <PackageMinus size={18} className="text-[#C8963E]" />
-              New Raw Material Requisition Slip — Real-Time Release (Pre-Bake Door Handoff)
+            <span className="font-mono text-xs font-bold bg-[#240e32] text-[#E5C585] px-2 py-0.5 rounded">
+              Form-WAR-002
+            </span>
+            <h2 className="font-serif text-2xl font-bold text-[#240e32] mt-1">
+              Central Warehouse Floor Stock Issuance (Material Requisition Gate)
             </h2>
-            <p className="text-xs text-gray-500">
-              Compose bulk + small quantities on a single line (e.g. 1 Tray + 17 pcs Eggs · 1 Box + 2 Cans Creamer)
+            <p className="text-xs text-gray-600 mt-0.5">
+              Strict First-Expired, First-Out (FEFO) Lot Deduction · Indangan Plant Production Lines
             </p>
           </div>
-          <span className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-900">
-            FEFO Auto-Deduction Active
-          </span>
+          <div className="bg-[#FAF6EE] border border-[#C8963E]/40 px-3 py-1.5 rounded-lg text-right text-xs">
+            <p className="font-bold text-[#240e32]">Warehouse Custodian: Jade Q. Dela Cruz</p>
+            <p className="text-gray-500 text-[11px]">SOP-WAR-002 Compliant</p>
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <div>
-            <label className="block text-xs font-bold text-gray-700 mb-1">
-              Requesting Production Line / Outlet / Department *
-            </label>
+            <label className="block text-xs font-bold text-gray-700 mb-1">Target Production Line *</label>
             <select
               value={selectedLineId}
               onChange={(e) => handleLineSelectChange(e.target.value)}
               className="w-full border border-gray-300 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:border-[#C8963E]"
             >
-              {UNIFIED_PRODUCTION_LINES.map((line) => (
-                <option key={line.id} value={line.id}>{line.label}</option>
+              {UNIFIED_PRODUCTION_LINES.map((l) => (
+                <option key={l.id} value={l.id}>{l.name} ({l.dept})</option>
               ))}
             </select>
             {selectedLineId === 'CUSTOM' && (
@@ -472,25 +809,25 @@ export default function IssuanceModule({
               <select
                 value={selectedPresetIdx}
                 onChange={(e) => setSelectedPresetIdx(Number(e.target.value))}
-                className="w-full border border-gray-300 rounded-lg px-2.5 py-2 text-xs font-bold bg-white text-[#240e32]"
+                className="w-full border border-gray-300 rounded-lg px-2.5 py-2 text-xs font-semibold bg-white font-mono"
               >
-                {unitPresets.map((preset, idx) => (
-                  <option key={idx} value={idx}>{preset.label}</option>
+                {unitPresets.map((u, i) => (
+                  <option key={i} value={i}>
+                    {u.label} ({u.multiplierInSec} {selectedMatObj.secondaryUom || 'kg'})
+                  </option>
                 ))}
               </select>
             </div>
 
             <div className="md:col-span-2">
-              <label className="block text-[11px] font-bold text-gray-700 mb-1">
-                Qty of {activePreset.badge || 'Units'}
-              </label>
+              <label className="block text-[11px] font-bold text-gray-700 mb-1">Packs / Count</label>
               <input
                 type="number"
-                step="0.25"
-                min="0.25"
+                min="0.1"
+                step="any"
                 value={packCount}
-                onChange={(e) => setPackCount(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-2.5 py-2 text-xs font-bold bg-white"
+                onChange={(e) => setPackCount(parseFloat(e.target.value) || 0)}
+                className="w-full border border-gray-300 rounded-lg px-2.5 py-2 text-xs font-mono font-bold"
               />
             </div>
 
@@ -498,127 +835,91 @@ export default function IssuanceModule({
               <button
                 type="button"
                 onClick={handleAddLineItem}
-                className="w-full py-2 px-3 rounded-lg bg-[#C8963E] hover:bg-[#b58432] text-[#240e32] font-extrabold text-xs flex items-center justify-center gap-1 shadow"
+                className="w-full bg-[#240e32] hover:bg-[#3D1C52] text-[#E5C585] text-xs font-bold py-2 rounded-lg flex items-center justify-center gap-1 shadow transition"
               >
-                <Plus size={14} /> Add ({computedSecondaryQty} {selectedMatObj.secondaryUom})
+                <Plus size={14} /> Add Line
               </button>
             </div>
           </div>
+        </div>
 
-          <div className="flex flex-wrap items-center gap-1.5 pt-1">
-            <span className="text-[10px] font-bold uppercase text-gray-500 mr-1">Quick Presets:</span>
-            {unitPresets.map((p, idx) => (
-              <button
-                key={idx}
-                type="button"
-                onClick={() => {
-                  setSelectedPresetIdx(idx);
-                  setPackCount(1);
-                }}
-                className={`px-2 py-0.5 rounded-md text-[11px] font-bold border transition ${
-                  selectedPresetIdx === idx
-                    ? 'bg-[#240e32] text-[#E5C585] border-[#240e32]'
-                    : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-100'
-                }`}
-              >
-                {p.label}
-              </button>
-            ))}
-          </div>
-
-          {lineItems.length > 0 && (
-            <div className="pt-3 space-y-2">
-              <p className="text-[10px] font-extrabold uppercase tracking-widest text-gray-500">
-                Composition — Same material = one line, multiple unit entries
-              </p>
-              {lineItems.map((it) => (
-                <div
-                  key={it.materialCode}
-                  className="bg-white px-3 py-2.5 rounded-lg border border-gray-200 space-y-2"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1 min-w-0">
-                      <div className="text-xs">
-                        <span className="font-mono font-bold text-[#240e32]">{it.materialCode}</span>
-                        <span className="mx-1 text-gray-400">·</span>
-                        <span className="font-bold">{it.name}</span>
-                      </div>
-                      <div className="mt-1 flex flex-wrap items-center gap-1">
-                        {(it.composition || []).map((c, ci) => (
-                          <span
-                            key={ci}
-                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-[#FAF6EE] border border-[#E2D1B8] text-[11px] font-bold text-[#240e32]"
-                            title={c.label}
-                          >
-                            {c.count} × {c.badge}
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveCompositionEntry(it.materialCode, ci)}
-                              className="text-red-600 hover:text-red-800"
-                              title="Remove this pack entry"
-                            >
-                              <X size={11} />
-                            </button>
-                          </span>
-                        ))}
-                      </div>
-                      <div className="mt-1 text-[11px] text-gray-500">
-                        Lot: <code className="font-mono">{it.lotNumber}</code>
-                      </div>
-                    </div>
-
-                    <div className="text-right shrink-0 space-y-1">
-                      <div className="text-xs font-extrabold text-[#1E7A3E]">
-                        {it.qtyRequestedSec} {it.secondaryUom}
-                      </div>
-                      <div className="text-[11px] text-gray-500">
-                        ₱{Number(it.estimatedCost || 0).toLocaleString()}
-                      </div>
+        {lineItems.length > 0 && (
+          <div className="border border-gray-200 rounded-xl overflow-hidden">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-[#240e32] text-[#E5C585]">
+                <tr>
+                  <th className="p-3">Material SKU</th>
+                  <th className="p-3">Item Description</th>
+                  <th className="p-3">Allocated FEFO Lot</th>
+                  <th className="p-3 text-right">Deducted Qty</th>
+                  <th className="p-3">Storage Room</th>
+                  <th className="p-3 text-right">Est. Cost</th>
+                  <th className="p-3 text-center">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {lineItems.map((it, idx) => (
+                  <tr key={idx} className="hover:bg-gray-50">
+                    <td className="p-3 font-mono font-bold text-[#240e32]">{it.materialCode}</td>
+                    <td className="p-3">
+                      <span className="font-bold text-gray-800">{it.name}</span>
+                      {it.remarks && (
+                        <span className="block text-[11px] text-emerald-700 font-mono">{it.remarks}</span>
+                      )}
+                    </td>
+                    <td className="p-3 font-mono text-[11px] text-gray-600">{it.lotNumber}</td>
+                    <td className="p-3 text-right font-mono font-bold text-[#1E7A3E]">
+                      {it.qtyIssuedSec} {it.secondaryUom}
+                    </td>
+                    <td className="p-3 text-gray-500">{it.storageRoom}</td>
+                    <td className="p-3 text-right font-mono font-bold text-gray-800">
+                      ₱{it.estimatedCost?.toLocaleString('en-PH', { minimumFractionDigits: 2 })}
+                    </td>
+                    <td className="p-3 text-center">
                       <button
                         type="button"
-                        onClick={() => handleRemoveLineItem(it.materialCode)}
-                        className="text-red-600 hover:text-red-800 text-[11px] font-bold flex items-center gap-1 ml-auto"
-                        title="Remove entire line item"
+                        onClick={() => handleRemoveLineItem(idx)}
+                        className="text-red-500 hover:text-red-700 p-1"
                       >
-                        <Trash2 size={12} /> Remove line
+                        <Trash2 size={14} />
                       </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot className="bg-[#FAF6EE] font-bold">
+                <tr>
+                  <td colSpan={5} className="p-3 text-right text-gray-700">Estimated Requisition Total:</td>
+                  <td className="p-3 text-right font-mono text-sm text-[#1E7A3E]">
+                    ₱{grandTotalCost.toLocaleString('en-PH', { minimumFractionDigits: 2 })}
+                  </td>
+                  <td></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        )}
 
-        {/* ═══════════ NEW: MULTI-LINE REMARKS / HANDLING NOTES ═══════════ */}
         <div>
-          <label className="block text-xs font-bold text-gray-700 mb-1 flex items-center gap-1.5">
-            <FileText size={13} /> Multi-Line Remarks / Handling Notes
-          </label>
-          <textarea
-            rows={3}
+          <label className="block text-xs font-bold text-gray-700 mb-1">Requisition Notes &amp; Specific Remarks</label>
+          <input
+            type="text"
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
-            placeholder={`Enter multi-line delivery instructions, receiving notes, or special handling remarks...
-
-Examples:
-• Deliver to Dry Room 2 north gate before 05:00 AM
-• Separate yeast packet from flour sack
-• Rinse eggs before Wet Room entry
-• Split boxed items across Pallet A1 and A2`}
-            className="w-full border border-gray-300 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[#C8963E] whitespace-pre-line"
+            placeholder="e.g. Substituted brown sugar with refined per Master Baker; 2 kg buffer added for spill..."
+            className="w-full border border-gray-300 rounded-xl px-3 py-2 text-xs"
           />
-          <p className="text-[10px] text-gray-500 mt-1">
-            ℹ️ Notes are stored on the slip and appear on the printed Form-WAR-001.
-          </p>
         </div>
 
-        <button
-          type="submit"
-          className="w-full py-3 rounded-xl bg-[#240e32] hover:bg-black text-[#E5C585] font-extrabold text-xs uppercase tracking-wider shadow-lg transition"
-        >
-          Authorize Immediate Stock Issuance & Deduct FEFO Lots
-        </button>
+        <div className="flex justify-end pt-2">
+          <button
+            type="submit"
+            className="bg-[#1E7A3E] hover:bg-emerald-800 text-white font-extrabold text-sm px-6 py-3 rounded-xl flex items-center gap-2 shadow-lg transition"
+          >
+            <PackageMinus size={18} />
+            Authorize Issuance &amp; Deduct Warehouse Stock
+          </button>
+        </div>
       </form>
     </div>
   );

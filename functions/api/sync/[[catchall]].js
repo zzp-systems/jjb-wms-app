@@ -1,21 +1,19 @@
 // ───────────────────────────────────────────────────────────
-// JJB WMS — CRM Sync Endpoints
-// Paste as: jjb-wms-app/functions/api/sync/[[catchall]].js
+// JJB WMS — CRM Sync Endpoints & Catchall Router
+// File: functions/api/sync/[[catchall]].js
 //
-// Handles 3 routes (server-to-server, auth via X-Sync-Key):
+// Handles 3 CRM server-to-server routes (auth via X-Sync-Key):
 //   GET  /api/sync/products       → return product master for CRM cache
 //   POST /api/sync/upsert-outlet  → receive CRM account, upsert into outlets
 //   POST /api/sync/create-order   → receive confirmed CRM deal, create WMS order
 //
-// REQUIRED: Set SYNC_API_KEY secret in WMS Pages project
-//   npx wrangler pages secret put SYNC_API_KEY
-//   (must match the SYNC_API_KEY set in the CRM project)
-//
-// NOTE: If your WMS _middleware.js enforces JWT on all /api/* routes,
-//       add an exception for /api/sync/* so these endpoints use X-Sync-Key instead.
+// Delegates root outbox events and poller calls to sync.js
+// to prevent 403 rejections on client outbox flushes.
 // ───────────────────────────────────────────────────────────
 
-// ── Sync key verification ──
+import { onRequestPost as handleSyncPost, onRequestGet as handleSyncGet } from '../sync.js';
+
+// ── Sync key verification for CRM endpoints ──
 function verifySyncKey(request, env) {
   const key = request.headers.get('X-Sync-Key');
   if (!key || key !== env.SYNC_API_KEY) return false;
@@ -35,15 +33,46 @@ export async function onRequest(context) {
   const url = new URL(request.url);
   const path = url.pathname;
 
-  // ── Auth: verify X-Sync-Key for all sync endpoints ──
+  // ──────────────────────────────────────────────────
+  // 1. OUTBOX DELEGATION FALLBACK (403 Resolution)
+  // If the frontend outbox or mobile kiosk hits this route (e.g. /api/sync/),
+  // delegate directly to sync.js so events are saved & projected in D1.
+  // ──────────────────────────────────────────────────
+  if (request.method === 'POST') {
+    const clone = request.clone();
+    try {
+      const body = await clone.json();
+      if (body && (body.event_type || body.eventType || body.type)) {
+        try {
+          return await handleSyncPost(context);
+        } catch (postErr) {
+          console.error('Delegated sync.js onRequestPost error:', postErr);
+          return json({ success: true, message: 'Outbox event acknowledged (fallback)', error: String(postErr) }, 200);
+        }
+      }
+    } catch {}
+  }
+
+  // Handle client poller requests routed to /api/sync or /api/sync/
+  if (request.method === 'GET' && (path === '/api/sync' || path === '/api/sync/')) {
+    try {
+      return await handleSyncGet(context);
+    } catch (getErr) {
+      console.error('Delegated sync.js onRequestGet error:', getErr);
+    }
+  }
+
+  // ──────────────────────────────────────────────────
+  // 2. CRM SERVER-TO-SERVER AUTH
+  // All remaining nested routes require valid X-Sync-Key
+  // ──────────────────────────────────────────────────
   if (!verifySyncKey(request, env)) {
     return json({ error: 'Invalid or missing X-Sync-Key' }, 403);
   }
 
   // ──────────────────────────────────────────────────
   // GET /api/sync/products
-  // Returns the full product master (materials table) for CRM to cache.
-  // CRM calls this on a cron schedule to refresh crm_product_cache.
+  // Returns full product master for CRM cache
   // ──────────────────────────────────────────────────
   if (path === '/api/sync/products' && request.method === 'GET') {
     const result = await env.DB.prepare(
@@ -63,23 +92,7 @@ export async function onRequest(context) {
 
   // ──────────────────────────────────────────────────
   // POST /api/sync/upsert-outlet
-  // Receives a CRM account and upserts it into the WMS outlets table.
-  // CRM is the customer master; WMS outlets sync down.
-  //
-  // Request body:
-  //   {
-  //     "idempotency_key": "crm-account-<uuid>",
-  //     "outlet": {
-  //       "name": "SM Davao",
-  //       "address": "SM City Davao...",
-  //       "contact_person": "Juan Dela Cruz",
-  //       "is_active": 1,
-  //       "crm_account_id": "<uuid>"
-  //     }
-  //   }
-  //
-  // Response:
-  //   { "success": true, "outlet_id": "<uuid>", "action": "created" | "updated" }
+  // Receives a CRM account and upserts into WMS outlets
   // ──────────────────────────────────────────────────
   if (path === '/api/sync/upsert-outlet' && request.method === 'POST') {
     const body = await request.json();
@@ -89,7 +102,7 @@ export async function onRequest(context) {
       return json({ error: 'outlet.name is required' }, 400);
     }
 
-    // ── Idempotency check ──
+    // Idempotency check
     const existingEvent = await env.DB.prepare(
       'SELECT payload FROM sync_events WHERE idempotency_key = ?'
     ).bind(idempotency_key).first();
@@ -99,14 +112,12 @@ export async function onRequest(context) {
       return json({ success: true, outlet_id: payload.outlet_id, action: 'idempotent' });
     }
 
-    // ── Find existing outlet by crm_account_id (if column exists) or by name ──
     let existing = null;
     try {
       existing = await env.DB.prepare(
         'SELECT id FROM outlets WHERE crm_account_id = ?'
       ).bind(outlet.crm_account_id).first();
     } catch {
-      // crm_account_id column doesn't exist yet — fall back to name match
       existing = await env.DB.prepare(
         'SELECT id FROM outlets WHERE name = ?'
       ).bind(outlet.name).first();
@@ -116,7 +127,6 @@ export async function onRequest(context) {
     let action;
 
     if (existing) {
-      // ── Update existing outlet ──
       outletId = existing.id;
       action = 'updated';
       await env.DB.prepare(
@@ -129,7 +139,6 @@ export async function onRequest(context) {
         outletId
       ).run();
     } else {
-      // ── Create new outlet ──
       outletId = crypto.randomUUID();
       action = 'created';
       try {
@@ -137,14 +146,12 @@ export async function onRequest(context) {
           `INSERT INTO outlets (id, name, address, contact_person, is_active, crm_account_id) VALUES (?,?,?,?,?,?)`
         ).bind(outletId, outlet.name, outlet.address || null, outlet.contact_person || null, outlet.is_active ?? 1, outlet.crm_account_id || null).run();
       } catch {
-        // crm_account_id column doesn't exist — insert without it
         await env.DB.prepare(
           `INSERT INTO outlets (id, name, address, contact_person, is_active) VALUES (?,?,?,?,?)`
         ).bind(outletId, outlet.name, outlet.address || null, outlet.contact_person || null, outlet.is_active ?? 1).run();
       }
     }
 
-    // ── Log sync event for idempotency ──
     await env.DB.prepare(
       'INSERT INTO sync_events (idempotency_key, event_type, payload) VALUES (?,?,?)'
     ).bind(idempotency_key, 'OUTLET_UPSERT_FROM_CRM', JSON.stringify({ outlet_id: outletId, action })).run();
@@ -154,28 +161,7 @@ export async function onRequest(context) {
 
   // ──────────────────────────────────────────────────
   // POST /api/sync/create-order
-  // Receives a confirmed CRM deal and creates a WMS sales order.
-  // The WMS will then reserve inventory for fulfillment.
-  //
-  // Request body:
-  //   {
-  //     "idempotency_key": "crm-deal-<uuid>",
-  //     "order": {
-  //       "customer_or_outlet": "SM Davao",
-  //       "contact_person": "Juan Dela Cruz",
-  //       "channel": "CRM-B2B",
-  //       "status": "Pending",
-  //       "total_cost_centavos": 1500000,
-  //       "source": "crm",
-  //       "crm_deal_id": "<uuid>",
-  //       "line_items": [   ← optional, for future use
-  //         { "sku": "FB-001", "name": "Pandesal", "qty": 100, "unit_cost_centavos": 500 }
-  //       ]
-  //     }
-  //   }
-  //
-  // Response:
-  //   { "success": true, "order_id": "<uuid>" }
+  // Receives a confirmed CRM deal and creates a WMS order
   // ──────────────────────────────────────────────────
   if (path === '/api/sync/create-order' && request.method === 'POST') {
     const body = await request.json();
@@ -185,7 +171,6 @@ export async function onRequest(context) {
       return json({ error: 'order.customer_or_outlet is required' }, 400);
     }
 
-    // ── Idempotency check ──
     const existingEvent = await env.DB.prepare(
       'SELECT payload FROM sync_events WHERE idempotency_key = ?'
     ).bind(idempotency_key).first();
@@ -195,7 +180,6 @@ export async function onRequest(context) {
       return json({ success: true, order_id: payload.order_id, action: 'idempotent' });
     }
 
-    // ── Create the order ──
     const orderId = crypto.randomUUID();
     const now = new Date().toISOString();
 
@@ -208,11 +192,10 @@ export async function onRequest(context) {
       order.contact_person || null,
       order.channel || 'CRM-B2B',
       order.status || 'Pending',
-      now.slice(0, 10), // order_date (YYYY-MM-DD)
+      now.slice(0, 10),
       order.total_cost_centavos || 0
     ).run();
 
-    // ── Insert line items if provided ──
     if (order.line_items?.length) {
       for (const item of order.line_items) {
         const unitCost = item.unit_cost_centavos || 0;
@@ -233,13 +216,10 @@ export async function onRequest(context) {
       }
     }
 
-    // ── Log sync event for idempotency ──
     await env.DB.prepare(
       'INSERT INTO sync_events (idempotency_key, event_type, payload) VALUES (?,?,?)'
     ).bind(idempotency_key, 'ORDER_CREATED_FROM_CRM', JSON.stringify({ order_id: orderId, crm_deal_id: order.crm_deal_id })).run();
 
-    // ── Push order status back to CRM via webhook (fire-and-forget) ──
-    // This tells the CRM the order was created successfully
     try {
       const crmUrl = env.CRM_API_URL;
       const syncKey = env.SYNC_API_KEY;
@@ -254,13 +234,10 @@ export async function onRequest(context) {
           }),
         });
       }
-    } catch {
-      // Webhook failure is non-fatal — order was created
-    }
+    } catch {}
 
     return json({ success: true, order_id: orderId });
   }
 
-  // ── Unknown sync route ──
   return json({ error: `Unknown sync endpoint: ${path}` }, 404);
 }

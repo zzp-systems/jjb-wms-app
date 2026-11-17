@@ -1,7 +1,10 @@
+// ============================================================================
+// FILE: src/components/ReceivingModule.jsx
+// ============================================================================
 import React, { useState } from 'react';
 import {
   Plus, Trash2, CheckCircle2, ShieldCheck,
-  Printer, Truck, FileText, Thermometer
+  Printer, Truck, FileText, Thermometer, Link2, AlertCircle, AlertTriangle
 } from 'lucide-react';
 
 export default function ReceivingModule({
@@ -10,17 +13,22 @@ export default function ReceivingModule({
   receivingReports,
   currentRole,
   isMobileMode,
-  prefilledItem
+  prefilledItem,
+  purchaseOrders = [],
+  onUpdatePoStatus
 }) {
   const todayStr = new Date().toISOString().slice(0, 10);
   const [reportNo, setReportNo] = useState(`RR-${todayStr.replace(/-/g, '')}-${String(receivingReports.length + 1).padStart(3, '0')}`);
   const [poNo, setPoNo] = useState('');
   const [drNo, setDrNo] = useState('');
-  const [supplier, setSupplier] = useState('');
+  const [supplier, setSupplier] = useState('P.L. Sebastian Corporation');
   const [invoiceNo, setInvoiceNo] = useState('');
   const [deliveryVehicle, setDeliveryVehicle] = useState('');
-  const [shipmentNotes, setShipmentNotes] = useState('');   // ← NEW
+  const [shipmentNotes, setShipmentNotes] = useState('');
   const [selectedReportView, setSelectedReportView] = useState(null);
+
+  // Cross-reference with Purchase Orders (Form-PUR-002)
+  const [selectedPoId, setSelectedPoId] = useState('');
 
   const defaultMat = inventory[0] || {
     code: 'RM-FLR-001', name: 'All Purpose Flour',
@@ -30,6 +38,7 @@ export default function ReceivingModule({
 
   const buildInitialRow = (m) => ({
     materialCode: m.code, name: m.name,
+    orderedPrimaryQty: null,
     primaryQty: 0, primaryUom: m.primaryUom,
     conversionFactor: m.conversionFactor || 1,
     secondaryQty: 0, secondaryUom: m.secondaryUom,
@@ -45,51 +54,94 @@ export default function ReceivingModule({
     buildInitialRow(prefilledItem || defaultMat)
   ]);
 
+  const pendingPos = purchaseOrders.filter((po) => po.status === 'PENDING_DELIVERY');
+
+  const handleSelectPo = (targetPoNo) => {
+    setSelectedPoId(targetPoNo);
+    if (!targetPoNo) return;
+    const po = purchaseOrders.find((p) => p.poNo === targetPoNo);
+    if (!po) return;
+
+    setPoNo(po.poNo);
+    if (po.supplier) setSupplier(po.supplier);
+
+    if (Array.isArray(po.items) && po.items.length > 0) {
+      const mapped = po.items.map((it) => {
+        const mat = inventory.find((m) => m.code === (it.code || it.materialCode)) || {};
+        const primary = Number(it.suggestedPrimaryQty || it.primaryQty || 1);
+        const factor = Number(mat.conversionFactor || it.conversionFactor || 1);
+        const unitP = Number(it.unitCost || mat.unitCost || 1000);
+        return {
+          materialCode: it.code || it.materialCode || mat.code || 'RM-NEW',
+          name: it.name || mat.name || 'Raw Material',
+          orderedPrimaryQty: primary,
+          primaryQty: primary,
+          primaryUom: it.primaryUom || mat.primaryUom || 'Unit',
+          conversionFactor: factor,
+          secondaryQty: +(primary * factor).toFixed(3),
+          secondaryUom: it.secondaryUom || mat.secondaryUom || 'kg',
+          unitPrice: unitP,
+          totalAmount: +(primary * unitP).toFixed(2),
+          lotNumber: `LOT-${(it.code || mat.code || 'RM').replace(/[^A-Z0-9]/gi, '')}-${todayStr.slice(2).replace(/-/g, '')}`,
+          expiryDate: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+          storageRoom: mat.room || 'Dry Room 1',
+          binLocation: '',
+          qtyDamaged: 0,
+          chilledTemp: '',
+          butterCellophaneSticker: true,
+          eggRinsePassed: true,
+          coaPassed: true
+        };
+      });
+      setReceivingItems(mapped);
+    }
+  };
+
   const handleItemSkuChange = (index, code) => {
-    const mat = inventory.find(m => m.code === code);
+    const mat = inventory.find((m) => m.code === code);
     if (!mat) return;
-    setReceivingItems(prev => prev.map((item, i) => {
+    setReceivingItems((prev) => prev.map((item, i) => {
       if (i !== index) return item;
       const primary = item.primaryQty || 1;
       return {
         ...item,
         materialCode: mat.code, name: mat.name,
         primaryUom: mat.primaryUom, conversionFactor: mat.conversionFactor,
-        secondaryQty: primary * mat.conversionFactor,
+        secondaryQty: +(primary * mat.conversionFactor).toFixed(3),
         secondaryUom: mat.secondaryUom,
         unitPrice: mat.unitCost || 1000,
-        totalAmount: primary * (mat.unitCost || 1000),
+        totalAmount: +(primary * (mat.unitCost || 1000)).toFixed(2),
         storageRoom: mat.room,
-        lotNumber: `LOT-${mat.code.split('-')[1]}-${new Date().toISOString().slice(2, 10).replace(/-/g, '')}`
+        lotNumber: `LOT-${mat.code.replace(/[^A-Z0-9]/gi, '')}-${todayStr.slice(2).replace(/-/g, '')}`
       };
     }));
   };
 
   const handleQtyChange = (index, primaryQty) => {
     const qty = parseFloat(primaryQty) || 0;
-    setReceivingItems(prev => prev.map((item, i) => {
+    setReceivingItems((prev) => prev.map((item, i) => {
       if (i !== index) return item;
       return {
         ...item,
         primaryQty: qty,
-        secondaryQty: qty * item.conversionFactor,
-        totalAmount: qty * item.unitPrice
+        secondaryQty: +(qty * item.conversionFactor).toFixed(3),
+        totalAmount: +(qty * item.unitPrice).toFixed(2)
       };
     }));
   };
 
   const handleAddRow = () => {
-    const m = inventory[0];
+    const m = inventory[0] || defaultMat;
     const row = buildInitialRow(m);
     row.primaryQty = 10;
-    row.secondaryQty = 10 * m.conversionFactor;
-    row.totalAmount = 10 * (m.unitCost || 1000);
-    setReceivingItems(prev => [...prev, row]);
+    row.secondaryQty = +(10 * (m.conversionFactor || 1)).toFixed(3);
+    row.totalAmount = +(10 * (m.unitCost || 1000)).toFixed(2);
+    setReceivingItems((prev) => [...prev, row]);
   };
 
   const handleRemoveRow = (index) => {
     if (receivingItems.length <= 1) return;
-    setReceivingItems(prev => prev.filter((_, i) => i !== index));
+    setReceivingItems((prev) => prev.filter((_, i) => i !== index));
   };
 
   const grandTotal = receivingItems.reduce((s, it) => s + (it.totalAmount || 0), 0);
@@ -115,12 +167,53 @@ export default function ReceivingModule({
       notes: shipmentNotes
     };
 
-    // 1. Save to WMS (D1)
+    // 1. Cross-reference comparison against selected Purchase Order
+    if (selectedPoId && onUpdatePoStatus) {
+      const origPo = purchaseOrders.find((p) => p.poNo === selectedPoId);
+      let hasChanges = false;
+      const changeLogs = [];
+
+      if (origPo && Array.isArray(origPo.items)) {
+        origPo.items.forEach((origIt) => {
+          const origCode = origIt.code || origIt.materialCode;
+          const origQty = Number(origIt.suggestedPrimaryQty || origIt.primaryQty || 0);
+          const rec = receivingItems.find((r) => r.materialCode === origCode);
+          if (!rec) {
+            hasChanges = true;
+            changeLogs.push(`${origIt.name || origCode}: Ordered ${origQty}, but 0 received (omitted)`);
+          } else if (Number(rec.primaryQty) !== origQty) {
+            hasChanges = true;
+            const diff = Number(rec.primaryQty) - origQty;
+            changeLogs.push(`${origIt.name || origCode}: Ordered ${origQty}, received ${rec.primaryQty} (${diff >= 0 ? '+' : ''}${diff})`);
+          }
+        });
+
+        receivingItems.forEach((rec) => {
+          const inOrig = origPo.items.some((origIt) => (origIt.code || origIt.materialCode) === rec.materialCode);
+          if (!inOrig) {
+            hasChanges = true;
+            changeLogs.push(`Added unexpected item ${rec.name || rec.materialCode} (${rec.primaryQty} ${rec.primaryUom})`);
+          }
+        });
+      }
+
+      const finalStatus = hasChanges ? 'RECEIVED_WITH_CHANGES' : 'RECEIVED';
+      const varianceNotes = hasChanges ? changeLogs.join('; ') : '100% matched PO specifications.';
+
+      onUpdatePoStatus(selectedPoId, finalStatus, {
+        receivingReportNo: reportNo,
+        receivedDate: newReport.date,
+        receivedBy: currentRole,
+        notes: varianceNotes
+      });
+    }
+
+    // 2. Save to WMS
     onSaveReceiving(newReport);
 
-    // 2. Sync to ARAP (Z-Books)
+    // 3. Sync to ARAP (Z-Books)
     try {
-      const token = localStorage.getItem('jjb_wms_token'); // Ensure this matches your auth token key
+      const token = localStorage.getItem('jjb_wms_token');
       const res = await fetch('/api/receiving-sync', {
         method: 'POST',
         headers: {
@@ -132,7 +225,7 @@ export default function ReceivingModule({
           supplier_name: newReport.supplier,
           total_amount: newReport.totalPaid,
           invoice_date: newReport.date,
-          due_date: newReport.date, // Assuming due immediately
+          due_date: newReport.date,
         }),
       });
       const data = await res.json();
@@ -141,13 +234,13 @@ export default function ReceivingModule({
       }
     } catch (err) {
       console.error('ARAP receiving sync failed:', err);
-      // Non-fatal, WMS save already succeeded
     }
 
     // Reset for next shipment
     setReportNo(`RR-${todayStr.replace(/-/g, '')}-${String(receivingReports.length + 2).padStart(3, '0')}`);
     setPoNo(''); setDrNo(''); setInvoiceNo('');
     setShipmentNotes('');
+    setSelectedPoId('');
   };
 
   return (
@@ -159,12 +252,12 @@ export default function ReceivingModule({
             <h2 className="font-serif text-2xl font-bold text-[#3D1C52]">Inbound Receiving &amp; Quality Inspection Dock</h2>
           </div>
           <p className="text-xs text-gray-600 mt-0.5">
-            Mandatory 30-min logging SLA · 0°C Butter Cellophane Gate · Egg Sanitization Rinse Protocol · Dual UoM Net Conversion
+            Cross-Reference Form-PUR-002 POs · Mandatory 30-min logging SLA · 0°C Butter Cellophane Gate · Egg Sanitization Rinse Protocol
           </p>
         </div>
         <div className="bg-[#FAF6EE] border border-[#C8963E]/40 px-3 py-1.5 rounded-lg text-right text-xs">
           <p className="font-bold text-[#5B2E7A]">Warehouse Custodian: Jade Q. Dela Cruz</p>
-          <p className="text-gray-500 text-[11px]">Unlogged shipments &gt; 1 hr = Mandatory Dock Quarantine</p>
+          <p className="text-gray-500 text-[11px]">Cross-ref Delivery Receipts &amp; Invoices against Purchase Orders</p>
         </div>
       </div>
 
@@ -178,6 +271,52 @@ export default function ReceivingModule({
           </span>
         </div>
 
+        {/* PO Cross-Reference Bar */}
+        <div className="bg-[#FAF6EE] p-3.5 rounded-xl border border-[#C8963E]/40 space-y-2">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-2">
+              <Link2 size={16} className="text-[#C8963E]" />
+              <label className="text-xs font-bold text-[#240e32]">Cross-Reference Pending Purchase Order (`Form-PUR-002`):</label>
+            </div>
+            <span className="text-[11px] font-bold text-amber-900 bg-amber-100 px-2.5 py-0.5 rounded-full">
+              {pendingPos.length} Pending PO{pendingPos.length !== 1 ? 's' : ''} Awaiting Dock Ingest
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            <select
+              value={selectedPoId}
+              onChange={(e) => handleSelectPo(e.target.value)}
+              className="flex-1 p-2 text-xs border rounded bg-white font-medium"
+            >
+              <option value="">-- Manual Ingest / No Pre-Linked PO --</option>
+              {pendingPos.map((po) => (
+                <option key={po.poNo} value={po.poNo}>
+                  {po.poNo} · {po.supplier} ({po.items?.length || 0} SKUs — ₱{(po.totalCost || 0).toLocaleString()})
+                </option>
+              ))}
+            </select>
+            {selectedPoId && (
+              <button
+                type="button"
+                onClick={() => { setSelectedPoId(''); setPoNo(''); }}
+                className="text-xs px-2.5 py-1.5 rounded bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold"
+              >
+                Clear Link
+              </button>
+            )}
+          </div>
+
+          {selectedPoId && (
+            <div className="text-[11px] text-[#1E7A3E] bg-green-50 border border-green-200 p-2 rounded flex items-center gap-2 font-medium">
+              <CheckCircle2 size={14} />
+              <span>
+                Linked to <strong>{selectedPoId}</strong>. Quantities below are pre-loaded from Mariejohn's PO. You can modify actual received quantities, note damages, or add/remove items as delivered.
+              </span>
+            </div>
+          )}
+        </div>
+
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs">
           <div>
             <label className="block font-bold text-gray-700 mb-1">Receiving Report No.</label>
@@ -185,273 +324,307 @@ export default function ReceivingModule({
           </div>
           <div>
             <label className="block font-bold text-gray-700 mb-1">PO / DR Number <span className="text-red-500">*</span></label>
-            <input type="text" placeholder="e.g. PO-2026-1045" value={poNo} onChange={(e) => setPoNo(e.target.value)} required className="w-full p-2 border rounded font-mono focus:ring-2 focus:ring-[#C8963E] focus:outline-none" />
+            <input
+              type="text"
+              placeholder="e.g. PO-2026-1045"
+              value={poNo}
+              onChange={(e) => setPoNo(e.target.value)}
+              required
+              className="w-full p-2 border rounded font-mono focus:ring-2 focus:ring-[#C8963E] focus:outline-none font-bold"
+            />
           </div>
           <div>
             <label className="block font-bold text-gray-700 mb-1">Supplier Name</label>
-            <select value={supplier} onChange={(e) => setSupplier(e.target.value)} className="w-full p-2 border rounded bg-white font-medium focus:ring-2 focus:ring-[#C8963E]">
-              <option>P.L. Sebastian Corporation</option>
-              <option>Lucky Roma Trading</option>
-              <option>JCT Wheat & Sugar Products</option>
-              <option>Davao Great Wall Trading, Inc.</option>
-              <option>Golden Fortune Trading Incorporated</option>
-              <option>Local Poultry Coop</option>
-              <option>C-One Packaging Solutions</option>
-              <option>Mandaue Libertad Flexible Packaging</option>
-              <option>D'Unibuenas Corporation (Solane LPG)</option>
-            </select>
+            <input
+              type="text"
+              value={supplier}
+              onChange={(e) => setSupplier(e.target.value)}
+              placeholder="Supplier / Vendor name"
+              className="w-full p-2 border rounded bg-white font-medium focus:ring-2 focus:ring-[#C8963E]"
+            />
           </div>
           <div>
             <label className="block font-bold text-gray-700 mb-1">Charge Invoice / Delivery Receipt #</label>
-            <input type="text" placeholder="e.g. CI-29401 / DR-88492" value={invoiceNo} onChange={(e) => setInvoiceNo(e.target.value)} className="w-full p-2 border rounded font-mono" />
+            <input
+              type="text"
+              placeholder="e.g. CI-29401 / DR-88492"
+              value={invoiceNo}
+              onChange={(e) => setInvoiceNo(e.target.value)}
+              className="w-full p-2 border rounded font-mono"
+            />
           </div>
         </div>
 
-        <div className="bg-[#FAF6EE] p-3 rounded-lg border border-[#E2D1B8] text-xs flex flex-wrap gap-4 items-center justify-between">
-          <div className="flex-1 min-w-[240px]">
-            <label className="block font-bold text-gray-700 mb-1">Delivery Transport Vehicle &amp; Deck Sanitation</label>
-            <input type="text" value={deliveryVehicle} onChange={(e) => setDeliveryVehicle(e.target.value)} className="w-full p-2 border rounded bg-white text-xs" placeholder="e.g. Isuzu Forward / Plate ABC-1234 / Sanitized Deck Verified" />
-          </div>
-          <div className="flex items-center gap-2 text-green-800 font-semibold text-xs">
-            <ShieldCheck size={16} className="text-[#1E7A3E]" />
-            <span>Dock Low Care (Black Zone) Unloading Active</span>
-          </div>
-        </div>
-
-        <div className="space-y-3">
-          <div className="flex justify-between items-center">
-            <h4 className="font-serif font-bold text-[#3D1C52] text-sm">Itemized Materials &amp; Mandatory Quality Gates</h4>
-            <button type="button" onClick={handleAddRow} className="text-xs bg-[#5B2E7A] text-white px-3 py-1.5 rounded font-bold hover:bg-[#3D1C52] flex items-center gap-1 transition">
-              <Plus size={13} /> Add Delivered Item Row
-            </button>
-          </div>
-
-          <div className="space-y-4">
-            {receivingItems.map((item, idx) => {
-              const isButter = item.materialCode === 'RM-FAT-001';
-              const isEggs = item.materialCode === 'RM-DRY-001';
-              const isPackaging = item.materialCode.startsWith('PM-');
-
-              return (
-                <div key={idx} className="p-4 rounded-xl border border-[#E2D1B8] bg-white shadow-sm space-y-3">
-                  <div className="flex justify-between items-start gap-2 flex-wrap">
-                    <div className="flex-1 min-w-[280px]">
-                      <label className="block text-[11px] font-bold text-gray-600 mb-1">Delivered Material #{idx + 1}</label>
-                      <select value={item.materialCode} onChange={(e) => handleItemSkuChange(idx, e.target.value)} className="w-full p-2 text-xs border rounded bg-white font-medium">
-                        {inventory.map(m => (
-                          <option key={m.code} value={m.code}>
-                            {m.code} — {m.name} ({m.room} · {m.primaryUom} to {m.conversionFactor} {m.secondaryUom})
-                          </option>
+        {/* Dynamic Items Table */}
+        <div className="border border-gray-200 rounded-lg overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead className="bg-[#5B2E7A] text-white">
+              <tr>
+                <th className="p-2.5">Material SKU &amp; Name</th>
+                <th className="p-2.5 text-right">Delivered Bulk Qty</th>
+                <th className="p-2.5">Primary UoM</th>
+                <th className="p-2.5 text-right">Net Secondary Qty</th>
+                <th className="p-2.5 text-right">Unit Cost</th>
+                <th className="p-2.5 text-right">Line Total</th>
+                <th className="p-2.5">Assigned Lot Number</th>
+                <th className="p-2.5">Expiry Date</th>
+                <th className="p-2.5">Storage Location</th>
+                <th className="p-2.5 text-center">Damaged Units</th>
+                <th className="p-2.5 text-center">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200">
+              {receivingItems.map((item, idx) => {
+                const isPoLinked = item.orderedPrimaryQty != null;
+                const hasVariance = isPoLinked && Number(item.primaryQty) !== Number(item.orderedPrimaryQty);
+                return (
+                  <tr key={idx} className={hasVariance ? 'bg-amber-50/60 hover:bg-amber-50' : 'hover:bg-gray-50'}>
+                    <td className="p-2">
+                      <select
+                        value={item.materialCode}
+                        onChange={(e) => handleItemSkuChange(idx, e.target.value)}
+                        className="p-1 border rounded text-xs w-48 font-mono font-bold bg-white"
+                      >
+                        {inventory.map((m) => (
+                          <option key={m.code} value={m.code}>{m.code} · {m.name}</option>
                         ))}
                       </select>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-mono px-2 py-1 bg-gray-100 rounded text-gray-700">
-                        Destination: <strong className="text-[#5B2E7A]">{item.storageRoom}</strong>
-                      </span>
-                      {receivingItems.length > 1 && (
-                        <button type="button" onClick={() => handleRemoveRow(idx)} className="p-1.5 text-red-500 hover:bg-red-50 rounded" title="Remove item">
-                          <Trash2 size={16} />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
-                    <div>
-                      <label className="block text-gray-600 font-semibold mb-1">Primary Count ({item.primaryUom})</label>
-                      <input type="number" min="0.1" step="any" value={item.primaryQty} onChange={(e) => handleQtyChange(idx, e.target.value)} className="w-full p-2 border rounded font-mono font-bold text-[#3D1C52]" />
-                    </div>
-                    <div>
-                      <label className="block text-gray-600 font-semibold mb-1">Calculated Net ({item.secondaryUom})</label>
-                      <input type="text" readOnly value={`${item.secondaryQty.toLocaleString()} ${item.secondaryUom}`} className="w-full p-2 border rounded bg-gray-50 font-mono font-bold text-green-700" />
-                    </div>
-                    <div>
-                      <label className="block text-gray-600 font-semibold mb-1">Supplier Lot #</label>
-                      <input type="text" value={item.lotNumber} onChange={(e) => {
-                        const val = e.target.value;
-                        setReceivingItems(prev => prev.map((it, i) => i === idx ? { ...it, lotNumber: val } : it));
-                      }} className="w-full p-2 border rounded font-mono text-xs" />
-                    </div>
-                    <div>
-                      <label className="block text-gray-600 font-semibold mb-1">Expiration Date</label>
-                      <input type="date" value={item.expiryDate} onChange={(e) => {
-                        const val = e.target.value;
-                        setReceivingItems(prev => prev.map((it, i) => i === idx ? { ...it, expiryDate: val } : it));
-                      }} className="w-full p-2 border rounded text-xs" />
-                    </div>
-                    <div>
-                      <label className="block text-gray-600 font-semibold mb-1">Damage / Broken</label>
-                      <input type="number" min="0" value={item.qtyDamaged} onChange={(e) => {
-                        const val = parseFloat(e.target.value) || 0;
-                        setReceivingItems(prev => prev.map((it, i) => i === idx ? { ...it, qtyDamaged: val } : it));
-                      }} className={`w-full p-2 border rounded font-mono ${item.qtyDamaged > 0 ? 'bg-red-50 text-red-600 border-red-300 font-bold' : ''}`} />
-                    </div>
-                  </div>
-
-                  <div className="bg-[#FAF6EE] p-3 rounded-lg border border-[#E2D1B8] text-xs space-y-2">
-                    <p className="font-bold text-[#5B2E7A] flex items-center gap-1.5">
-                      <ShieldCheck size={14} /> Quality Assurance Compliance Gate (FDA PLI Standards):
-                    </p>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                      {isButter ? (
-                        <div className="bg-amber-50 p-2 rounded border border-amber-300">
-                          <label className="block font-bold text-amber-900 mb-0.5">Chilled Temp Check (Must be ≤ 0°C)</label>
-                          <div className="flex items-center gap-1">
-                            <Thermometer size={14} className="text-red-500" />
-                            <input type="text" value={item.chilledTemp || '-1.2°C'} onChange={(e) => {
-                              const val = e.target.value;
-                              setReceivingItems(prev => prev.map((it, i) => i === idx ? { ...it, chilledTemp: val } : it));
-                            }} className="w-20 p-1 border rounded bg-white text-xs font-mono font-bold" />
-                            <span className="text-[10px] text-amber-800 font-semibold">Locked Freezer Gate</span>
-                          </div>
-                          <label className="flex items-center gap-1.5 mt-1.5 text-[11px] font-bold text-amber-900">
-                            <input type="checkbox" checked={item.butterCellophaneSticker} onChange={(e) => {
-                              const chk = e.target.checked;
-                              setReceivingItems(prev => prev.map((it, i) => i === idx ? { ...it, butterCellophaneSticker: chk } : it));
-                            }} />
-                            Cellophane Expiry Sticker Verified Intact
-                          </label>
-                        </div>
-                      ) : isEggs ? (
-                        <div className="bg-green-50 p-2 rounded border border-green-300">
-                          <label className="block font-bold text-green-900 mb-0.5">Egg Sanitization Dip / Rinse Protocol</label>
-                          <label className="flex items-center gap-1.5 mt-1 text-[11px] font-bold text-green-800">
-                            <input type="checkbox" checked={item.eggRinsePassed} onChange={(e) => {
-                              const chk = e.target.checked;
-                              setReceivingItems(prev => prev.map((it, i) => i === idx ? { ...it, eggRinsePassed: chk } : it));
-                            }} />
-                            Rinsed &amp; Sanitized prior to Wet Room entry
-                          </label>
-                        </div>
-                      ) : isPackaging ? (
-                        <div className="bg-blue-50 p-2 rounded border border-blue-300">
-                          <label className="block font-bold text-blue-900 mb-0.5">Food-Grade Packaging CoA / CoC</label>
-                          <label className="flex items-center gap-1.5 mt-1 text-[11px] font-bold text-blue-800">
-                            <input type="checkbox" checked={item.coaPassed} onChange={(e) => {
-                              const chk = e.target.checked;
-                              setReceivingItems(prev => prev.map((it, i) => i === idx ? { ...it, coaPassed: chk } : it));
-                            }} />
-                            Food-Contact Resin CoA on file
-                          </label>
-                        </div>
-                      ) : (
-                        <div className="p-2 rounded bg-white border text-gray-600">
-                          <span className="font-semibold">General Standard:</span> Clean sacks, off-floor pallet staging ≥10cm, zero vermin activity.
+                      {isPoLinked && (
+                        <div className="text-[10px] text-gray-500 mt-0.5 font-mono">
+                          Ordered on PO: <strong>{item.orderedPrimaryQty} {item.primaryUom}</strong>
+                          {hasVariance && (
+                            <span className="ml-1 text-amber-700 font-bold">
+                              (Variance: {Number(item.primaryQty) - Number(item.orderedPrimaryQty) >= 0 ? '+' : ''}{Number(item.primaryQty) - Number(item.orderedPrimaryQty)})
+                            </span>
+                          )}
                         </div>
                       )}
-
-                      <div className="p-2 rounded bg-white border">
-                        <label className="block font-semibold text-gray-700 mb-0.5">Storage Bay / Pallet #</label>
-                        <input type="text" value={item.binLocation} onChange={(e) => {
+                    </td>
+                    <td className="p-2 text-right">
+                      <input
+                        type="number"
+                        min="0"
+                        step="any"
+                        value={item.primaryQty}
+                        onChange={(e) => handleQtyChange(idx, e.target.value)}
+                        className="w-16 p-1 border rounded text-right font-mono font-bold text-xs"
+                      />
+                    </td>
+                    <td className="p-2 font-mono text-gray-600">{item.primaryUom}</td>
+                    <td className="p-2 text-right font-mono font-bold text-[#1E7A3E]">
+                      {item.secondaryQty?.toLocaleString()} {item.secondaryUom}
+                    </td>
+                    <td className="p-2 text-right font-mono">
+                      <input
+                        type="number"
+                        min="0"
+                        step="any"
+                        value={item.unitPrice}
+                        onChange={(e) => {
+                          const p = parseFloat(e.target.value) || 0;
+                          setReceivingItems((prev) => prev.map((r, i) => i === idx ? { ...r, unitPrice: p, totalAmount: +(p * r.primaryQty).toFixed(2) } : r));
+                        }}
+                        className="w-20 p-1 border rounded text-right font-mono text-xs"
+                      />
+                    </td>
+                    <td className="p-2 text-right font-mono font-bold text-gray-900">
+                      ₱{(item.totalAmount || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}
+                    </td>
+                    <td className="p-2">
+                      <input
+                        type="text"
+                        value={item.lotNumber}
+                        onChange={(e) => {
                           const val = e.target.value;
-                          setReceivingItems(prev => prev.map((it, i) => i === idx ? { ...it, binLocation: val } : it));
-                        }} className="w-full p-1 border rounded text-xs font-mono" placeholder="e.g. Pallet A1 / Shelf 2B" />
-                      </div>
+                          setReceivingItems((prev) => prev.map((r, i) => i === idx ? { ...r, lotNumber: val } : r));
+                        }}
+                        className="p-1 border rounded text-[11px] font-mono w-28"
+                      />
+                    </td>
+                    <td className="p-2">
+                      <input
+                        type="date"
+                        value={item.expiryDate}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setReceivingItems((prev) => prev.map((r, i) => i === idx ? { ...r, expiryDate: val } : r));
+                        }}
+                        className="p-1 border rounded text-[11px] w-28"
+                      />
+                    </td>
+                    <td className="p-2">
+                      <input
+                        type="text"
+                        placeholder="Bin / Bay"
+                        value={item.binLocation}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setReceivingItems((prev) => prev.map((r, i) => i === idx ? { ...r, binLocation: val } : r));
+                        }}
+                        className="p-1 border rounded text-[11px] w-20"
+                      />
+                    </td>
+                    <td className="p-2 text-center">
+                      <input
+                        type="number"
+                        min="0"
+                        value={item.qtyDamaged}
+                        onChange={(e) => {
+                          const val = parseFloat(e.target.value) || 0;
+                          setReceivingItems((prev) => prev.map((r, i) => i === idx ? { ...r, qtyDamaged: val } : r));
+                        }}
+                        className="w-12 p-1 border rounded text-center text-xs font-mono font-bold text-red-600 bg-red-50"
+                      />
+                    </td>
+                    <td className="p-2 text-center">
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveRow(idx)}
+                        disabled={receivingItems.length <= 1}
+                        className="text-red-500 hover:text-red-700 disabled:opacity-30"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+            <tfoot className="bg-[#FAF6EE] font-bold">
+              <tr>
+                <td colSpan={5} className="p-2.5 text-right text-gray-700">Inbound Shipment Valuation:</td>
+                <td className="p-2.5 text-right font-mono text-sm text-[#1E7A3E]">
+                  ₱{grandTotal.toLocaleString('en-PH', { minimumFractionDigits: 2 })}
+                </td>
+                <td colSpan={5} className="p-2.5 text-right text-red-600 font-mono">
+                  {totalDamaged > 0 ? `⚠️ ${totalDamaged} units flagged damaged` : '✓ 100% Quality Pass'}
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
 
-                      <div className="p-2 rounded bg-white border flex flex-col justify-between">
-                        <span className="text-gray-500 text-[10px]">Total Line Payable:</span>
-                        <span className="font-mono font-bold text-sm text-[#3D1C52]">
-                          ₱{item.totalAmount?.toLocaleString('en-PH', { minimumFractionDigits: 2 })}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+        <div className="flex justify-between items-center flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={handleAddRow}
+            className="text-xs bg-[#FAF6EE] hover:bg-[#E2D1B8] text-[#5B2E7A] font-bold py-2 px-3.5 rounded border border-[#C8963E]/40 flex items-center gap-1.5 shadow-sm transition"
+          >
+            <Plus size={14} /> Add Another Material Line
+          </button>
+        </div>
+
+        {/* Transport & QA Checks */}
+        <div className="bg-[#FAF6EE] p-4 rounded-xl border border-[#E2D1B8] space-y-3">
+          <h4 className="font-serif font-bold text-[#3D1C52] text-xs uppercase tracking-wide flex items-center gap-1.5">
+            <ShieldCheck size={16} className="text-[#1E7A3E]" /> Transport Vehicle &amp; Cold-Chain QA Inspection
+          </h4>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+            <div>
+              <label className="block text-gray-700 font-semibold mb-1">Delivery Truck Plate / Vehicle</label>
+              <input
+                type="text"
+                placeholder="e.g. ABC-1234 (Reefer Van)"
+                value={deliveryVehicle}
+                onChange={(e) => setDeliveryVehicle(e.target.value)}
+                className="w-full p-2 border rounded bg-white"
+              />
+            </div>
+            <div className="flex items-center gap-2 pt-5">
+              <input type="checkbox" id="butterCellophane" defaultChecked className="rounded text-[#1E7A3E]" />
+              <label htmlFor="butterCellophane" className="text-gray-700 font-semibold">
+                Butter Cellophane Seal Intact (&lt; 0°C)
+              </label>
+            </div>
+            <div className="flex items-center gap-2 pt-5">
+              <input type="checkbox" id="eggRinse" defaultChecked className="rounded text-[#1E7A3E]" />
+              <label htmlFor="eggRinse" className="text-gray-700 font-semibold">
+                Egg Sanitization Rinse Passed
+              </label>
+            </div>
+            <div className="flex items-center gap-2 pt-5">
+              <input type="checkbox" id="coaVerified" defaultChecked className="rounded text-[#1E7A3E]" />
+              <label htmlFor="coaVerified" className="text-gray-700 font-semibold">
+                CoA &amp; Food-Grade Verified
+              </label>
+            </div>
           </div>
         </div>
 
-        {/* ═══════════ NEW: MULTI-LINE DELIVERY / QA NOTES ═══════════ */}
-        <div className="bg-white p-4 rounded-xl border border-[#E2D1B8] space-y-2">
-          <label className="block text-xs font-bold text-gray-700 flex items-center gap-1.5">
-            <FileText size={13} className="text-[#5B2E7A]" /> Multi-Line Delivery Remarks / QA Observations
+        {/* Shipment Notes */}
+        <div>
+          <label className="block font-bold text-gray-700 text-xs mb-1">
+            Receiving &amp; Quarantine Observations / Variance Remarks
           </label>
           <textarea
-            rows={3}
             value={shipmentNotes}
             onChange={(e) => setShipmentNotes(e.target.value)}
-            placeholder={`Enter multi-line delivery notes, QA observations, or vehicle condition remarks...
-
-Examples:
-• Truck deck sanitized but slight moisture near rear door
-• 2 of 25 sacks have torn corners — flagged for re-bagging
-• Lot # LOT-RMFLR003-2601 manufacturer date confirmed via CoA
-• Delivered by driver Mr. Juan Dela Cruz (Solane LPG)`}
-            className="w-full border border-gray-300 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[#C8963E] whitespace-pre-line"
+            rows={2}
+            placeholder="Record any deviations from PO, temperature spikes, damaged cartons, or delivery delays..."
+            className="w-full p-2.5 border rounded-lg text-xs"
           />
-          <p className="text-[10px] text-gray-500">
-            ℹ️ Notes appear on the printed Form-REC-001 and are archived with the receiving report.
-          </p>
         </div>
 
-        <div className="pt-4 border-t border-gray-200 flex flex-col sm:flex-row justify-between items-center gap-4">
-          <div>
-            <p className="text-xs text-gray-500">Total Inbound Shipment Value:</p>
-            <p className="text-2xl font-bold font-serif text-[#1E7A3E]">
-              ₱{grandTotal.toLocaleString('en-PH', { minimumFractionDigits: 2 })}
-            </p>
-            {totalDamaged > 0 && (
-              <p className="text-xs font-bold text-[#C0392B]">
-                ⚠️ {totalDamaged} damaged items flagged for Form-NCR-001 Quarantine
-              </p>
-            )}
-          </div>
-
-          <button type="submit" className="bg-[#1E7A3E] hover:bg-[#165c2f] text-white font-bold text-xs px-6 py-3 rounded-lg shadow-lg flex items-center gap-2 transition">
-            <CheckCircle2 size={16} /> Save &amp; Commit Inbound Receiving (`Form-REC-001`)
+        <div className="flex justify-end pt-2">
+          <button
+            type="submit"
+            className="bg-[#1E7A3E] hover:bg-emerald-800 text-white font-extrabold text-sm px-6 py-3 rounded-xl flex items-center gap-2 shadow-lg transition"
+          >
+            <CheckCircle2 size={18} />
+            {selectedPoId ? `Cross-Ref & Receive Against ${selectedPoId}` : 'Log Inbound Shipment to Warehouse'}
           </button>
         </div>
       </form>
 
+      {/* Historical Inbound Receiving Reports Table */}
       <div className="bg-white rounded-xl border border-[#E2D1B8] shadow-sm overflow-hidden">
-        <div className="px-6 py-3.5 bg-[#FAF6EE] border-b border-[#E2D1B8] flex justify-between items-center">
-          <h3 className="font-serif font-bold text-[#5B2E7A]">Recent Inbound Shipments Logbook (`Form-REC-001` Archive)</h3>
-          <span className="text-xs text-gray-500 font-medium">{receivingReports.length} logged reports</span>
+        <div className="p-4 bg-[#FAF6EE] border-b border-[#E2D1B8] flex justify-between items-center">
+          <h3 className="font-serif font-bold text-[#3D1C52] text-sm">
+            Archived Inbound Receiving Reports ({receivingReports.length})
+          </h3>
+          <span className="text-xs text-gray-500 font-mono font-semibold">Indangan Central Plant</span>
         </div>
-
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead className="bg-[#5B2E7A] text-white">
               <tr>
-                <th className="p-3">Report #</th>
-                <th className="p-3">PO / DR #</th>
-                <th className="p-3">Supplier Name</th>
-                <th className="p-3">Date &amp; Time</th>
-                <th className="p-3">Delivered Items</th>
-                <th className="p-3 text-right">Payable Value</th>
-                <th className="p-3 text-center">QA Status</th>
-                <th className="p-3 text-center">View</th>
+                <th className="p-2.5">Report #</th>
+                <th className="p-2.5">Date &amp; Time</th>
+                <th className="p-2.5">Supplier</th>
+                <th className="p-2.5">PO / DR #</th>
+                <th className="p-2.5">Invoice #</th>
+                <th className="p-2.5 text-right">Items Received</th>
+                <th className="p-2.5 text-right">Total Amount</th>
+                <th className="p-2.5">Status</th>
+                <th className="p-2.5 text-center">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#E2D1B8]">
+            <tbody className="divide-y divide-gray-200">
               {receivingReports.map((r, i) => (
-                <tr key={i} className="hover:bg-[#FAF6EE]/50">
-                  <td className="p-3 font-mono font-bold text-[#5B2E7A]">{r.reportNo}</td>
-                  <td className="p-3 font-mono">{r.poNo}</td>
-                  <td className="p-3 font-medium text-gray-900">{r.supplier}</td>
-                  <td className="p-3 text-gray-600">{r.date} {r.time}</td>
-                  <td className="p-3">
-                    {r.items?.map((it, idx) => (
-                      <span key={idx} className="block text-[11px] text-gray-700">
-                        • {it.primaryQty} {it.primaryUom}s {it.name} ({it.secondaryQty} {it.secondaryUom})
-                      </span>
-                    ))}
+                <tr key={i} className="hover:bg-gray-50">
+                  <td className="p-2.5 font-mono font-bold text-[#5B2E7A]">{r.reportNo}</td>
+                  <td className="p-2.5 font-mono text-gray-600">{r.date} {r.time}</td>
+                  <td className="p-2.5 font-medium">{r.supplier}</td>
+                  <td className="p-2.5 font-mono font-bold text-gray-700">{r.poNo}</td>
+                  <td className="p-2.5 font-mono text-gray-500">{r.invoiceNo}</td>
+                  <td className="p-2.5 text-right font-mono font-bold">{r.items?.length || 0} SKUs</td>
+                  <td className="p-2.5 text-right font-mono font-bold text-[#1E7A3E]">
+                    ₱{(r.totalPaid || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}
                   </td>
-                  <td className="p-3 text-right font-mono font-bold text-gray-900">
-                    ₱{r.totalPaid?.toLocaleString('en-PH', { minimumFractionDigits: 2 })}
-                  </td>
-                  <td className="p-3 text-center">
-                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                      r.overallStatus.includes('DAMAGED') ? 'bg-red-100 text-[#C0392B]' : 'bg-green-100 text-[#1E7A3E]'
+                  <td className="p-2.5">
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                      String(r.overallStatus).includes('DAMAGED') ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'
                     }`}>
-                      {r.overallStatus}
+                      {r.overallStatus || 'ACCEPTED CLEAN'}
                     </span>
                   </td>
-                  <td className="p-3 text-center">
-                    <button onClick={() => setSelectedReportView(r)} className="text-xs text-[#5B2E7A] hover:underline font-bold">
-                      Inspect Slip
+                  <td className="p-2.5 text-center">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedReportView(r)}
+                      className="text-xs text-[#5B2E7A] hover:underline font-bold"
+                    >
+                      View Report
                     </button>
                   </td>
                 </tr>
@@ -461,63 +634,74 @@ Examples:
         </div>
       </div>
 
+      {/* PRINTABLE RECEIVING REPORT MODAL */}
       {selectedReportView && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border-2 border-[#C8963E] space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-start border-b-2 border-[#5B2E7A] pb-3">
               <div>
-                <p className="text-[10px] font-bold tracking-widest text-gray-500 uppercase">JANG-JANG BAKESHOP · INDANGAN PLANT LTO #3000013388488</p>
-                <h3 className="font-serif font-bold text-xl text-[#3D1C52]">Receiving &amp; Quality Acceptance Report (`Form-REC-001`)</h3>
+                <p className="text-[10px] font-bold tracking-widest text-gray-500 uppercase">JANG-JANG BAKESHOP &amp; KINGDOM CONFECTIONARY</p>
+                <h3 className="font-serif font-bold text-xl text-[#3D1C52]">Inbound Receiving Report (Form-REC-001)</h3>
                 <p className="text-xs text-[#C8963E] font-mono font-bold">Report ID: {selectedReportView.reportNo}</p>
               </div>
               <button onClick={() => setSelectedReportView(null)} className="text-gray-400 hover:text-gray-600 font-bold text-lg">✕</button>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 text-xs bg-[#FAF6EE] p-3 rounded-lg border border-[#E2D1B8]">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs bg-[#FAF6EE] p-3 rounded border border-[#E2D1B8]">
               <div><strong>Supplier:</strong> {selectedReportView.supplier}</div>
               <div><strong>PO / DR #:</strong> {selectedReportView.poNo}</div>
               <div><strong>Invoice #:</strong> {selectedReportView.invoiceNo}</div>
               <div><strong>Date &amp; Time:</strong> {selectedReportView.date} {selectedReportView.time}</div>
-              <div><strong>Transport:</strong> {selectedReportView.deliveryVehicle}</div>
+              <div><strong>Transport:</strong> {selectedReportView.deliveryVehicle || 'N/A'}</div>
               <div><strong>Inspector:</strong> {selectedReportView.receiver}</div>
             </div>
 
-            <table className="w-full text-left text-xs border border-gray-300">
+            <table className="w-full text-left text-xs border">
               <thead className="bg-[#5B2E7A] text-white">
                 <tr>
-                  <th className="p-2">Item Code &amp; Name</th>
-                  <th className="p-2 text-right">Primary</th>
-                  <th className="p-2 text-right">Net Secondary</th>
-                  <th className="p-2">Lot &amp; Expiry</th>
-                  <th className="p-2 text-right">Total</th>
+                  <th className="p-2">Material Code</th>
+                  <th className="p-2">Description</th>
+                  <th className="p-2 text-right">Delivered Bulk</th>
+                  <th className="p-2 text-right">Net Qty</th>
+                  <th className="p-2">Lot Number</th>
+                  <th className="p-2 text-right">Amount</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
                 {selectedReportView.items?.map((it, idx) => (
                   <tr key={idx}>
-                    <td className="p-2 font-medium">{it.materialCode} - {it.name}</td>
+                    <td className="p-2 font-mono font-bold text-[#5B2E7A]">{it.materialCode}</td>
+                    <td className="p-2">{it.name}</td>
                     <td className="p-2 text-right font-mono">{it.primaryQty} {it.primaryUom}</td>
                     <td className="p-2 text-right font-mono font-bold text-[#1E7A3E]">{it.secondaryQty} {it.secondaryUom}</td>
-                    <td className="p-2 font-mono text-[11px]">{it.lotNumber} ({it.expiryDate})</td>
-                    <td className="p-2 text-right font-mono">₱{it.totalAmount?.toLocaleString()}</td>
+                    <td className="p-2 font-mono text-[11px]">{it.lotNumber}</td>
+                    <td className="p-2 text-right font-mono font-bold">₱{(it.totalAmount || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}</td>
                   </tr>
                 ))}
               </tbody>
+              <tfoot className="bg-gray-100 font-bold">
+                <tr>
+                  <td colSpan={5} className="p-2 text-right">Total Shipment Paid:</td>
+                  <td className="p-2 text-right font-mono text-sm text-[#1E7A3E]">
+                    ₱{(selectedReportView.totalPaid || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}
+                  </td>
+                </tr>
+              </tfoot>
             </table>
 
             {selectedReportView.notes && (
-              <div className="bg-amber-50 border border-amber-300 rounded-lg p-3 text-xs">
-                <p className="font-bold text-amber-900 mb-1">Delivery Remarks / QA Observations:</p>
+              <div className="bg-gray-50 border p-2.5 rounded text-xs space-y-1">
+                <p className="font-bold text-gray-700">Receiving Notes &amp; Observations:</p>
                 <p className="text-gray-700 whitespace-pre-line">{selectedReportView.notes}</p>
               </div>
             )}
 
-            <div className="pt-2 border-t flex justify-between items-center text-xs">
+            <div className="pt-2 flex justify-between items-center text-xs border-t">
               <div>
-                <p className="text-gray-500">Sign-Off Authority:</p>
+                <p className="text-[10px] uppercase font-bold text-gray-500">Authorized Receiver Signoff:</p>
                 <p className="font-bold text-[#5B2E7A]">{selectedReportView.qcSignoff}</p>
               </div>
-              <button onClick={() => window.print()} className="bg-[#3D1C52] text-white text-xs font-bold px-4 py-2 rounded flex items-center gap-1.5">
+              <button onClick={() => window.print()} className="bg-[#3D1C52] text-white text-xs font-bold px-4 py-2 rounded flex items-center gap-1.5 shadow">
                 <Printer size={13} /> Print Hard-Copy Slip
               </button>
             </div>
