@@ -794,7 +794,13 @@ export async function onRequestPost({ request, env }) {
       try {
         const stmts = await handler(env, payload, isTest);
         if (BALANCE_AFFECTING.has(type)) stmts.push(buildReconciliationStatement(env));
-        if (stmts.length > 0) await env.DB.batch(stmts);
+        if (stmts.length > 0) {
+          await env.DB.batch([
+            env.DB.prepare('PRAGMA defer_foreign_keys = ON;'),
+            ...stmts,
+            env.DB.prepare('PRAGMA defer_foreign_keys = OFF;')
+          ]);
+        }
         await env.DB.prepare(
           `UPDATE sync_events SET projected_at = datetime('now'), projection_error = NULL WHERE idempotency_key = ?`
         ).bind(key).run();
