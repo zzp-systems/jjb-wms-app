@@ -197,12 +197,13 @@ async function projectWithdrawal(env, p, isTest) {
   const items = p.items || p.lines || [];
   if (items.length === 0) throw new Error('NO_LINE_ITEMS');
 
-  // Ensure issued_by satisfies users(id) FK if present
+  // 1. FORENSIC FK GUARD: Ensure issued_by exists in users(id)
   let issuedBy = str(pick(p, 'issuedBy', 'issued_by'));
   if (issuedBy && env.DB) {
     try {
-      const u = await env.DB.prepare('SELECT id FROM users WHERE id = ?').bind(issuedBy).first();
-      if (!u) issuedBy = null;
+      const u = await env.DB.prepare('SELECT id FROM users WHERE id = ?1 OR username = ?1 LIMIT 1')
+        .bind(issuedBy).first();
+      issuedBy = u ? u.id : null;
     } catch {
       issuedBy = null;
     }
@@ -247,9 +248,28 @@ async function projectWithdrawal(env, p, isTest) {
 
   stmts.push(env.DB.prepare(`DELETE FROM withdrawal_items WHERE slip_no = ?`).bind(slipNo));
 
+  // 2. FORENSIC FK GUARD: Pre-fetch valid material codes in D1 to prevent SQLITE_CONSTRAINT_FOREIGNKEY
+  const incomingCodes = items.map(it => pick(it, 'materialCode', 'material_code', 'code')).filter(Boolean);
+  const validMaterialSet = new Set();
+  
+  if (incomingCodes.length > 0 && env.DB) {
+    try {
+      const placeholders = incomingCodes.map(() => '?').join(',');
+      const { results } = await env.DB.prepare(`SELECT code FROM materials WHERE code IN (${placeholders})`)
+        .bind(...incomingCodes).all();
+      (results || []).forEach(r => validMaterialSet.add(r.code));
+    } catch (e) {
+      console.warn('Material validation query failed:', e.message);
+    }
+  }
+
   for (const item of items) {
-    const materialCode = pick(item, 'materialCode', 'material_code', 'code');
-    if (!materialCode) continue;
+    const rawMaterialCode = pick(item, 'materialCode', 'material_code', 'code');
+    if (!rawMaterialCode) continue;
+
+    const safeMaterialCode = validMaterialSet.has(rawMaterialCode) ? rawMaterialCode : null;
+    const nameSnapshot = str(pick(item, 'name', 'materialName')) || rawMaterialCode;
+    const remarks = safeMaterialCode ? str(item.remarks) : `[Unlinked / Sub-Assembly: ${rawMaterialCode}] ${str(item.remarks) || ''}`.trim();
 
     stmts.push(env.DB.prepare(`
       INSERT INTO withdrawal_items
@@ -257,23 +277,26 @@ async function projectWithdrawal(env, p, isTest) {
          secondary_uom, lot_number, storage_room, estimated_cost_centavos, remarks, is_test_data)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
-      slipNo, materialCode, str(pick(item, 'name', 'materialName')),
+      slipNo,
+      safeMaterialCode,
+      nameSnapshot,
       num(pick(item, 'qtyRequestedSec', 'qty_requested_sec', 'qtyRequested')),
       num(pick(item, 'qtyIssuedSec', 'qty_issued_sec', 'qtyIssued')),
       str(pick(item, 'secondaryUom', 'secondary_uom')),
       str(pick(item, 'lotNumber', 'lot_number')),
       str(pick(item, 'storageRoom', 'storage_room')),
       cents(pick(item, 'estimatedCost', 'estimated_cost')),
-      str(item.remarks), isTest
+      remarks,
+      isTest
     ));
 
     const lotNo = pick(item, 'lotNumber', 'lot_number');
     const qty = num(pick(item, 'qtyIssuedSec', 'qty_issued_sec', 'qtyIssued')) || 0;
-    if (lotNo && qty) {
+    if (safeMaterialCode && lotNo && lotNo !== 'FEFO-AUTO' && qty > 0) {
       stmts.push(env.DB.prepare(`
-        UPDATE material_lots SET qty_sec = qty_sec - ?, updated_at = datetime('now')
+        UPDATE material_lots SET qty_sec = MAX(0, qty_sec - ?), updated_at = datetime('now')
         WHERE material_code = ? AND lot_number = ? AND is_test_data = ?
-      `).bind(qty, materialCode, lotNo, isTest));
+      `).bind(qty, safeMaterialCode, lotNo, isTest));
     }
   }
   return stmts;
@@ -794,13 +817,7 @@ export async function onRequestPost({ request, env }) {
       try {
         const stmts = await handler(env, payload, isTest);
         if (BALANCE_AFFECTING.has(type)) stmts.push(buildReconciliationStatement(env));
-        if (stmts.length > 0) {
-          await env.DB.batch([
-            env.DB.prepare('PRAGMA defer_foreign_keys = ON;'),
-            ...stmts,
-            env.DB.prepare('PRAGMA defer_foreign_keys = OFF;')
-          ]);
-        }
+        if (stmts.length > 0) await env.DB.batch(stmts);
         await env.DB.prepare(
           `UPDATE sync_events SET projected_at = datetime('now'), projection_error = NULL WHERE idempotency_key = ?`
         ).bind(key).run();
