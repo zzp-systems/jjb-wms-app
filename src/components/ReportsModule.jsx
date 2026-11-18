@@ -4,7 +4,8 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
   FileSpreadsheet, Download, Upload, Filter, Search, Printer, CheckCircle2, 
-  AlertTriangle, Layers, Calendar, ChevronRight, FileText, Plus, Trash2, ShoppingCart, RefreshCw
+  AlertTriangle, Layers, Calendar, ChevronRight, FileText, Plus, Trash2, ShoppingCart, RefreshCw,
+  Building2, ShieldCheck, Check
 } from 'lucide-react';
 import { calculateReorderSuggestions } from '../utils/wmsLogic';
 
@@ -35,7 +36,13 @@ export default function ReportsModule({
   purchaseOrders = [],
   onSavePurchaseOrder,
   onUpdatePoStatus,
-  onDeletePurchaseOrder
+  onDeletePurchaseOrder,
+  suppliers = [],
+  onSaveSupplier,
+  onDeleteSupplier,
+  vendorPriceAgreements = [],
+  onSavePriceAgreement,
+  onDeletePriceAgreement
 }) {
   const [activeSubTab, setActiveSubTab] = useState('po_generator'); // 'po_generator' | 'ledger' | 'csv_bridge'
   const [timeframe, setTimeframe] = useState('ALL'); // 'ALL' | 'TODAY' | 'WEEK' | 'MONTH' | 'CUSTOM'
@@ -66,12 +73,17 @@ export default function ReportsModule({
     return calculateReorderSuggestions(inventory);
   }, [inventory]);
 
-  // Combined Authorized Suppliers list
-  const suppliers = useMemo(() => {
+  // Combined Authorized Suppliers list for dropdowns (Names as strings)
+  const authorizedSupplierNames = useMemo(() => {
     const set = new Set(DEFAULT_AUTHORIZED_SUPPLIERS);
-    inventory.forEach((i) => { if (i.supplier) set.add(i.supplier); });
+    (inventory || []).forEach((i) => { if (i.supplier) set.add(i.supplier); });
+    (suppliers || []).forEach((s) => { if (s.name) set.add(s.name); });
     return Array.from(set);
-  }, [inventory]);
+  }, [inventory, suppliers]);
+
+  // Modal State for Vendor Master & Price Agreement Editing (Form-PUR-003)
+  const [editingSupplier, setEditingSupplier] = useState(null);
+  const [editingAgreement, setEditingAgreement] = useState(null);
 
   // Initialize or re-sync draft items when low-stock suggestions are computed
   useEffect(() => {
@@ -89,15 +101,26 @@ export default function ReportsModule({
       setIsCustomSupplier(false);
       setSelectedSupplier(val);
       if (val !== 'ALL') {
-        const filtered = lowStockSuggestions.filter((s) => s.supplier === val);
-        if (filtered.length > 0) {
-          setPoDraftItems(filtered.map((it) => ({ ...it, supplier: val, catalogSupplier: it.supplier })));
-        } else {
-          // If items already in draft, update their supplier to the newly selected target vendor
-          setPoDraftItems((prev) => prev.map((it) => ({ ...it, supplier: val, catalogSupplier: it.catalogSupplier || it.supplier })));
-        }
-      } else {
-        setPoDraftItems(lowStockSuggestions.map((it) => ({ ...it, catalogSupplier: it.supplier })));
+        const todayStr = new Date().toISOString().slice(0, 10);
+        // Automatically synchronize existing draft items to target vendor and apply active contract rates
+        setPoDraftItems((prev) => prev.map((it) => {
+          const activeAgreement = (vendorPriceAgreements || []).find((a) =>
+            (a.supplierName === val || a.supplierId === val) &&
+            a.materialCode === it.code &&
+            a.isActive !== false &&
+            (!a.effectiveStartDate || a.effectiveStartDate <= todayStr) &&
+            (!a.effectiveEndDate || a.effectiveEndDate >= todayStr)
+          );
+          const c = activeAgreement ? Number(activeAgreement.unitCost) : Number(it.unitCost);
+          const q = Number(it.suggestedPrimaryQty || 0);
+          return {
+            ...it,
+            supplier: val,
+            unitCost: c,
+            estimatedCost: +(q * c).toFixed(2),
+            hasContractRate: !!activeAgreement
+          };
+        }));
       }
     }
   };
@@ -138,12 +161,23 @@ export default function ReportsModule({
     const mat = inventory.find((m) => m.code === addMaterialCode);
     if (!mat || addQty <= 0) return;
     const factor = Number(mat.conversionFactor || 1);
-    const cost = Number(mat.unitCost || 1000);
-    const lineTotal = +(addQty * cost).toFixed(2);
 
     const targetVendor = isCustomSupplier
       ? (customSupplierName.trim() || 'Custom Lowest-Offering Vendor')
-      : (selectedSupplier !== 'ALL' ? selectedSupplier : (mat.supplier || 'Lucky Roma Trading / JCT Wheat'));
+      : (selectedSupplier === 'ALL' ? (mat.supplier || 'Consolidated Vendors') : selectedSupplier);
+
+    // Auto-lookup active contract price agreement
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const activeAgreement = (vendorPriceAgreements || []).find((a) =>
+      (a.supplierName === targetVendor || a.supplierId === targetVendor) &&
+      a.materialCode === mat.code &&
+      a.isActive !== false &&
+      (!a.effectiveStartDate || a.effectiveStartDate <= todayStr) &&
+      (!a.effectiveEndDate || a.effectiveEndDate >= todayStr)
+    );
+
+    const cost = activeAgreement ? Number(activeAgreement.unitCost) : Number(mat.unitCost || 1000);
+    const lineTotal = +(addQty * cost).toFixed(2);
 
     setPoDraftItems((prev) => {
       const existingIdx = prev.findIndex((it) => it.code === mat.code);
@@ -154,10 +188,11 @@ export default function ReportsModule({
           return {
             ...it,
             supplier: targetVendor,
-            catalogSupplier: mat.supplier || it.catalogSupplier,
+            unitCost: cost,
             suggestedPrimaryQty: newQ,
             totalSecondaryQty: +(newQ * factor).toFixed(3),
-            estimatedCost: +(newQ * cost).toFixed(2)
+            estimatedCost: +(newQ * cost).toFixed(2),
+            hasContractRate: !!activeAgreement
           };
         });
       }
@@ -168,7 +203,7 @@ export default function ReportsModule({
           name: mat.name,
           category: mat.category,
           supplier: targetVendor,
-          catalogSupplier: mat.supplier || 'General Supplier',
+          catalogSupplier: mat.supplier || targetVendor,
           room: mat.room || 'Dry Room 1',
           primaryUom: mat.primaryUom || 'Unit',
           secondaryUom: mat.secondaryUom || 'kg',
@@ -178,7 +213,8 @@ export default function ReportsModule({
           thresholdSec: mat.threshold || 0,
           suggestedPrimaryQty: Number(addQty),
           totalSecondaryQty: +(addQty * factor).toFixed(3),
-          estimatedCost: lineTotal
+          estimatedCost: lineTotal,
+          hasContractRate: !!activeAgreement
         }
       ];
     });
@@ -411,6 +447,16 @@ export default function ReportsModule({
             <Calendar size={13} /> Historical Transaction Ledgers
           </button>
           <button
+            onClick={() => setActiveSubTab('vendor_roster')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
+              activeSubTab === 'vendor_roster'
+                ? 'bg-[#3D1C52] text-white shadow'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            <Building2 size={13} /> Vendor Roster &amp; Contract Rates ({(suppliers || []).length})
+          </button>
+          <button
             onClick={() => setActiveSubTab('csv_bridge')}
             className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
               activeSubTab === 'csv_bridge'
@@ -459,10 +505,11 @@ export default function ReportsModule({
                   onChange={(e) => handleSupplierChange(e.target.value)}
                   className="w-full p-2 border rounded bg-white font-medium focus:ring-2 focus:ring-[#C8963E]"
                 >
-                  <option value="ALL">All Authorized Suppliers ({suppliers.length})</option>
-                  {suppliers.map((s) => (
+                  <option value="ALL">All Authorized Suppliers ({authorizedSupplierNames.length})</option>
+                  {authorizedSupplierNames.map((s) => (
                     <option key={s} value={s}>{s}</option>
                   ))}
+                  <option value="NEW_SUPPLIER">+ Enter New / Custom Lowest-Offering Vendor...</option>
                   <option value="NEW_SUPPLIER">+ Add New / Lowest-Offering Supplier...</option>
                 </select>
               </div>
@@ -670,9 +717,14 @@ export default function ReportsModule({
                           <span className="block text-[10px] text-gray-500">{item.room}</span>
                         </td>
                         <td className="p-2.5 font-medium text-gray-700">
-                          <span className="font-bold text-[#3D1C52]">{item.supplier}</span>
+                          <div className="font-bold text-[#240e32]">{item.supplier}</div>
                           {item.catalogSupplier && item.catalogSupplier !== item.supplier && (
-                            <span className="block text-[10px] text-gray-400 font-normal">Catalog: {item.catalogSupplier}</span>
+                            <div className="text-[10px] text-gray-500 italic">Catalog: {item.catalogSupplier}</div>
+                          )}
+                          {item.hasContractRate && (
+                            <span className="inline-block text-[9px] font-bold text-emerald-800 bg-emerald-100 px-1 rounded mt-0.5">
+                              ✓ Contract Rate
+                            </span>
                           )}
                         </td>
                         <td className="p-2.5 text-right font-mono text-gray-500">
@@ -810,14 +862,12 @@ export default function ReportsModule({
                             <span className="text-emerald-700 font-bold">{po.receivingReportNo}</span>
                           ) : po.status === 'PO_DRAFT' ? (
                             <span className="text-yellow-700 italic">Draft (Not Dispatched)</span>
-                          ) : po.status === 'CANCELLED' ? (
-                            <span className="text-red-500 italic">Revoked / Cancelled</span>
                           ) : (
                             <span className="text-gray-400 italic">Awaiting Dock</span>
                           )}
                         </td>
                         <td className="p-2.5 text-center">
-                          <div className="flex items-center justify-center gap-2 flex-wrap">
+                          <div className="flex items-center justify-center gap-2">
                             <button
                               type="button"
                               onClick={() => setSelectedPoPreview(po)}
@@ -825,8 +875,6 @@ export default function ReportsModule({
                             >
                               View Form
                             </button>
-
-                            {/* DRAFT PO ACTIONS */}
                             {po.status === 'PO_DRAFT' && (
                               <>
                                 <button
@@ -850,55 +898,45 @@ export default function ReportsModule({
                                 >
                                   Finalize
                                 </button>
-                                {onDeletePurchaseOrder && (
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      if (window.confirm(`Discard and delete draft PO ${po.poNo}?`)) {
-                                        onDeletePurchaseOrder(po.poNo);
-                                      }
-                                    }}
-                                    className="text-xs text-red-600 hover:underline font-bold"
-                                    title="Discard this draft PO"
-                                  >
-                                    Discard
-                                  </button>
-                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (window.confirm(`Discard draft purchase order ${po.poNo}?`)) {
+                                      if (onDeletePurchaseOrder) onDeletePurchaseOrder(po.poNo);
+                                    }
+                                  }}
+                                  className="text-xs text-red-600 hover:underline font-bold"
+                                  title="Permanently discard draft PO"
+                                >
+                                  Discard
+                                </button>
                               </>
                             )}
-
-                            {/* PENDING DELIVERY (DISPATCHED) ACTIONS */}
-                            {po.status === 'PENDING_DELIVERY' && onUpdatePoStatus && (
+                            {po.status === 'PENDING_DELIVERY' && (
                               <button
                                 type="button"
                                 onClick={() => {
-                                  const reason = window.prompt(
-                                    `Cancel Purchase Order ${po.poNo}?\n\nEnter cancellation reason (e.g. Supplier stockout, revoked by purchasing):`,
-                                    'Revoked by purchasing'
-                                  );
-                                  if (reason !== null) {
-                                    onUpdatePoStatus(po.poNo, 'CANCELLED', { notes: reason.trim() });
-                                    alert(`⚠️ PO ${po.poNo} has been cancelled and removed from the Inbound Dock queue.`);
+                                  const reason = window.prompt(`Cancel Purchase Order ${po.poNo}?\n\nReason for cancellation:`, 'Supplier unable to fulfill');
+                                  if (reason !== null && onUpdatePoStatus) {
+                                    onUpdatePoStatus(po.poNo, 'CANCELLED', { notes: reason });
                                   }
                                 }}
                                 className="text-xs text-red-600 hover:underline font-bold"
-                                title="Cancel PO and remove from dock queue"
+                                title="Revoke and cancel this pending purchase order"
                               >
                                 Cancel PO
                               </button>
                             )}
-
-                            {/* CANCELLED ACTIONS */}
-                            {po.status === 'CANCELLED' && onDeletePurchaseOrder && (
+                            {po.status === 'CANCELLED' && (
                               <button
                                 type="button"
                                 onClick={() => {
-                                  if (window.confirm(`Permanently remove cancelled record ${po.poNo} from register?`)) {
-                                    onDeletePurchaseOrder(po.poNo);
+                                  if (window.confirm(`Delete cancelled record ${po.poNo} from register?`)) {
+                                    if (onDeletePurchaseOrder) onDeletePurchaseOrder(po.poNo);
                                   }
                                 }}
-                                className="text-xs text-gray-500 hover:text-red-600 hover:underline"
-                                title="Permanently delete cancelled PO"
+                                className="text-xs text-gray-500 hover:underline font-bold"
+                                title="Delete voided PO record"
                               >
                                 Delete
                               </button>
@@ -911,6 +949,459 @@ export default function ReportsModule({
                 </table>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* SUB-TAB 3: AUTHORIZED VENDOR ROSTER & CONTRACT PRICING (Form-PUR-003) */}
+      {activeSubTab === 'vendor_roster' && (
+        <div className="space-y-6">
+          {/* Section A: Vendor Directory */}
+          <div className="bg-white p-5 rounded-2xl border border-[#E2D1B8] shadow-sm space-y-4">
+            <div className="flex justify-between items-center border-b pb-3 flex-wrap gap-2">
+              <div>
+                <h3 className="font-serif font-bold text-[#3D1C52] text-sm flex items-center gap-2">
+                  <Building2 size={17} className="text-[#C8963E]" />
+                  Authorized Supplier &amp; Vendor Master Directory
+                </h3>
+                <p className="text-xs text-gray-500">
+                  Manage vendor corporate profiles, official addresses, sales contacts, TIN, and default terms
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingSupplier({
+                  id: `SUP-${Date.now().toString().slice(-5)}`,
+                  name: '',
+                  contactPerson: '',
+                  phone: '',
+                  email: '',
+                  address: '',
+                  tin: '',
+                  paymentTerms: 'Net 30 Days',
+                  isActive: true
+                })}
+                className="bg-[#C8963E] text-[#240e32] font-bold text-xs px-3.5 py-2 rounded-lg shadow flex items-center gap-1.5"
+              >
+                <Plus size={14} /> + Add Authorized Vendor
+              </button>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-[#240e32] text-[#E5C585]">
+                  <tr>
+                    <th className="p-2.5">Vendor Name</th>
+                    <th className="p-2.5">Contact Person</th>
+                    <th className="p-2.5">Phone / Mobile</th>
+                    <th className="p-2.5">Email</th>
+                    <th className="p-2.5">Facility / Business Address</th>
+                    <th className="p-2.5">Payment Terms</th>
+                    <th className="p-2.5 text-center">Status</th>
+                    <th className="p-2.5 text-center">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {(suppliers || []).map((sup) => (
+                    <tr key={sup.id || sup.name} className="hover:bg-gray-50">
+                      <td className="p-2.5 font-bold text-[#5B2E7A]">{sup.name}</td>
+                      <td className="p-2.5 font-medium">{sup.contactPerson || '—'}</td>
+                      <td className="p-2.5 font-mono">{sup.phone || '—'}</td>
+                      <td className="p-2.5 text-gray-600">{sup.email || '—'}</td>
+                      <td className="p-2.5 text-gray-600 text-[11px] max-w-xs truncate" title={sup.address}>{sup.address || '—'}</td>
+                      <td className="p-2.5 font-semibold text-gray-700">{sup.paymentTerms || 'Net 30 Days'}</td>
+                      <td className="p-2.5 text-center">
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                          sup.isActive !== false ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-600'
+                        }`}>
+                          {sup.isActive !== false ? '✓ ACTIVE' : 'INACTIVE'}
+                        </span>
+                      </td>
+                      <td className="p-2.5 text-center">
+                        <div className="flex items-center justify-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setEditingSupplier({ ...sup })}
+                            className="text-xs text-amber-700 hover:underline font-bold"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (window.confirm(`Delete supplier "${sup.name}" from roster?`)) {
+                                if (onDeleteSupplier) onDeleteSupplier(sup.id || sup.name);
+                              }
+                            }}
+                            className="text-xs text-red-600 hover:underline font-bold"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {(suppliers || []).length === 0 && (
+                    <tr>
+                      <td colSpan={8} className="p-6 text-center text-gray-400 italic">
+                        No permanent suppliers recorded yet. Click &quot;+ Add Authorized Vendor&quot; above.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Section B: Date-Effective Price Agreement Matrix */}
+          <div className="bg-white p-5 rounded-2xl border border-[#E2D1B8] shadow-sm space-y-4">
+            <div className="flex justify-between items-center border-b pb-3 flex-wrap gap-2">
+              <div>
+                <h3 className="font-serif font-bold text-[#3D1C52] text-sm flex items-center gap-2">
+                  <ShieldCheck size={17} className="text-[#1E7A3E]" />
+                  Multi-Supplier Price Agreement Matrix (`Form-PUR-003`)
+                </h3>
+                <p className="text-xs text-gray-500">
+                  Assign raw materials to multiple vendors with contracted unit prices and time-bound effective windows
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingAgreement({
+                  id: `AGR-${Date.now().toString().slice(-5)}`,
+                  supplierName: authorizedSupplierNames[0] || 'Lucky Roma Trading / JCT Wheat',
+                  materialCode: inventory[0]?.code || 'RM-FLR-001',
+                  unitCost: 1050,
+                  effectiveStartDate: new Date().toISOString().slice(0, 10),
+                  effectiveEndDate: '2027-12-31',
+                  moq: '10 Sacks',
+                  notes: 'Official wholesale agreement'
+                })}
+                className="bg-[#1E7A3E] hover:bg-emerald-800 text-white font-bold text-xs px-3.5 py-2 rounded-lg shadow flex items-center gap-1.5 transition"
+              >
+                <Plus size={14} /> + New Price Agreement
+              </button>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-[#5B2E7A] text-white">
+                  <tr>
+                    <th className="p-2.5">Material SKU &amp; Name</th>
+                    <th className="p-2.5">Vendor / Supplier</th>
+                    <th className="p-2.5 text-right font-bold text-[#E5C585]">Contract Rate (PHP)</th>
+                    <th className="p-2.5">Effective Period (Start — End)</th>
+                    <th className="p-2.5 text-center">MOQ</th>
+                    <th className="p-2.5">Agreement Notes</th>
+                    <th className="p-2.5 text-center">Status</th>
+                    <th className="p-2.5 text-center">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {(vendorPriceAgreements || []).map((agr) => {
+                    const todayStr = new Date().toISOString().slice(0, 10);
+                    const isUpcoming = agr.effectiveStartDate && agr.effectiveStartDate > todayStr;
+                    const isExpired = agr.effectiveEndDate && agr.effectiveEndDate < todayStr;
+                    const isActive = !isUpcoming && !isExpired && agr.isActive !== false;
+                    return (
+                      <tr key={agr.id} className="hover:bg-gray-50">
+                        <td className="p-2.5">
+                          <span className="font-mono font-bold text-[#5B2E7A]">{agr.materialCode}</span>
+                          <span className="block text-[11px] text-gray-800">{agr.materialName || inventory.find(m => m.code === agr.materialCode)?.name || '—'}</span>
+                        </td>
+                        <td className="p-2.5 font-bold text-[#240e32]">{agr.supplierName}</td>
+                        <td className="p-2.5 text-right font-mono font-bold text-[#1E7A3E] text-sm">
+                          ₱{Number(agr.unitCost || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}
+                        </td>
+                        <td className="p-2.5 font-mono text-[11px]">
+                          {agr.effectiveStartDate || 'Immediate'} <span className="text-gray-400">→</span> {agr.effectiveEndDate || 'Open'}
+                        </td>
+                        <td className="p-2.5 text-center font-semibold text-gray-700">{agr.moq || '1 Unit'}</td>
+                        <td className="p-2.5 text-gray-600 text-[11px] max-w-xs truncate" title={agr.notes}>{agr.notes || '—'}</td>
+                        <td className="p-2.5 text-center">
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            isActive
+                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                              : isUpcoming
+                              ? 'bg-blue-100 text-blue-800'
+                              : 'bg-red-100 text-red-800'
+                          }`}>
+                            {isActive ? '✓ ACTIVE' : isUpcoming ? '⏳ UPCOMING' : '✕ EXPIRED'}
+                          </span>
+                        </td>
+                        <td className="p-2.5 text-center">
+                          <div className="flex items-center justify-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setEditingAgreement({ ...agr })}
+                              className="text-xs text-amber-700 hover:underline font-bold"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (window.confirm(`Delete price agreement for ${agr.materialCode} with ${agr.supplierName}?`)) {
+                                  if (onDeletePriceAgreement) onDeletePriceAgreement(agr.id);
+                                }
+                              }}
+                              className="text-xs text-red-600 hover:underline font-bold"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {(vendorPriceAgreements || []).length === 0 && (
+                    <tr>
+                      <td colSpan={8} className="p-6 text-center text-gray-400 italic">
+                        No negotiated price agreements on file. Click &quot;+ New Price Agreement&quot; to lock in contract rates.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: ADD / EDIT SUPPLIER PROFILE */}
+      {editingSupplier && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border-2 border-[#C8963E] space-y-4">
+            <div className="flex justify-between items-start border-b pb-2">
+              <h3 className="font-serif font-bold text-lg text-[#240e32] flex items-center gap-2">
+                <Building2 size={18} className="text-[#C8963E]" />
+                {editingSupplier.name ? `Edit Vendor: ${editingSupplier.name}` : 'New Authorized Vendor Entry'}
+              </h3>
+              <button onClick={() => setEditingSupplier(null)} className="text-gray-400 hover:text-gray-700 font-bold text-lg">✕</button>
+            </div>
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">Company / Vendor Name *</label>
+                <input
+                  type="text"
+                  value={editingSupplier.name}
+                  onChange={(e) => setEditingSupplier({ ...editingSupplier, name: e.target.value })}
+                  placeholder="e.g. Davao Great Wall Trading, Inc."
+                  required
+                  className="w-full p-2 border rounded font-semibold text-xs"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Contact Person</label>
+                  <input
+                    type="text"
+                    value={editingSupplier.contactPerson || ''}
+                    onChange={(e) => setEditingSupplier({ ...editingSupplier, contactPerson: e.target.value })}
+                    placeholder="Key Account Mgr"
+                    className="w-full p-2 border rounded"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Phone / Mobile</label>
+                  <input
+                    type="text"
+                    value={editingSupplier.phone || ''}
+                    onChange={(e) => setEditingSupplier({ ...editingSupplier, phone: e.target.value })}
+                    placeholder="+63 9XX-XXX-XXXX"
+                    className="w-full p-2 border rounded font-mono"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Email Address</label>
+                  <input
+                    type="email"
+                    value={editingSupplier.email || ''}
+                    onChange={(e) => setEditingSupplier({ ...editingSupplier, email: e.target.value })}
+                    placeholder="sales@vendor.com"
+                    className="w-full p-2 border rounded"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Tax Identification Number (TIN)</label>
+                  <input
+                    type="text"
+                    value={editingSupplier.tin || ''}
+                    onChange={(e) => setEditingSupplier({ ...editingSupplier, tin: e.target.value })}
+                    placeholder="000-000-000-000"
+                    className="w-full p-2 border rounded font-mono"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">Facility / Warehouse Address</label>
+                <textarea
+                  rows={2}
+                  value={editingSupplier.address || ''}
+                  onChange={(e) => setEditingSupplier({ ...editingSupplier, address: e.target.value })}
+                  placeholder="Complete business / delivery depot address..."
+                  className="w-full p-2 border rounded"
+                />
+              </div>
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">Default Payment Terms</label>
+                <select
+                  value={editingSupplier.paymentTerms || 'Net 30 Days'}
+                  onChange={(e) => setEditingSupplier({ ...editingSupplier, paymentTerms: e.target.value })}
+                  className="w-full p-2 border rounded"
+                >
+                  <option value="Net 30 Days">Net 30 Days</option>
+                  <option value="Net 15 Days">Net 15 Days</option>
+                  <option value="Net 7 Days">Net 7 Days</option>
+                  <option value="COD / Immediate">COD / Immediate Delivery</option>
+                  <option value="Advanced / Pre-Payment">Advanced / Pre-Payment</option>
+                </select>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-3 border-t">
+              <button
+                type="button"
+                onClick={() => setEditingSupplier(null)}
+                className="px-4 py-2 rounded text-xs font-semibold text-gray-600 hover:bg-gray-100"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!editingSupplier.name.trim()) return alert('Please enter the company name.');
+                  if (onSaveSupplier) onSaveSupplier(editingSupplier);
+                  setEditingSupplier(null);
+                }}
+                className="bg-[#C8963E] text-[#240e32] font-bold text-xs px-5 py-2 rounded-xl shadow"
+              >
+                Save Vendor Profile
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: ADD / EDIT PRICE AGREEMENT */}
+      {editingAgreement && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border-2 border-[#1E7A3E] space-y-4">
+            <div className="flex justify-between items-start border-b pb-2">
+              <h3 className="font-serif font-bold text-lg text-[#240e32] flex items-center gap-2">
+                <ShieldCheck size={18} className="text-[#1E7A3E]" />
+                {editingAgreement.id ? 'Negotiated Price Agreement' : 'New Contract Price Quote'}
+              </h3>
+              <button onClick={() => setEditingAgreement(null)} className="text-gray-400 hover:text-gray-700 font-bold text-lg">✕</button>
+            </div>
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">Vendor / Supplier *</label>
+                <select
+                  value={editingAgreement.supplierName}
+                  onChange={(e) => setEditingAgreement({ ...editingAgreement, supplierName: e.target.value })}
+                  className="w-full p-2 border rounded font-semibold text-xs"
+                >
+                  {authorizedSupplierNames.map((s) => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">Raw Material SKU *</label>
+                <select
+                  value={editingAgreement.materialCode}
+                  onChange={(e) => {
+                    const m = inventory.find(x => x.code === e.target.value);
+                    setEditingAgreement({
+                      ...editingAgreement,
+                      materialCode: e.target.value,
+                      materialName: m?.name || e.target.value,
+                      unitCost: Number(m?.unitCost || 1000)
+                    });
+                  }}
+                  className="w-full p-2 border rounded font-mono text-xs font-bold"
+                >
+                  {inventory.map((m) => (
+                    <option key={m.code} value={m.code}>{m.code} · {m.name} ({m.primaryUom})</option>
+                  ))}
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Contract Rate (₱ / Primary Unit) *</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={editingAgreement.unitCost}
+                    onChange={(e) => setEditingAgreement({ ...editingAgreement, unitCost: parseFloat(e.target.value) || 0 })}
+                    className="w-full p-2 border rounded font-mono font-bold text-[#1E7A3E]"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Minimum Order Qty (MOQ)</label>
+                  <input
+                    type="text"
+                    value={editingAgreement.moq || ''}
+                    onChange={(e) => setEditingAgreement({ ...editingAgreement, moq: e.target.value })}
+                    placeholder="e.g. 10 Sacks / 1 Ton"
+                    className="w-full p-2 border rounded"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Effective Start Date *</label>
+                  <input
+                    type="date"
+                    value={editingAgreement.effectiveStartDate || ''}
+                    onChange={(e) => setEditingAgreement({ ...editingAgreement, effectiveStartDate: e.target.value })}
+                    className="w-full p-2 border rounded font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Effective End Date *</label>
+                  <input
+                    type="date"
+                    value={editingAgreement.effectiveEndDate || ''}
+                    onChange={(e) => setEditingAgreement({ ...editingAgreement, effectiveEndDate: e.target.value })}
+                    className="w-full p-2 border rounded font-mono"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">Contract Terms / Memo</label>
+                <input
+                  type="text"
+                  value={editingAgreement.notes || ''}
+                  onChange={(e) => setEditingAgreement({ ...editingAgreement, notes: e.target.value })}
+                  placeholder="e.g. Q4 fixed flour quota agreement"
+                  className="w-full p-2 border rounded"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-3 border-t">
+              <button
+                type="button"
+                onClick={() => setEditingAgreement(null)}
+                className="px-4 py-2 rounded text-xs font-semibold text-gray-600 hover:bg-gray-100"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (Number(editingAgreement.unitCost) <= 0) return alert('Please enter a valid contract rate.');
+                  if (onSavePriceAgreement) onSavePriceAgreement(editingAgreement);
+                  setEditingAgreement(null);
+                }}
+                className="bg-[#1E7A3E] hover:bg-emerald-800 text-white font-bold text-xs px-5 py-2 rounded-xl shadow transition"
+              >
+                Save Price Agreement
+              </button>
+            </div>
           </div>
         </div>
       )}

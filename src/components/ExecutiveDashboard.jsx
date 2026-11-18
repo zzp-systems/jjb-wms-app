@@ -3,18 +3,27 @@ import {
   Search, Filter, AlertTriangle, Package, Clock, Warehouse, 
   ArrowUpRight, ArrowDownRight, Layers, Eye, RefreshCw, Sparkles,
   FileSpreadsheet, Upload, Download, Store, Scale, FileText, CheckCircle2,
-  Users
+  Users, SlidersHorizontal, Plus, X
 } from 'lucide-react';
 
 export default function ExecutiveDashboard({ 
-  inventory, 
+  inventory = [], 
   isMobileMode, 
   onQuickAction,
   storageRooms,
   onOpenImportModal,
   batchOrders = [],
-  withdrawals = []
+  withdrawals = [],
+  onUpdateMaterial,
+  onQuickAdjustStock,
+  suppliers = [],
+  currentRole
 }) {
+  const [editingMaterial, setEditingMaterial] = useState(null);
+  const [modalActiveTab, setModalActiveTab] = useState('count'); // 'count' | 'master'
+  const [physicalCountInput, setPhysicalCountInput] = useState('');
+  const [adjReason, setAdjReason] = useState('Physical Cycle Count Variance');
+  const [adjNotes, setAdjNotes] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedRoom, setSelectedRoom] = useState('ALL');
   const [selectedCategory, setSelectedCategory] = useState('ALL');
@@ -136,6 +145,32 @@ export default function ExecutiveDashboard({
           >
             <Users size={14} className="text-[#E5C585]" />
             <span>Customers</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setEditingMaterial({
+                code: '',
+                name: '',
+                brand: '',
+                category: 'Flour & Grains',
+                room: 'Dry Room 1',
+                primaryUom: 'Sack',
+                secondaryUom: 'kg',
+                conversionFactor: 25,
+                threshold: 250,
+                unitCost: 1000,
+                supplier: 'Lucky Roma Trading / JCT Wheat',
+                isNew: true
+              });
+              setModalActiveTab('master');
+            }}
+            className="bg-[#C8963E] hover:bg-[#b08030] text-[#240e32] font-bold px-3 py-2 rounded-xl text-xs transition flex items-center gap-1.5 shadow"
+            title="Onboard New Raw Material SKU into Bodega Catalog"
+          >
+            <Plus size={14} />
+            <span>+ New Material</span>
           </button>
         </div>
       </div>
@@ -458,6 +493,20 @@ export default function ExecutiveDashboard({
                               <Eye size={14} />
                             </button>
                             <button
+                              type="button"
+                              onClick={() => {
+                                setEditingMaterial({ ...item, isNew: false });
+                                setPhysicalCountInput(item.currentBalance ?? 0);
+                                setModalActiveTab('count');
+                                setAdjNotes('');
+                              }}
+                              className="px-2 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded text-[11px] font-bold flex items-center gap-1 transition"
+                              title="Physical Count Correction & Material Master Details"
+                            >
+                              <SlidersHorizontal size={11} />
+                              <span>Edit / Count</span>
+                            </button>
+                            <button
                               onClick={() => onQuickAction('issuance', item)}
                               className="px-2 py-1 bg-[#5B2E7A] text-white rounded text-[11px] font-bold hover:bg-[#3D1C52]"
                               title="Issue for Production"
@@ -547,6 +596,332 @@ export default function ExecutiveDashboard({
       </div>
 
       {/* MODAL: FEFO Lot Details Viewer */}
+      {/* JADE: UNIFIED INVENTORY COUNT CORRECTION & ITEM MASTER MODAL */}
+      {editingMaterial && (() => {
+        const factor = Number(editingMaterial.conversionFactor || 1);
+        const currentBal = Number(editingMaterial.currentBalance || 0);
+        const physicalVal = parseFloat(physicalCountInput);
+        const hasValidPhysical = !isNaN(physicalVal) && physicalVal >= 0;
+        const varianceVal = hasValidPhysical ? +(physicalVal - currentBal).toFixed(3) : 0;
+        const currentPrimary = +(currentBal / factor).toFixed(2);
+        const physicalPrimary = hasValidPhysical ? +(physicalVal / factor).toFixed(2) : 0;
+
+        return (
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl border-2 border-[#C8963E] space-y-4 max-h-[90vh] overflow-y-auto">
+              <div className="flex justify-between items-start border-b pb-3">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-[10px] font-bold bg-[#240e32] text-[#E5C585] px-2 py-0.5 rounded">
+                      {editingMaterial.code || 'NEW SKU'}
+                    </span>
+                    <span className="text-xs text-gray-500 font-bold uppercase">
+                      {editingMaterial.isNew ? 'New Catalog SKU' : 'Item Master & Inventory Control'}
+                    </span>
+                  </div>
+                  <h3 className="font-serif font-bold text-lg text-[#240e32] mt-0.5">
+                    {editingMaterial.name || 'Register New Raw Material SKU'}
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setEditingMaterial(null)}
+                  className="text-gray-400 hover:text-gray-700 font-extrabold text-lg"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Sub-Tabs for Modal */}
+              {!editingMaterial.isNew && (
+                <div className="flex bg-[#FAF6EE] p-1 rounded-xl border border-[#C8963E]/40 gap-1 text-xs font-bold">
+                  <button
+                    type="button"
+                    onClick={() => setModalActiveTab('count')}
+                    className={`flex-1 py-1.5 rounded-lg transition ${
+                      modalActiveTab === 'count' ? 'bg-[#240e32] text-[#E5C585] shadow' : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    1. Quick Physical Count Fix
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setModalActiveTab('master')}
+                    className={`flex-1 py-1.5 rounded-lg transition ${
+                      modalActiveTab === 'master' ? 'bg-[#240e32] text-[#E5C585] shadow' : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    2. Edit Brand &amp; Master Details
+                  </button>
+                </div>
+              )}
+
+              {/* TAB 1: QUICK PHYSICAL COUNT CORRECTION */}
+              {modalActiveTab === 'count' && !editingMaterial.isNew && (
+                <div className="space-y-4 text-xs">
+                  <div className="grid grid-cols-2 gap-3 bg-[#FAF6EE] p-3.5 rounded-xl border border-[#E2D1B8]">
+                    <div>
+                      <span className="text-gray-500 block text-[10px] uppercase font-bold">Current System Balance:</span>
+                      <strong className="text-sm font-mono text-[#5B2E7A]">
+                        {currentBal.toLocaleString()} {editingMaterial.secondaryUom}
+                      </strong>
+                      <span className="block text-[11px] text-gray-500">
+                        (~{currentPrimary} {editingMaterial.primaryUom}s)
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500 block text-[10px] uppercase font-bold">Storage Location:</span>
+                      <strong className="text-sm text-gray-800">{editingMaterial.room}</strong>
+                      <span className="block text-[11px] text-gray-500">Conversion: 1 {editingMaterial.primaryUom} = {factor} {editingMaterial.secondaryUom}</span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-gray-700 mb-1">
+                      Physical Count Found in Bodega ({editingMaterial.secondaryUom}) *
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        step="any"
+                        min="0"
+                        value={physicalCountInput}
+                        onChange={(e) => setPhysicalCountInput(e.target.value)}
+                        placeholder="Enter actual physical balance found..."
+                        className="w-full p-2.5 border rounded-xl font-mono font-bold text-sm text-[#1E7A3E] focus:ring-2 focus:ring-[#C8963E]"
+                      />
+                      <span className="font-bold text-gray-700">{editingMaterial.secondaryUom}</span>
+                    </div>
+                    {hasValidPhysical && (
+                      <div className="text-[11px] text-gray-500 mt-1 flex justify-between">
+                        <span>Equivalent: ~{physicalPrimary} {editingMaterial.primaryUom}s</span>
+                        <span className={`font-mono font-bold ${varianceVal >= 0 ? 'text-[#1E7A3E]' : 'text-[#C0392B]'}`}>
+                          Variance: {varianceVal >= 0 ? `+${varianceVal}` : varianceVal} {editingMaterial.secondaryUom} {varianceVal >= 0 ? '▲ Surplus' : '▼ Deficit'}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-gray-700 mb-1">Variance Reason *</label>
+                    <select
+                      value={adjReason}
+                      onChange={(e) => setAdjReason(e.target.value)}
+                      className="w-full p-2 border rounded-xl font-medium text-xs bg-white"
+                    >
+                      <option value="Physical Cycle Count Variance">Physical Cycle Count Variance</option>
+                      <option value="Found Unrecorded Bodega Stock">Found Unrecorded Bodega Stock / Surplus</option>
+                      <option value="Floor Spoilage / Condemned">Floor Spoilage / Condemned Stock</option>
+                      <option value="Damaged Sacks / Puncture Spill">Damaged Sacks / Puncture Spillage</option>
+                      <option value="Production Tare & Weighing Discrepancy">Production Tare &amp; Weighing Discrepancy</option>
+                      <option value="Packaging Breakage / Leak">Packaging Breakage / Leak</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-gray-700 mb-1">Custodian Adjustment Notes / Audit Remarks</label>
+                    <textarea
+                      rows={2}
+                      value={adjNotes}
+                      onChange={(e) => setAdjNotes(e.target.value)}
+                      placeholder="e.g. Conducted weekly cycle count in Dry Room 1 with Jade Dela Cruz..."
+                      className="w-full p-2 border rounded-xl text-xs"
+                    />
+                  </div>
+
+                  <div className="flex justify-end gap-2 pt-2 border-t">
+                    <button
+                      type="button"
+                      onClick={() => setEditingMaterial(null)}
+                      className="px-4 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-100 rounded-xl"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!hasValidPhysical) return alert('Please enter a valid physical count quantity.');
+                        if (onQuickAdjustStock) {
+                          onQuickAdjustStock(editingMaterial.code, physicalVal, adjReason, adjNotes);
+                        }
+                        setEditingMaterial(null);
+                      }}
+                      className="bg-[#1E7A3E] hover:bg-emerald-800 text-white font-bold text-xs px-5 py-2.5 rounded-xl shadow-lg flex items-center gap-1.5 transition"
+                    >
+                      <CheckCircle2 size={16} /> Apply Physical Count &amp; Update Balance
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 2: EDIT BRAND & MASTER SPECIFICATIONS */}
+              {(modalActiveTab === 'master' || editingMaterial.isNew) && (
+                <div className="space-y-3 text-xs">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-bold text-gray-700 mb-1">Material SKU Code *</label>
+                      <input
+                        type="text"
+                        value={editingMaterial.code}
+                        onChange={(e) => setEditingMaterial({ ...editingMaterial, code: e.target.value.toUpperCase() })}
+                        placeholder="e.g. RM-FLR-004"
+                        disabled={!editingMaterial.isNew}
+                        className={`w-full p-2 border rounded-xl font-mono font-bold ${!editingMaterial.isNew ? 'bg-gray-100 text-gray-600' : ''}`}
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-gray-700 mb-1">Brand Name</label>
+                      <input
+                        type="text"
+                        value={editingMaterial.brand || ''}
+                        onChange={(e) => setEditingMaterial({ ...editingMaterial, brand: e.target.value })}
+                        placeholder="e.g. Rossa / Continental / Buttercup"
+                        className="w-full p-2 border rounded-xl"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-gray-700 mb-1">Item Description / Name *</label>
+                    <input
+                      type="text"
+                      value={editingMaterial.name}
+                      onChange={(e) => setEditingMaterial({ ...editingMaterial, name: e.target.value })}
+                      placeholder="e.g. 1st Class Hard Bread Flour"
+                      className="w-full p-2 border rounded-xl font-semibold text-xs"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-bold text-gray-700 mb-1">Category</label>
+                      <select
+                        value={editingMaterial.category}
+                        onChange={(e) => setEditingMaterial({ ...editingMaterial, category: e.target.value })}
+                        className="w-full p-2 border rounded-xl bg-white"
+                      >
+                        <option value="Flour & Grains">Flour &amp; Grains</option>
+                        <option value="Sweeteners">Sweeteners</option>
+                        <option value="Fats & Oils">Fats &amp; Oils</option>
+                        <option value="Dairy & Eggs">Dairy &amp; Eggs</option>
+                        <option value="Leavening & Improvers">Leavening &amp; Improvers</option>
+                        <option value="Flavors & Colors">Flavors &amp; Colors</option>
+                        <option value="Specialty & Toppings">Specialty &amp; Toppings</option>
+                        <option value="Packaging Materials">Packaging Materials</option>
+                        <option value="Sanitation & Gases">Sanitation &amp; Gases</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block font-bold text-gray-700 mb-1">Storage Chamber</label>
+                      <select
+                        value={editingMaterial.room}
+                        onChange={(e) => setEditingMaterial({ ...editingMaterial, room: e.target.value })}
+                        className="w-full p-2 border rounded-xl bg-white"
+                      >
+                        <option value="Dry Room 1">Dry Room 1 (Flour &amp; Bulk)</option>
+                        <option value="Dry Room 2">Dry Room 2 (Batching &amp; Micro)</option>
+                        <option value="Cold Room">Cold Room (Dairy &amp; Chilled)</option>
+                        <option value="Wet Room">Wet Room (Oils &amp; Sanitizers)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <label className="block font-bold text-gray-700 mb-1">Primary Unit (Bulk)</label>
+                      <input
+                        type="text"
+                        value={editingMaterial.primaryUom}
+                        onChange={(e) => setEditingMaterial({ ...editingMaterial, primaryUom: e.target.value })}
+                        placeholder="Sack / Box / Laton"
+                        className="w-full p-2 border rounded-xl"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-gray-700 mb-1">Secondary Unit (Net)</label>
+                      <input
+                        type="text"
+                        value={editingMaterial.secondaryUom}
+                        onChange={(e) => setEditingMaterial({ ...editingMaterial, secondaryUom: e.target.value })}
+                        placeholder="kg / L / pcs"
+                        className="w-full p-2 border rounded-xl font-mono font-bold text-[#1E7A3E]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-gray-700 mb-1">Conversion Factor</label>
+                      <input
+                        type="number"
+                        step="any"
+                        min="0.01"
+                        value={editingMaterial.conversionFactor}
+                        onChange={(e) => setEditingMaterial({ ...editingMaterial, conversionFactor: parseFloat(e.target.value) || 1 })}
+                        className="w-full p-2 border rounded-xl font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <label className="block font-bold text-gray-700 mb-1">Reorder Safety Threshold</label>
+                      <input
+                        type="number"
+                        step="any"
+                        value={editingMaterial.threshold}
+                        onChange={(e) => setEditingMaterial({ ...editingMaterial, threshold: parseFloat(e.target.value) || 0 })}
+                        className="w-full p-2 border rounded-xl font-mono text-amber-700 font-bold"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-gray-700 mb-1">Base Unit Price (₱)</label>
+                      <input
+                        type="number"
+                        step="any"
+                        value={editingMaterial.unitCost}
+                        onChange={(e) => setEditingMaterial({ ...editingMaterial, unitCost: parseFloat(e.target.value) || 0 })}
+                        className="w-full p-2 border rounded-xl font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-gray-700 mb-1">Primary Vendor</label>
+                      <input
+                        type="text"
+                        value={editingMaterial.supplier || ''}
+                        onChange={(e) => setEditingMaterial({ ...editingMaterial, supplier: e.target.value })}
+                        placeholder="Default vendor name"
+                        className="w-full p-2 border rounded-xl"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end gap-2 pt-3 border-t">
+                    <button
+                      type="button"
+                      onClick={() => setEditingMaterial(null)}
+                      className="px-4 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-100 rounded-xl"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!editingMaterial.code.trim() || !editingMaterial.name.trim()) {
+                          return alert('Please enter both SKU Code and Item Description.');
+                        }
+                        if (onUpdateMaterial) onUpdateMaterial(editingMaterial);
+                        setEditingMaterial(null);
+                      }}
+                      className="bg-[#C8963E] hover:bg-[#b08030] text-[#240e32] font-bold text-xs px-5 py-2.5 rounded-xl shadow-lg flex items-center gap-1.5 transition"
+                    >
+                      <CheckCircle2 size={16} /> Save Material Master Details
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
       {selectedItemLots && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-[#C8963E]/40 space-y-4">

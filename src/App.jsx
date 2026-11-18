@@ -29,6 +29,19 @@ import {
   EOD_EMAIL_RECIPIENTS
 } from './data/initialData';
 
+const INITIAL_SUPPLIERS = [
+  { id: 'SUP-001', name: 'Lucky Roma Trading / JCT Wheat', contactPerson: 'Roberto Roma', phone: '+63 917-555-1021', email: 'sales@luckyroma.com', address: 'Bldg 4, Agdao Commercial Complex, Davao City', tin: '204-918-301-000', paymentTerms: 'Net 30 Days', isActive: true },
+  { id: 'SUP-002', name: 'Mindanao Packaging & Industrial Box Corp', contactPerson: 'Clarissa Uy', phone: '+63 920-888-4491', email: 'orders@minpack.ph', address: 'Km 12 Sasa Wharf Road, Davao City', tin: '109-482-771-000', paymentTerms: 'Net 30 Days', isActive: true },
+  { id: 'SUP-003', name: 'P.L. Sebastian Corporation', contactPerson: 'Paul Sebastian', phone: '+63 918-222-9901', email: 'plsebastian@gmail.com', address: 'Monteverde Ave, Chinatown, Davao City', tin: '331-502-119-000', paymentTerms: 'Net 15 Days', isActive: true },
+  { id: 'SUP-004', name: 'Davao Great Wall Trading, Inc.', contactPerson: 'Elena Chen', phone: '+63 922-441-8890', email: 'sales@davaogreatwall.com', address: 'R. Castillo St, Agdao, Davao City', tin: '419-882-663-000', paymentTerms: 'Net 30 Days', isActive: true }
+];
+
+const INITIAL_PRICE_AGREEMENTS = [
+  { id: 'AGR-001', supplierName: 'Lucky Roma Trading / JCT Wheat', materialCode: 'RM-FLR-003', materialName: '1st Class Hard Bread Flour (Rossa)', unitCost: 1120, effectiveStartDate: '2026-11-01', effectiveEndDate: '2027-12-31', moq: '20 Sacks', notes: 'Indangan Site Master Annual Supply Rate', isActive: true },
+  { id: 'AGR-002', supplierName: 'Davao Great Wall Trading, Inc.', materialCode: 'RM-SWT-001', materialName: 'Crystal Brown Sugar', unitCost: 2200, effectiveStartDate: '2026-11-01', effectiveEndDate: '2027-12-31', moq: '10 Sacks', notes: 'Fixed Refined Brown Cane Rate', isActive: true },
+  { id: 'AGR-003', supplierName: 'Davao Great Wall Trading, Inc.', materialCode: 'RM-DRY-006', materialName: 'White Sesame Seeds — 1 kg', unitCost: 195, effectiveStartDate: '2026-11-01', effectiveEndDate: '2027-12-31', moq: '5 Packs', notes: 'Contract Quota Discount', isActive: true }
+];
+
 import { deductFefoLots, calculateRecipeIngredients } from './utils/wmsLogic';
 import {
   initOfflineDb,
@@ -167,6 +180,8 @@ export default function App() {
   const [quarantineList, setQuarantineList] = useState(() => getSaved('quarantine', INITIAL_QUARANTINE));
   const [auditLogs, setAuditLogs] = useState(() => getSaved('audit_logs', INITIAL_AUDIT_LOGS));
   const [purchaseOrders, setPurchaseOrders] = useState(() => getSaved('purchase_orders', []));
+  const [suppliers, setSuppliers] = useState(() => getSaved('suppliers', INITIAL_SUPPLIERS));
+  const [vendorPriceAgreements, setVendorPriceAgreements] = useState(() => getSaved('vendor_price_agreements', INITIAL_PRICE_AGREEMENTS));
 
   // UI Preferences
   const initialUiPrefs = loadUiPrefs();
@@ -769,6 +784,8 @@ export default function App() {
   useEffect(() => { saveToStorage('quarantine', quarantineList); }, [quarantineList]);
   useEffect(() => { saveToStorage('audit_logs', auditLogs); }, [auditLogs]);
   useEffect(() => { saveToStorage('purchase_orders', purchaseOrders); }, [purchaseOrders]);
+  useEffect(() => { saveToStorage('suppliers', suppliers); }, [suppliers]);
+  useEffect(() => { saveToStorage('vendor_price_agreements', vendorPriceAgreements); }, [vendorPriceAgreements]);
 
   // Real-Time Cross-Tab & Floor Kiosk Synchronization
   useEffect(() => {
@@ -946,12 +963,113 @@ export default function App() {
 
   const handleDeletePurchaseOrder = (poNo) => {
     setPurchaseOrders((prev) => prev.filter((p) => p.poNo !== poNo));
-    recordAudit(
-      'PO_DELETED',
-      `Purchase order ${poNo} removed/cancelled from register by ${currentRole}`
+    recordAudit('PO_DELETED', `Purchase order ${poNo} deleted from register by ${currentRole}`);
+    showToast(`Purchase order ${poNo} removed.`);
+  };
+
+  const handleSaveSupplier = (newSup) => {
+    setSuppliers((prev) => {
+      const exists = prev.some((s) => s.id === newSup.id || s.name === newSup.name);
+      if (exists) {
+        return prev.map((s) => (s.id === newSup.id || s.name === newSup.name ? { ...s, ...newSup, updatedAt: new Date().toISOString() } : s));
+      }
+      return [newSup, ...prev];
+    });
+    recordAudit('SUPPLIER_SAVED', `Supplier ${newSup.name} profile saved/updated by ${currentRole}`);
+    showToast(`Vendor ${newSup.name} recorded!`);
+  };
+
+  const handleDeleteSupplier = (supId) => {
+    setSuppliers((prev) => prev.filter((s) => s.id !== supId && s.name !== supId));
+    recordAudit('SUPPLIER_DELETED', `Supplier ${supId} removed from roster by ${currentRole}`);
+    showToast('Supplier deleted from roster.');
+  };
+
+  const handleSavePriceAgreement = (newAgr) => {
+    setVendorPriceAgreements((prev) => {
+      const exists = prev.some((a) => a.id === newAgr.id);
+      if (exists) {
+        return prev.map((a) => (a.id === newAgr.id ? { ...a, ...newAgr, updatedAt: new Date().toISOString() } : a));
+      }
+      return [newAgr, ...prev];
+    });
+    recordAudit('PRICE_AGREEMENT_SAVED', `Price agreement ${newAgr.id} for ${newAgr.materialCode} with ${newAgr.supplierName} saved (Rate: ₱${newAgr.unitCost})`);
+    showToast(`Contract rate for ${newAgr.materialCode} recorded!`);
+  };
+
+  const handleDeletePriceAgreement = (agrId) => {
+    setVendorPriceAgreements((prev) => prev.filter((a) => a.id !== agrId));
+    recordAudit('PRICE_AGREEMENT_DELETED', `Price agreement ${agrId} deleted by ${currentRole}`);
+    showToast('Price agreement removed.');
+  };
+
+  // JADE: In-Place Material Master Details Update
+  const handleUpdateMaterial = (updatedMat) => {
+    setInventory((prev) => {
+      const exists = prev.some((m) => m.code === updatedMat.code);
+      if (exists) {
+        return prev.map((m) => (m.code === updatedMat.code ? { ...m, ...updatedMat } : m));
+      }
+      return [...prev, { ...updatedMat, currentBalance: updatedMat.currentBalance || 0, lots: [] }];
+    });
+    recordAudit('MATERIAL_MASTER_UPDATED', `Item ${updatedMat.code} (${updatedMat.name}) master specifications updated by ${currentRole}`);
+    postSyncEvent('MATERIAL_UPDATED', `MAT_UPD_${updatedMat.code}_${Date.now()}`, updatedMat);
+    showToast(`Material ${updatedMat.code} specifications saved!`);
+  };
+
+  // JADE: Simplified Perpetual Inventory Count Correction
+  const handleQuickAdjustStock = (code, newPhysicalQty, reason = 'Physical Count Correction', notes = '') => {
+    const mat = inventory.find((m) => m.code === code);
+    if (!mat) return;
+    const oldBalance = Number(mat.currentBalance || 0);
+    const targetQty = Number(newPhysicalQty);
+    const variance = +(targetQty - oldBalance).toFixed(3);
+    if (variance === 0) {
+      showToast(`Count matches current balance (${targetQty} ${mat.secondaryUom}). No variance adjustment needed.`);
+      return;
+    }
+    const adjType = variance > 0 ? 'IN' : 'OUT';
+    const absVariance = Math.abs(variance);
+    const syntheticLot = `ADJ-${Date.now().toString().slice(-6)}`;
+    const newAdj = {
+      id: `ADJ-${Date.now().toString().slice(-6)}`,
+      materialCode: mat.code,
+      materialName: mat.name,
+      adjustmentType: adjType,
+      qtySec: absVariance,
+      uom: mat.secondaryUom || 'kg',
+      reason: reason || 'Physical Cycle Count Variance',
+      adjustedBy: resolveUserId(currentRole, authUser),
+      adjustedAt: new Date().toISOString(),
+      notes: `Physical count updated from ${oldBalance} to ${targetQty} ${mat.secondaryUom}. ${notes}`.trim()
+    };
+    setInventory((prev) =>
+      prev.map((item) => {
+        if (item.code !== code) return item;
+        const existingLots = item.lots || [];
+        let updatedLots;
+        if (adjType === 'IN') {
+          const newLot = {
+            lotNumber: syntheticLot,
+            expiryDate: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+            qtySec: absVariance,
+            location: item.room || 'ADJUSTMENT'
+          };
+          updatedLots = [newLot, ...existingLots];
+        } else {
+          const fefoResult = deductFefoLots(existingLots, absVariance);
+          updatedLots = fefoResult.updatedLots;
+        }
+        return { ...item, currentBalance: targetQty, lots: updatedLots };
+      })
     );
-    postSyncEvent('PURCHASE_ORDER_DELETED', `PO_DEL_${poNo}_${Date.now()}`, { poNo });
-    showToast(`Purchase order ${poNo} removed from register.`);
+    setAdjustments((prev) => [newAdj, ...prev]);
+    recordAudit('PERPETUAL_COUNT_ADJUSTMENT', `Physical count for ${mat.code} set to ${targetQty} ${mat.secondaryUom} (${variance > 0 ? '+' : ''}${variance} ${adjType}) by ${currentRole}: ${reason}`);
+    postSyncEvent('ADJUSTMENT_SAVED', `QUICK_ADJ_${code}_${Date.now()}`, {
+      ...newAdj,
+      timestamp: new Date().toISOString()
+    });
+    showToast(`Physical count saved! Balance for ${mat.code} updated to ${targetQty} ${mat.secondaryUom}.`);
   };
 
   const handleUpdatePendingRequest = (requestId, updates = {}) => {
@@ -1887,6 +2005,10 @@ export default function App() {
                 batchOrders={batchOrders}
                 withdrawals={withdrawals}
                 pendingRequests={pendingRequests}
+                onUpdateMaterial={handleUpdateMaterial}
+                onQuickAdjustStock={handleQuickAdjustStock}
+                suppliers={suppliers || []}
+                currentRole={currentRole}
               />
             )}
 
@@ -1999,6 +2121,12 @@ export default function App() {
                 onSavePurchaseOrder={handleSavePurchaseOrder}
                 onUpdatePoStatus={handleUpdatePoStatus}
                 onDeletePurchaseOrder={handleDeletePurchaseOrder}
+                suppliers={suppliers || []}
+                onSaveSupplier={handleSaveSupplier}
+                onDeleteSupplier={handleDeleteSupplier}
+                vendorPriceAgreements={vendorPriceAgreements || []}
+                onSavePriceAgreement={handleSavePriceAgreement}
+                onDeletePriceAgreement={handleDeletePriceAgreement}
               />
             )}
 
