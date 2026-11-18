@@ -673,218 +673,152 @@ export default function BatchingWorkbench({
         
       )}
 
-      {/* MODAL 1: SCALE & PRECISION KITTING MODAL (Form-ING-001 / SOP-WAR-002) */}
+      {/* ── PRECISION SCALE & KIT MODAL (Form-ING-001) ── */}
       {scalingModalOrder && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] flex flex-col shadow-2xl border-2 border-[#C8963E] overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-            {/* Header */}
-            <div className="bg-[#240e32] text-white p-4 flex justify-between items-center border-b border-[#C8963E]/40">
-              <div className="flex items-center gap-2">
-                <Scale className="text-[#E5C585]" size={20} />
-                <div>
-                  <h3 className="font-extrabold text-sm text-[#E5C585]">
-                    Dry Room 2 Scale &amp; Precision Kitting Workbench
-                  </h3>
-                  <p className="text-[10px] text-gray-300">
-                    Form-ING-001 · Dual Bench Scale Metrology Verification &amp; 40-Mesh Sifter Control
-                  </p>
-                </div>
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border-2 border-[#C8963E] space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-start border-b-2 border-[#5B2E7A] pb-3">
+              <div>
+                <span className="font-mono text-[10px] font-bold bg-[#C8963E] text-[#240e32] px-2 py-0.5 rounded">
+                  Form-ING-001 · Rev. 04
+                </span>
+                <h3 className="font-serif font-bold text-xl text-[#3D1C52] mt-1">
+                  Scale &amp; Kit Batch Precision Metrology
+                </h3>
+                <p className="text-xs text-gray-600">
+                  Order ID: <strong className="font-mono text-purple-900">{scalingModalOrder.orderId}</strong> · {scalingModalOrder.recipeName} ({scalingModalOrder.batchMultiplier}x)
+                </p>
               </div>
               <button
+                type="button"
                 onClick={() => setScalingModalOrder(null)}
-                className="text-gray-400 hover:text-white font-bold p-1 rounded-lg"
+                className="text-gray-400 hover:text-gray-700 font-extrabold text-lg"
               >
                 ✕
               </button>
             </div>
 
-            {/* Modal Body */}
-            <div className="p-5 overflow-y-auto space-y-4 text-xs">
-              {/* Target Order Summary Banner */}
-              <div className="bg-[#FAF6EE] p-3 rounded-xl border border-[#E2D1B8] flex justify-between items-center flex-wrap gap-2">
-                <div>
-                  <span className="font-mono text-[10px] bg-purple-900 text-purple-100 px-2 py-0.5 rounded font-bold">
-                    {scalingModalOrder.orderId}
-                  </span>
-                  <div className="font-bold text-sm text-[#240e32] mt-1">
-                    {scalingModalOrder.recipeName}
-                  </div>
-                  <div className="text-[11px] text-gray-600">
-                    {scalingModalOrder.outletName} · Target: {scalingModalOrder.requestedQtyPcs} pcs ({scalingModalOrder.batchMultiplier}x Batch)
-                  </div>
-                </div>
-                <div className="text-right">
-                  <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full block mb-1">
-                    ✓ Bulk Bodega Release Authorized
-                  </span>
-                  <span className="text-xs font-mono font-bold text-purple-900">
-                    Slip: {scalingModalOrder.bulkRequisitionSlipNo || 'WS-BULK-VERIFIED'}
-                  </span>
-                </div>
+            {/* Metrology & Calibration Verification Strip */}
+            <div className="bg-[#FAF6EE] p-3 rounded-xl border border-[#C8963E]/40 space-y-1.5 text-xs">
+              <div className="font-bold text-[#240e32] flex items-center gap-1.5">
+                <ShieldCheck size={16} className="text-[#1E7A3E]" />
+                Mandatory Metrology Verification (FDA PLI cGMP Protocols):
               </div>
-
-              {/* Recipe BOM Ingredients Checklist */}
-              <div>
-                <h4 className="font-bold text-gray-700 mb-2 flex items-center justify-between">
-                  <span>Authorized Ingredient Bill of Materials (BOM):</span>
-                  <span className="text-[10px] text-gray-500 font-normal">Pre-scaled via Certified Bench Scale</span>
-                </h4>
-                <div className="border border-gray-200 rounded-xl overflow-hidden">
-                  <table className="w-full text-left text-xs">
-                    <thead className="bg-[#240e32] text-[#E5C585] text-[11px]">
-                      <tr>
-                        <th className="py-1.5 px-3">Material Code</th>
-                        <th className="py-1.5 px-3">Ingredient Description</th>
-                        <th className="py-1.5 px-3 text-right">Required Target</th>
-                        <th className="py-1.5 px-3 text-center">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100 text-[11px]">
-                      {(scalingModalOrder.scaledIngredients || []).map((ing, i) => (
-                        <tr key={i} className="hover:bg-gray-50">
-                          <td className="py-2 px-3 font-mono font-bold text-[#5B2E7A]">{ing.code}</td>
-                          <td className="py-2 px-3 font-medium text-gray-800">{ing.name}</td>
-                          <td className="py-2 px-3 font-mono font-bold text-right text-gray-900">
-                            {ing.dualUnitDisplay || `${ing.requiredSec} ${ing.secondaryUom || 'kg'}`}
-                          </td>
-                          <td className="py-2 px-3 text-center">
-                            <span className="text-emerald-700 font-bold text-[10px] bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
-                              ✓ Weighed
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-gray-700">
+                <div className="flex items-center gap-1.5 bg-white p-2 rounded border border-gray-200">
+                  <Check size={14} className="text-emerald-700 shrink-0" />
+                  <span><strong>Bench Scale #1</strong> · Govt Seal #798073 (Valid)</span>
                 </div>
-              </div>
-
-              {/* QA & Metrology Compliance Section */}
-              <div className="bg-amber-50/70 p-3.5 rounded-xl border border-amber-300 space-y-2">
-                <div className="font-bold text-amber-950 flex items-center gap-1.5 text-xs">
-                  <ShieldCheck size={15} className="text-amber-700" />
-                  <span>FDA PLI Regulatory Metrology Checklist:</span>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
-                  <label className="flex items-center gap-2 bg-white p-2 rounded-lg border border-amber-200 cursor-pointer">
-                    <input type="checkbox" defaultChecked disabled className="rounded text-amber-600" />
-                    <span><strong>Bench Scale #1:</strong> Govt Seal #798073 Verified</span>
-                  </label>
-                  <label className="flex items-center gap-2 bg-white p-2 rounded-lg border border-amber-200 cursor-pointer">
-                    <input type="checkbox" defaultChecked disabled className="rounded text-amber-600" />
-                    <span><strong>Flour Sifter:</strong> 40-Mesh Sifter Clean &amp; Intact</span>
-                  </label>
-                  <label className="flex items-center gap-2 bg-white p-2 rounded-lg border border-amber-200 cursor-pointer">
-                    <input type="checkbox" defaultChecked disabled className="rounded text-amber-600" />
-                    <span><strong>Pre-Dough Room:</strong> 24°C - 26°C Ambient Range</span>
-                  </label>
-                  <label className="flex items-center gap-2 bg-white p-2 rounded-lg border border-amber-200 cursor-pointer">
-                    <input type="checkbox" defaultChecked disabled className="rounded text-amber-600" />
-                    <span><strong>Batch Preparer:</strong> Romeo B. Malusay</span>
-                  </label>
+                <div className="flex items-center gap-1.5 bg-white p-2 rounded border border-gray-200">
+                  <Check size={14} className="text-emerald-700 shrink-0" />
+                  <span><strong>40-Mesh Sifter Screen</strong> · Intact / No tears</span>
                 </div>
               </div>
             </div>
 
-            {/* Modal Footer */}
-            <div className="p-4 bg-gray-50 border-t border-gray-200 flex justify-between items-center gap-3">
+            {/* Ingredient BOM List */}
+            <div className="border border-gray-200 rounded-xl overflow-hidden">
+              <div className="p-2.5 bg-purple-900 text-purple-100 text-xs font-bold flex justify-between">
+                <span>Scaled Raw Material Ingredients Required</span>
+                <span>BOM Pull Target</span>
+              </div>
+              <div className="divide-y divide-gray-100 max-h-48 overflow-y-auto">
+                {(scalingModalOrder.scaledIngredients || []).map((ing, idx) => (
+                  <div key={idx} className="p-2.5 flex justify-between items-center text-xs hover:bg-gray-50">
+                    <div>
+                      <span className="font-mono font-bold text-purple-950">{ing.code}</span> · {ing.name}
+                    </div>
+                    <div className="font-mono font-bold text-[#1E7A3E] text-right">
+                      {ing.dualUnitDisplay || `${ing.requiredSec} ${ing.secondaryUom || 'kg'}`}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Kitting Actions */}
+            <div className="pt-3 border-t flex flex-wrap justify-between items-center gap-2">
               <button
                 type="button"
                 onClick={() => setScalingModalOrder(null)}
-                className="px-4 py-2 rounded-xl text-xs font-semibold text-gray-600 hover:bg-gray-200"
+                className="px-4 py-2 text-xs font-bold text-gray-600 hover:text-gray-900"
               >
-                Close
+                Cancel
               </button>
+
               <button
                 type="button"
                 onClick={() => {
                   const tagId = `KIT-${Date.now().toString().slice(-6)}`;
-                  const totalKg = (scalingModalOrder.scaledIngredients || []).reduce(
-                    (sum, it) => sum + (Number(it.requiredSec) || 0),
-                    0
-                  );
-                  onUpdateOrderStatus(scalingModalOrder.orderId, 'BATCHED_KITTED', tagId, totalKg);
+                  const targetOrd = scalingModalOrder;
+                  const estimatedKg = (targetOrd.requestedQtyPcs || 0) * 0.04 + 5;
+                  onUpdateOrderStatus(targetOrd.orderId, 'BATCHED_KITTED', tagId, estimatedKg);
                   setScalingModalOrder(null);
                   setSelectedTagOrder({
-                    ...scalingModalOrder,
-                    status: 'BATCHED_KITTED',
+                    ...targetOrd,
                     batchTagId: tagId,
-                    actualBatchedKg: totalKg
+                    actualBatchedKg: estimatedKg,
+                    batchedAt: new Date().toISOString().slice(0, 19).replace('T', ' ')
                   });
                 }}
-                className="px-5 py-2.5 rounded-xl bg-[#C8963E] hover:bg-[#b58330] text-[#240e32] font-extrabold text-xs shadow-lg flex items-center gap-2 transition"
+                className="bg-[#1E7A3E] hover:bg-emerald-800 text-white font-extrabold text-xs px-5 py-2.5 rounded-xl shadow-lg flex items-center gap-2 transition"
               >
-                <CheckCircle2 size={16} />
-                <span>Confirm Batch &amp; Generate Kit Tag</span>
+                <CheckCircle2 size={16} /> Complete Scaling &amp; Generate Batch Tag
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* MODAL 2: BATCH KITTING TAG VIEWER & PRINT DIALOG (Form-ING-001) */}
+      {/* ── BATCH TAG PRINT PREVIEW MODAL ── */}
       {selectedTagOrder && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border-2 border-[#5B2E7A] space-y-4">
-            <div className="border-b border-gray-200 pb-3 flex justify-between items-center">
+            <div className="flex justify-between items-start border-b pb-2">
               <div>
-                <h3 className="font-extrabold text-base text-[#240e32]">Production Batch Tag</h3>
-                <p className="text-[10px] text-gray-500 font-mono">Form-ING-001 · Production Floor Kit Identity</p>
+                <span className="font-mono text-[10px] font-bold bg-[#240e32] text-[#E5C585] px-2 py-0.5 rounded">
+                  PHYSICAL BIN IDENTIFIER
+                </span>
+                <h3 className="font-serif font-bold text-lg text-[#240e32] mt-1">
+                  Dry Room 2 Physical Batch Tag
+                </h3>
               </div>
-              <button onClick={() => setSelectedTagOrder(null)} className="text-gray-400 hover:text-gray-700 font-bold">
+              <button
+                type="button"
+                onClick={() => setSelectedTagOrder(null)}
+                className="text-gray-400 hover:text-gray-700 font-extrabold"
+              >
                 ✕
               </button>
             </div>
 
-            <div className="bg-[#FAF6EE] p-4 rounded-xl border border-[#C8963E]/40 space-y-2.5 font-mono text-xs">
-              <div className="flex justify-between border-b border-gray-200 pb-1.5">
-                <span className="text-gray-500">BATCH TAG ID:</span>
-                <strong className="text-purple-900">{selectedTagOrder.batchTagId || 'KIT-AUTO'}</strong>
+            <div className="border-2 border-dashed border-[#5B2E7A] p-4 rounded-xl bg-purple-50/50 space-y-2 text-xs">
+              <div className="flex justify-between font-mono font-extrabold text-sm text-[#5B2E7A] border-b pb-1">
+                <span>{selectedTagOrder.batchTagId || 'KIT-000000'}</span>
+                <span>{selectedTagOrder.orderId}</span>
               </div>
-              <div className="flex justify-between border-b border-gray-200 pb-1.5">
-                <span className="text-gray-500">ORDER NO:</span>
-                <strong>{selectedTagOrder.orderId}</strong>
-              </div>
-              <div className="flex justify-between border-b border-gray-200 pb-1.5">
-                <span className="text-gray-500">FORMULATION:</span>
-                <strong className="text-[#240e32]">{selectedTagOrder.recipeName}</strong>
-              </div>
-              <div className="flex justify-between border-b border-gray-200 pb-1.5">
-                <span className="text-gray-500">TARGET OUTLET:</span>
-                <strong>{selectedTagOrder.outletName}</strong>
-              </div>
-              <div className="flex justify-between border-b border-gray-200 pb-1.5">
-                <span className="text-gray-500">BATCH MULTIPLIER:</span>
-                <strong>{selectedTagOrder.batchMultiplier}x ({selectedTagOrder.requestedQtyPcs} pcs)</strong>
-              </div>
-              <div className="flex justify-between border-b border-gray-200 pb-1.5">
-                <span className="text-gray-500">ACTUAL BATCHED WT:</span>
-                <strong className="text-emerald-700">{selectedTagOrder.actualBatchedKg ? `${selectedTagOrder.actualBatchedKg} kg` : 'Pre-Scaled Kit'}</strong>
-              </div>
-              <div className="flex justify-between border-b border-gray-200 pb-1.5">
-                <span className="text-gray-500">SCALE USED:</span>
-                <span>Bench Scale #1 (#798073)</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-500">PREPARER / TIMESTAMP:</span>
-                <span>Romeo B. Malusay · {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-              </div>
+              <div><strong>Recipe:</strong> {selectedTagOrder.recipeName}</div>
+              <div><strong>Target Facility:</strong> {selectedTagOrder.outletName}</div>
+              <div><strong>Batched Yield:</strong> {selectedTagOrder.requestedQtyPcs} pieces</div>
+              <div><strong>Batch Multiplier:</strong> {selectedTagOrder.batchMultiplier}x</div>
+              <div><strong>Preparer:</strong> Romeo B. Malusay (Dry Room 2 Workbench)</div>
+              <div><strong>Timestamp:</strong> {selectedTagOrder.batchedAt || new Date().toLocaleString()}</div>
             </div>
 
             <div className="flex justify-end gap-2 pt-2 border-t">
               <button
                 type="button"
                 onClick={() => setSelectedTagOrder(null)}
-                className="px-4 py-2 rounded-xl text-xs font-semibold text-gray-600 hover:bg-gray-100"
+                className="px-4 py-2 text-xs font-bold text-gray-600 hover:text-gray-900"
               >
                 Close
               </button>
               <button
                 type="button"
                 onClick={() => window.print()}
-                className="px-4 py-2 rounded-xl bg-[#240e32] text-[#E5C585] font-extrabold text-xs shadow flex items-center gap-1.5"
+                className="bg-[#240e32] text-[#E5C585] font-extrabold text-xs px-4 py-2 rounded-xl shadow flex items-center gap-1.5"
               >
-                <Printer size={14} /> Print Hard-Copy Tag
+                <Printer size={14} /> Print Bin Tag
               </button>
             </div>
           </div>

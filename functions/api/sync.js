@@ -126,7 +126,33 @@ async function projectWithdrawalRequest(env, p, isTest) {
   const items = Array.isArray(p.items) ? p.items : [];
   if (items.length === 0) throw new Error('NO_LINE_ITEMS');
 
-  return [env.DB.prepare(`
+  const stmts = [];
+
+  // SELF-HEALING: Auto-create withdrawal_requests table if migration-v5 has not been applied yet
+  stmts.push(env.DB.prepare(`
+    CREATE TABLE IF NOT EXISTS withdrawal_requests (
+      request_id TEXT PRIMARY KEY,
+      withdrawal_no TEXT,
+      withdrawal_date TEXT,
+      submitted_at TEXT,
+      requesting_line TEXT,
+      department TEXT,
+      purpose TEXT,
+      requisitioned_by TEXT,
+      notes TEXT,
+      total_cost_centavos INTEGER DEFAULT 0,
+      status TEXT DEFAULT 'PENDING_ISSUANCE',
+      items_json TEXT,
+      issued_slip_no TEXT,
+      cancelled_reason TEXT,
+      cancelled_by TEXT,
+      is_test_data INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT
+    )
+  `));
+
+  stmts.push(env.DB.prepare(`
     INSERT INTO withdrawal_requests
       (request_id, withdrawal_no, withdrawal_date, submitted_at, requesting_line,
        department, purpose, requisitioned_by, notes, total_cost_centavos,
@@ -159,7 +185,9 @@ async function projectWithdrawalRequest(env, p, isTest) {
     str(p.status) || 'PENDING_ISSUANCE',
     JSON.stringify(items),
     isTest
-  )];
+  ));
+
+  return stmts;
 }
 
 async function projectWithdrawalRequestCancel(env, p, isTest) {
@@ -168,25 +196,35 @@ async function projectWithdrawalRequestCancel(env, p, isTest) {
 
   const reason = str(p.reason || 'Cancelled');
   const actor = str(p.cancelledBy || 'Outlet Staff');
+  const stmts = [];
 
-  return [
-    env.DB.prepare(`
-      UPDATE withdrawal_requests
-      SET status = 'CANCELLED', cancelled_reason = ?, cancelled_by = ?, updated_at = datetime('now')
-      WHERE request_id = ? OR withdrawal_no = ?
-    `).bind(reason, actor, targetId, targetId),
-    env.DB.prepare(`
-      INSERT INTO audit_log (timestamp, actor, role, action, details, is_test_data)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).bind(
-      str(p.timestamp) || new Date().toISOString(),
-      actor,
-      null,
-      'WITHDRAWAL_REQUEST_CANCELLED',
-      `Material requisition ${targetId} cancelled: ${reason}`,
-      isTest
-    )
-  ];
+  // Check if table exists before issuing UPDATE to avoid SQLITE_ERROR
+  if (env.DB) {
+    try {
+      const tableCheck = await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='withdrawal_requests'").first();
+      if (tableCheck) {
+        stmts.push(env.DB.prepare(`
+          UPDATE withdrawal_requests
+          SET status = 'CANCELLED', cancelled_reason = ?, cancelled_by = ?, updated_at = datetime('now')
+          WHERE request_id = ? OR withdrawal_no = ?
+        `).bind(reason, actor, targetId, targetId));
+      }
+    } catch {}
+  }
+
+  stmts.push(env.DB.prepare(`
+    INSERT INTO audit_log (timestamp, actor, role, action, details, is_test_data)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).bind(
+    str(p.timestamp) || new Date().toISOString(),
+    actor,
+    null,
+    'WITHDRAWAL_REQUEST_CANCELLED',
+    `Material requisition ${targetId} cancelled: ${reason}`,
+    isTest
+  ));
+
+  return stmts;
 }
 
 async function projectWithdrawal(env, p, isTest) {
@@ -238,12 +276,17 @@ async function projectWithdrawal(env, p, isTest) {
   ));
 
   const sourceReqId = pick(p, 'sourceRequestId', 'source_request_id');
-  if (sourceReqId) {
-    stmts.push(env.DB.prepare(`
-      UPDATE withdrawal_requests
-      SET status = 'ISSUED', issued_slip_no = ?, updated_at = datetime('now')
-      WHERE request_id = ? OR withdrawal_no = ?
-    `).bind(slipNo, sourceReqId, sourceReqId));
+  if (sourceReqId && env.DB) {
+    try {
+      const tableCheck = await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='withdrawal_requests'").first();
+      if (tableCheck) {
+        stmts.push(env.DB.prepare(`
+          UPDATE withdrawal_requests
+          SET status = 'ISSUED', issued_slip_no = ?, updated_at = datetime('now')
+          WHERE request_id = ? OR withdrawal_no = ?
+        `).bind(slipNo, sourceReqId, sourceReqId));
+      }
+    } catch {}
   }
 
   stmts.push(env.DB.prepare(`DELETE FROM withdrawal_items WHERE slip_no = ?`).bind(slipNo));

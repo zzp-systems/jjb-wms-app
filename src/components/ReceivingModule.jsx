@@ -4,13 +4,13 @@
 import React, { useState } from 'react';
 import {
   Plus, Trash2, CheckCircle2, ShieldCheck,
-  Printer, Truck, FileText, Thermometer, Link2, AlertCircle, AlertTriangle
+  Printer, Truck, FileText, Thermometer, AlertCircle, AlertTriangle
 } from 'lucide-react';
 
 export default function ReceivingModule({
-  inventory,
+  inventory = [],
   onSaveReceiving,
-  receivingReports,
+  receivingReports = [],
   currentRole,
   isMobileMode,
   prefilledItem,
@@ -18,7 +18,7 @@ export default function ReceivingModule({
   onUpdatePoStatus
 }) {
   const todayStr = new Date().toISOString().slice(0, 10);
-  const [reportNo, setReportNo] = useState(`RR-${todayStr.replace(/-/g, '')}-${String(receivingReports.length + 1).padStart(3, '0')}`);
+  const [reportNo, setReportNo] = useState(`RR-${todayStr.replace(/-/g, '')}-${String((receivingReports || []).length + 1).padStart(3, '0')}`);
   const [poNo, setPoNo] = useState('');
   const [drNo, setDrNo] = useState('');
   const [supplier, setSupplier] = useState('P.L. Sebastian Corporation');
@@ -54,12 +54,12 @@ export default function ReceivingModule({
     buildInitialRow(prefilledItem || defaultMat)
   ]);
 
-  const pendingPos = purchaseOrders.filter((po) => po.status === 'PENDING_DELIVERY');
+  const pendingPos = (purchaseOrders || []).filter((po) => po && po.status === 'PENDING_DELIVERY');
 
   const handleSelectPo = (targetPoNo) => {
     setSelectedPoId(targetPoNo);
     if (!targetPoNo) return;
-    const po = purchaseOrders.find((p) => p.poNo === targetPoNo);
+    const po = (purchaseOrders || []).find((p) => p && p.poNo === targetPoNo);
     if (!po) return;
 
     setPoNo(po.poNo);
@@ -169,7 +169,7 @@ export default function ReceivingModule({
 
     // 1. Cross-reference comparison against selected Purchase Order
     if (selectedPoId && onUpdatePoStatus) {
-      const origPo = purchaseOrders.find((p) => p.poNo === selectedPoId);
+      const origPo = (purchaseOrders || []).find((p) => p && p.poNo === selectedPoId);
       let hasChanges = false;
       const changeLogs = [];
 
@@ -237,7 +237,7 @@ export default function ReceivingModule({
     }
 
     // Reset for next shipment
-    setReportNo(`RR-${todayStr.replace(/-/g, '')}-${String(receivingReports.length + 2).padStart(3, '0')}`);
+    setReportNo(`RR-${todayStr.replace(/-/g, '')}-${String((receivingReports || []).length + 2).padStart(3, '0')}`);
     setPoNo(''); setDrNo(''); setInvoiceNo('');
     setShipmentNotes('');
     setSelectedPoId('');
@@ -275,7 +275,7 @@ export default function ReceivingModule({
         <div className="bg-[#FAF6EE] p-3.5 rounded-xl border border-[#C8963E]/40 space-y-2">
           <div className="flex items-center justify-between flex-wrap gap-2">
             <div className="flex items-center gap-2">
-              <Link2 size={16} className="text-[#C8963E]" />
+              <FileText size={16} className="text-[#C8963E]" />
               <label className="text-xs font-bold text-[#240e32]">Cross-Reference Pending Purchase Order (`Form-PUR-002`):</label>
             </div>
             <span className="text-[11px] font-bold text-amber-900 bg-amber-100 px-2.5 py-0.5 rounded-full">
@@ -580,7 +580,7 @@ export default function ReceivingModule({
       <div className="bg-white rounded-xl border border-[#E2D1B8] shadow-sm overflow-hidden">
         <div className="p-4 bg-[#FAF6EE] border-b border-[#E2D1B8] flex justify-between items-center">
           <h3 className="font-serif font-bold text-[#3D1C52] text-sm">
-            Archived Inbound Receiving Reports ({receivingReports.length})
+            Archived Inbound Receiving Reports ({(receivingReports || []).length})
           </h3>
           <span className="text-xs text-gray-500 font-mono font-semibold">Indangan Central Plant</span>
         </div>
@@ -600,7 +600,7 @@ export default function ReceivingModule({
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {receivingReports.map((r, i) => (
+              {(receivingReports || []).map((r, i) => (
                 <tr key={i} className="hover:bg-gray-50">
                   <td className="p-2.5 font-mono font-bold text-[#5B2E7A]">{r.reportNo}</td>
                   <td className="p-2.5 font-mono text-gray-600">{r.date} {r.time}</td>

@@ -4,7 +4,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
   FileSpreadsheet, Download, Upload, Filter, Search, Printer, CheckCircle2, 
-  AlertTriangle, Layers, Calendar, ChevronRight, FileText, Plus, Trash2, Edit2, ShoppingCart, RefreshCw, Link2
+  AlertTriangle, Layers, Calendar, ChevronRight, FileText, Plus, Trash2, ShoppingCart, RefreshCw
 } from 'lucide-react';
 import { calculateReorderSuggestions } from '../utils/wmsLogic';
 
@@ -22,12 +22,12 @@ const DEFAULT_AUTHORIZED_SUPPLIERS = [
 ];
 
 export default function ReportsModule({
-  inventory,
-  receivingReports,
-  withdrawals,
-  batchOrders,
-  adjustments,
-  quarantineList,
+  inventory = [],
+  receivingReports = [],
+  withdrawals = [],
+  batchOrders = [],
+  adjustments = [],
+  quarantineList = [],
   currentRole,
   onImportInventoryCsv,
   onRecordAudit,
@@ -174,7 +174,7 @@ export default function ReportsModule({
 
   const poTotalEstimatedCost = poDraftItems.reduce((acc, it) => acc + (it.estimatedCost || 0), 0);
 
-  const handleSaveDraftPo = () => {
+  const handleSavePoWithStatus = (targetStatus = 'PENDING_DELIVERY') => {
     if (poDraftItems.length === 0) {
       alert('Please add at least one material to the Purchase Order.');
       return;
@@ -192,7 +192,7 @@ export default function ReportsModule({
       generatedDate: new Date().toISOString().slice(0, 10),
       items: poDraftItems,
       totalCost: poTotalEstimatedCost,
-      status: 'PO_DRAFT',
+      status: targetStatus,
       preparedBy: `${currentRole} (Purchasing & Inventory Manager)`,
       notes: poNotes
     };
@@ -201,58 +201,24 @@ export default function ReportsModule({
       onSavePurchaseOrder(poRecord);
     }
 
-    alert(`📝 Purchase Order ${poNo} saved as DRAFT. It is recorded in your PO Register below and remains editable.`);
-  };
-
-  const handleSaveAndDispatchPo = () => {
-    if (poDraftItems.length === 0) {
-      alert('Please add at least one material to the Purchase Order.');
-      return;
+    if (targetStatus === 'PO_DRAFT') {
+      alert(`📝 Purchase Order ${poNo} saved as DRAFT in the PO Register. It is still editable and has not been dispatched to Jade's dock yet.`);
+    } else {
+      alert(`✅ Purchase Order ${poNo} FINALIZED and dispatched to Inbound Dock as PENDING_DELIVERY. Jade can now cross-reference deliveries against this PO.`);
     }
-    const resolvedSupplier = isCustomSupplier
-      ? (customSupplierName.trim() || 'Custom Lowest-Offering Vendor')
-      : (selectedSupplier === 'ALL' ? 'Consolidated Vendors' : selectedSupplier);
-
-    const poRecord = {
-      poNo,
-      supplier: resolvedSupplier,
-      supplierContact: isCustomSupplier ? customSupplierContact : '',
-      supplierAddress: isCustomSupplier ? customSupplierAddress : '',
-      date: new Date().toISOString().slice(0, 10),
-      generatedDate: new Date().toISOString().slice(0, 10),
-      items: poDraftItems,
-      totalCost: poTotalEstimatedCost,
-      status: 'PENDING_DELIVERY',
-      preparedBy: `${currentRole} (Purchasing & Inventory Manager)`,
-      notes: poNotes
-    };
-
-    if (onSavePurchaseOrder) {
-      onSavePurchaseOrder(poRecord);
-    }
-
-    alert(`✅ Purchase Order ${poNo} finalized and marked PENDING DELIVERY! Jade can now cross-reference dock deliveries against this PO.`);
 
     // Reset for next PO
     setPoNo(`PO-2026-${Math.floor(1050 + Math.random() * 50)}`);
     setPoNotes('');
-    setPoDraftItems([]);
   };
 
-  const handleLoadPoIntoDraft = (po) => {
+  const handleEditDraftPo = (po) => {
     setPoNo(po.poNo);
-    setPoDraftItems(po.items || []);
+    setSelectedSupplier(po.supplier);
     setPoNotes(po.notes || '');
-    if (po.supplierContact) {
-      setIsCustomSupplier(true);
-      setCustomSupplierName(po.supplier);
-      setCustomSupplierContact(po.supplierContact || '');
-      setCustomSupplierAddress(po.supplierAddress || '');
-    } else {
-      setIsCustomSupplier(false);
-      setSelectedSupplier(po.supplier || 'ALL');
+    if (Array.isArray(po.items)) {
+      setPoDraftItems(po.items.map((it) => ({ ...it })));
     }
-    setActiveSubTab('po_generator');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -262,14 +228,14 @@ export default function ReportsModule({
     let dateField = 'date';
 
     if (ledgerType === 'RECEIVING') {
-      dataset = receivingReports;
+      dataset = receivingReports || [];
     } else if (ledgerType === 'WITHDRAWALS') {
-      dataset = withdrawals;
+      dataset = withdrawals || [];
     } else if (ledgerType === 'BATCHING') {
-      dataset = batchOrders;
+      dataset = batchOrders || [];
       dateField = 'requestDate';
     } else if (ledgerType === 'ADJUSTMENTS') {
-      dataset = adjustments;
+      dataset = adjustments || [];
     }
 
     return dataset.filter((row) => {
@@ -314,7 +280,7 @@ export default function ReportsModule({
   const handleExportReceivingCsv = () => {
     const headers = ["ReportNo", "Date", "PoNo", "Supplier", "InvoiceNo", "MaterialCode", "MaterialName", "PrimaryQty", "PrimaryUom", "SecondaryQty", "SecondaryUom", "UnitPrice", "TotalAmount", "LotNumber", "ExpiryDate"];
     const rows = [];
-    receivingReports.forEach((r) => {
+    (receivingReports || []).forEach((r) => {
       (r.items || []).forEach((it) => {
         rows.push([
           r.reportNo,
@@ -420,7 +386,7 @@ export default function ReportsModule({
                 : 'text-gray-600 hover:text-gray-900'
             }`}
           >
-            <Printer size={13} /> Form-PUR-002 PO Generator &amp; Register ({purchaseOrders.length})
+            <Printer size={13} /> Form-PUR-002 PO Generator &amp; Register ({(purchaseOrders || []).length})
           </button>
           <button
             onClick={() => setActiveSubTab('ledger')}
@@ -594,28 +560,28 @@ export default function ReportsModule({
               <div className="flex items-center gap-2 flex-wrap">
                 <button
                   type="button"
-                  onClick={handleSaveDraftPo}
+                  onClick={() => handleSavePoWithStatus('PO_DRAFT')}
                   disabled={poDraftItems.length === 0}
                   className={`text-xs px-3.5 py-2 rounded-lg font-bold flex items-center gap-1.5 shadow transition ${
                     poDraftItems.length > 0
-                      ? 'bg-purple-900 hover:bg-purple-950 text-white'
+                      ? 'bg-amber-600 hover:bg-amber-700 text-white'
                       : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                   }`}
-                  title="Save as Draft: keep editing later without notifying dock"
+                  title="Save as editable draft without locking to Inbound Receiving dock yet"
                 >
                   <FileText size={14} /> Save as Draft (PO_DRAFT)
                 </button>
 
                 <button
                   type="button"
-                  onClick={handleSaveAndDispatchPo}
+                  onClick={() => handleSavePoWithStatus('PENDING_DELIVERY')}
                   disabled={poDraftItems.length === 0}
                   className={`text-xs px-4 py-2 rounded-lg font-bold flex items-center gap-1.5 shadow transition ${
                     poDraftItems.length > 0
                       ? 'bg-[#1E7A3E] hover:bg-emerald-800 text-white'
                       : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                   }`}
-                  title="Finalize PO: immediately unlocks Jade's dock cross-reference"
+                  title="Finalize PO and dispatch to Jade's Inbound Receiving dock selector"
                 >
                   <CheckCircle2 size={14} /> Finalize to Dock (PENDING_DELIVERY)
                 </button>
@@ -630,10 +596,10 @@ export default function ReportsModule({
                     items: poDraftItems,
                     totalCost: poTotalEstimatedCost,
                     generatedDate: new Date().toISOString().slice(0, 10),
-                    preparedBy: currentRole || 'Mariejohn F. Tacuban'
+                    preparedBy: 'Mariejohn F. Tacuban'
                   })}
                   disabled={poDraftItems.length === 0}
-                  className={`text-xs px-3.5 py-2 rounded-lg font-bold flex items-center gap-1.5 shadow transition ${
+                  className={`text-xs px-4 py-2 rounded-lg font-bold flex items-center gap-1.5 shadow transition ${
                     poDraftItems.length > 0 
                       ? 'bg-[#C8963E] hover:bg-[#b08030] text-[#240e32]' 
                       : 'bg-gray-200 text-gray-400 cursor-not-allowed'
@@ -766,11 +732,11 @@ export default function ReportsModule({
                 </p>
               </div>
               <span className="text-xs font-mono font-bold text-[#5B2E7A]">
-                {purchaseOrders.length} Recorded POs
+                {(purchaseOrders || []).length} Recorded POs
               </span>
             </div>
 
-            {purchaseOrders.length === 0 ? (
+            {(purchaseOrders || []).length === 0 ? (
               <div className="p-6 text-center text-gray-400 text-xs italic">
                 No purchase orders recorded yet. Generate a PO above and click "Save &amp; Record PO".
               </div>
@@ -790,7 +756,7 @@ export default function ReportsModule({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
-                    {purchaseOrders.map((po, i) => (
+                    {(purchaseOrders || []).map((po, i) => (
                       <tr key={i} className="hover:bg-gray-50">
                         <td className="p-2.5 font-mono font-bold text-[#5B2E7A]">{po.poNo}</td>
                         <td className="p-2.5 font-mono text-gray-600">{po.date}</td>
@@ -802,14 +768,14 @@ export default function ReportsModule({
                         <td className="p-2.5">
                           <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
                             po.status === 'RECEIVED'
-                              ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                              ? 'bg-green-100 text-green-800'
                               : po.status === 'RECEIVED_WITH_CHANGES'
-                              ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                              ? 'bg-amber-100 text-amber-800'
                               : po.status === 'PO_DRAFT'
-                              ? 'bg-purple-100 text-purple-900 border border-purple-300'
+                              ? 'bg-yellow-100 text-yellow-900 border border-yellow-300'
                               : po.status === 'CANCELLED'
-                              ? 'bg-red-100 text-red-900 border border-red-300'
-                              : 'bg-blue-100 text-blue-900 border border-blue-300'
+                              ? 'bg-red-100 text-red-800'
+                              : 'bg-blue-100 text-blue-800'
                           }`}>
                             {po.status === 'RECEIVED'
                               ? '✓ RECEIVED CLEAN'
@@ -826,7 +792,7 @@ export default function ReportsModule({
                           {po.receivingReportNo ? (
                             <span className="text-emerald-700 font-bold">{po.receivingReportNo}</span>
                           ) : po.status === 'PO_DRAFT' ? (
-                            <span className="text-purple-700 italic">Not Dispatched</span>
+                            <span className="text-yellow-700 italic">Draft (Not Dispatched)</span>
                           ) : (
                             <span className="text-gray-400 italic">Awaiting Dock</span>
                           )}
@@ -838,16 +804,15 @@ export default function ReportsModule({
                               onClick={() => setSelectedPoPreview(po)}
                               className="text-xs text-[#5B2E7A] hover:underline font-bold"
                             >
-                              View
+                              View Form
                             </button>
-
                             {po.status === 'PO_DRAFT' && (
                               <>
                                 <button
                                   type="button"
-                                  onClick={() => handleLoadPoIntoDraft(po)}
+                                  onClick={() => handleEditDraftPo(po)}
                                   className="text-xs text-amber-700 hover:underline font-bold"
-                                  title="Load this draft PO into workbench to edit"
+                                  title="Re-open in workbench to adjust prices or quantities"
                                 >
                                   Edit
                                 </button>
@@ -856,6 +821,7 @@ export default function ReportsModule({
                                   onClick={() => {
                                     if (onSavePurchaseOrder) {
                                       onSavePurchaseOrder({ ...po, status: 'PENDING_DELIVERY' });
+                                      alert(`✅ PO ${po.poNo} finalized and sent to Inbound Receiving dock!`);
                                     }
                                   }}
                                   className="text-xs text-emerald-700 hover:underline font-bold"
@@ -886,10 +852,10 @@ export default function ReportsModule({
               {/* Dataset Selector */}
               <div className="flex gap-1.5 flex-wrap">
                 {[
-                  { id: 'RECEIVING', label: 'Inbound Receiving (Form-REC-001)', count: receivingReports.length },
-                  { id: 'WITHDRAWALS', label: 'Stock Withdrawals (Form-WAR-001)', count: withdrawals.length },
-                  { id: 'BATCHING', label: 'Outlet Kitting (Form-ING-001)', count: batchOrders.length },
-                  { id: 'ADJUSTMENTS', label: 'Adjustments & NCR', count: adjustments.length + quarantineList.length }
+                  { id: 'RECEIVING', label: 'Inbound Receiving (Form-REC-001)', count: (receivingReports || []).length },
+                  { id: 'WITHDRAWALS', label: 'Stock Withdrawals (Form-WAR-001)', count: (withdrawals || []).length },
+                  { id: 'BATCHING', label: 'Outlet Kitting (Form-ING-001)', count: (batchOrders || []).length },
+                  { id: 'ADJUSTMENTS', label: 'Adjustments & NCR', count: (adjustments || []).length + quarantineList.length }
                 ].map((d) => (
                   <button
                     key={d.id}

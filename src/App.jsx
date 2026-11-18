@@ -160,13 +160,13 @@ export default function App() {
   // Main WMS State
   const [inventory, setInventory] = useState(() => getSaved('inventory', MASTER_MATERIALS));
   const [receivingReports, setReceivingReports] = useState(() => getSaved('receiving', INITIAL_RECEIVING_REPORTS));
-  const [purchaseOrders, setPurchaseOrders] = useState(() => getSaved('purchase_orders', []));
   const [withdrawals, setWithdrawals] = useState(() => getSaved('withdrawals', INITIAL_WITHDRAWALS));
   const [pendingRequests, setPendingRequests] = useState(() => getSaved('pending_requests', []));
   const [batchOrders, setBatchOrders] = useState(() => getSaved('batch_orders', INITIAL_BATCHING_ORDERS));
   const [adjustments, setAdjustments] = useState(() => getSaved('adjustments', INITIAL_ADJUSTMENTS));
   const [quarantineList, setQuarantineList] = useState(() => getSaved('quarantine', INITIAL_QUARANTINE));
   const [auditLogs, setAuditLogs] = useState(() => getSaved('audit_logs', INITIAL_AUDIT_LOGS));
+  const [purchaseOrders, setPurchaseOrders] = useState(() => getSaved('purchase_orders', []));
 
   // UI Preferences
   const initialUiPrefs = loadUiPrefs();
@@ -768,6 +768,7 @@ export default function App() {
   useEffect(() => { saveToStorage('adjustments', adjustments); }, [adjustments]);
   useEffect(() => { saveToStorage('quarantine', quarantineList); }, [quarantineList]);
   useEffect(() => { saveToStorage('audit_logs', auditLogs); }, [auditLogs]);
+  useEffect(() => { saveToStorage('purchase_orders', purchaseOrders); }, [purchaseOrders]);
 
   // Real-Time Cross-Tab & Floor Kiosk Synchronization
   useEffect(() => {
@@ -900,6 +901,67 @@ export default function App() {
   }, [lastEodTriggerDate]);
 
   // WORKFLOW 1: Inbound Receiving Save
+  // Purchase Order Handlers (Form-PUR-002)
+  const handleSavePurchaseOrder = (newPo) => {
+    setPurchaseOrders((prev) => {
+      const exists = prev.some((p) => p.poNo === newPo.poNo);
+      if (exists) {
+        return prev.map((p) => (p.poNo === newPo.poNo ? { ...p, ...newPo, updatedAt: new Date().toISOString() } : p));
+      }
+      return [newPo, ...prev];
+    });
+    recordAudit(
+      'PO_SAVED',
+      `Purchase order ${newPo.poNo} saved for ${newPo.supplier} (Status: ${newPo.status}, Total: ₱${Number(newPo.totalCost || 0).toLocaleString()})`
+    );
+    postSyncEvent('PURCHASE_ORDER_SAVED', `PO_${newPo.poNo}_${Date.now()}`, newPo);
+    showToast(`Purchase order ${newPo.poNo} recorded!`);
+  };
+
+  const handleUpdatePoStatus = (poNo, newStatus, details = {}) => {
+    setPurchaseOrders((prev) =>
+      prev.map((po) => {
+        if (po.poNo !== poNo) return po;
+        return {
+          ...po,
+          status: newStatus,
+          receivingReportNo: details.receivingReportNo || po.receivingReportNo,
+          receivedDate: details.receivedDate || po.receivedDate,
+          receivedBy: details.receivedBy || po.receivedBy,
+          varianceNotes: details.notes || po.varianceNotes,
+          updatedAt: new Date().toISOString()
+        };
+      })
+    );
+    recordAudit(
+      'PO_STATUS_UPDATED',
+      `Purchase order ${poNo} marked as ${newStatus} by ${currentRole}`
+    );
+    postSyncEvent('PURCHASE_ORDER_UPDATED', `PO_UPD_${poNo}_${newStatus}_${Date.now()}`, {
+      poNo,
+      status: newStatus,
+      ...details
+    });
+  };
+
+  const handleUpdatePendingRequest = (requestId, updates = {}) => {
+    setPendingRequests((prev) =>
+      prev.map((req) => {
+        if (req.requestId !== requestId && req.withdrawalNo !== requestId) return req;
+        return {
+          ...req,
+          ...updates,
+          updatedAt: new Date().toISOString()
+        };
+      })
+    );
+    recordAudit(
+      'WITHDRAWAL_REQUEST_UPDATED',
+      `Jade Dela Cruz updated queued requisition ${requestId} (items/quantities adjusted).`
+    );
+    showToast(`Requisition ${requestId} updated in queue.`);
+  };
+
   const handleSaveReceiving = (newReport) => {
     setReceivingReports((prev) => [newReport, ...prev]);
 
@@ -1209,7 +1271,7 @@ export default function App() {
     showToast(`Bulk requisition for ${order.recipeName} sent to Jade Dela Cruz in Tab 4!`);
   };
 
-  // WORKFLOW 3C — Jade Approves Romeo's Bulk Requisition (FK Protected + Custom Items Support)
+  // WORKFLOW 3C — Jade Approves Romeo's Bulk Requisition (FK Protected with Review Overrides)
   const handleApprovePendingWithdrawal = (orderId, customItems = null, customNotes = '') => {
     const order = batchOrders.find((o) => o.orderId === orderId);
     if (!order) return;
@@ -1217,39 +1279,37 @@ export default function App() {
     const recipe =
       recipes.find((r) => r.sku === order.recipeSku) ||
       MASTER_RECIPES.find((r) => r.sku === order.recipeSku);
+    if (!recipe && !customItems) return;
 
-    const itemsToUse = (customItems && customItems.length > 0)
-      ? customItems
-      : (recipe ? calculateRecipeIngredients(recipe, order.batchMultiplier) : []);
-
-    const nowStr = new Date().toISOString().slice(0, 19).replace('T', ' ');
     const slipNo = `WS-BULK-${Date.now().toString().slice(-6)}`;
+    const nowStr = new Date().toISOString().slice(0, 19).replace('T', ' ');
 
-    const rawWithdrawalItems = itemsToUse.map((ing) => {
-      const rawCode = ing.code || ing.materialCode;
-      const isSubRecipe = String(rawCode || '').startsWith('SUB-');
-      const mat = inventory.find((m) => m.code === rawCode);
-      const resolvedCode = mat ? mat.code : (isSubRecipe ? null : rawCode);
+    let rawWithdrawalItems = [];
 
-      const qtyReq = Number(ing.qtyRequestedSec ?? ing.requiredKg ?? 0);
-      const qtyIss = Number(ing.qtyIssuedSec ?? ing.requiredKg ?? qtyReq);
+    if (Array.isArray(customItems) && customItems.length > 0) {
+      rawWithdrawalItems = customItems;
+    } else {
+      const requiredIngredients = calculateRecipeIngredients(recipe, order.batchMultiplier);
+      rawWithdrawalItems = requiredIngredients.map((ing) => {
+        const isSubRecipe = String(ing.code || '').startsWith('SUB-');
+        const mat = inventory.find((m) => m.code === ing.code);
+        const resolvedCode = mat ? mat.code : (isSubRecipe ? null : ing.code);
 
-      return {
-        materialCode: resolvedCode,
-        name: ing.name || mat?.name || rawCode,
-        qtyRequestedSec: qtyReq,
-        qtyIssuedSec: qtyIss,
-        secondaryUom: ing.secondaryUom || mat?.secondaryUom || 'kg',
-        lotNumber: ing.lotNumber || (mat && mat.lots?.length > 0 ? (mat.lots[0]?.lotNumber || 'FEFO-AUTO') : 'FEFO-AUTO'),
-        storageRoom: ing.storageRoom || (mat ? mat.room : 'Dry Room 1'),
-        estimatedCost: ing.estimatedCost != null
-          ? Number(ing.estimatedCost)
-          : (mat ? +(qtyIss * (Number(mat.unitCost || 0) / Number(mat.conversionFactor || 1))).toFixed(2) : 0),
-        remarks: ing.remarks || (isSubRecipe
-          ? `Sub-Assembly Preparation: ${ing.name} for ${order.orderId}`
-          : `Bulk batching issue for ${order.orderId}`)
-      };
-    });
+        return {
+          materialCode: resolvedCode,
+          name: ing.name || mat?.name || ing.code,
+          qtyRequestedSec: Number(ing.requiredKg || 0),
+          qtyIssuedSec: Number(ing.requiredKg || 0),
+          secondaryUom: mat?.secondaryUom || 'kg',
+          lotNumber: mat && mat.lots?.length > 0 ? (mat.lots[0]?.lotNumber || 'FEFO-AUTO') : 'FEFO-AUTO',
+          storageRoom: mat ? mat.room : 'Dry Room 1',
+          estimatedCost: mat ? +(Number(ing.requiredKg || 0) * (Number(mat.unitCost || 0) / Number(mat.conversionFactor || 1))).toFixed(2) : 0,
+          remarks: isSubRecipe
+            ? `Sub-Assembly Preparation: ${ing.name} for ${order.orderId}`
+            : `Bulk batching issue for ${order.orderId}`
+        };
+      });
+    }
 
     const newWithdrawal = {
       slipNo,
@@ -1269,7 +1329,7 @@ export default function App() {
     performWithdrawal(newWithdrawal, {
       sourceChannel: 'BULK_BATCHING',
       auditAction: 'BULK_REQUISITION_APPROVED',
-      auditDetails: `Jade Dela Cruz authorized bulk bodega release (Slip: ${slipNo}) for ${order.recipeName} (${order.orderId})${customItems ? ' [Adjusted by Custodian]' : ''}. Scale & Kit unlocked for Romeo.`
+      auditDetails: `Jade Dela Cruz authorized bulk bodega release (Slip: ${slipNo}) for ${order.recipeName} (${order.orderId})${customNotes ? ` [Adjustments: ${customNotes}]` : ''}. Scale & Kit unlocked for Romeo.`
     });
 
     setBatchOrders((prev) =>
@@ -1280,7 +1340,7 @@ export default function App() {
           bulkRequestStatus: 'BULK_ISSUED_BY_JADE',
           bulkApprovedAt: nowStr,
           bulkApprovedBy: currentRole,
-          bulkRequisitionSlipNo: slipNo
+          notes: customNotes ? [o.notes, `[Jade: ${customNotes}]`].filter(Boolean).join(' | ') : o.notes
         };
       })
     );
@@ -1292,12 +1352,12 @@ export default function App() {
         orderId,
         bulkRequestStatus: 'BULK_ISSUED_BY_JADE',
         bulkApprovedAt: nowStr,
-        bulkApprovedBy: currentRole,
-        bulkRequisitionSlipNo: slipNo
+        bulkApprovedBy: currentRole
       }
     );
 
     showToast(`Bulk materials authorized & deducted! Romeo's Scale & Kit is unlocked.`);
+    return;
   };
 
   // WORKFLOW 3D — Jade Declines Romeo's Bulk Requisition
@@ -1844,31 +1904,33 @@ export default function App() {
 
             {activeTab === 'receiving' && (
               <ReceivingModule
-                inventory={inventory}
+                inventory={inventory || []}
                 onSaveReceiving={handleSaveReceiving}
-                receivingReports={receivingReports}
+                receivingReports={receivingReports || []}
                 currentRole={currentRole}
                 isMobileMode={isMobileMode}
                 prefilledItem={prefilledItem}
-                purchaseOrders={purchaseOrders}
+                purchaseOrders={purchaseOrders || []}
                 onUpdatePoStatus={handleUpdatePoStatus}
               />
             )}
 
             {activeTab === 'issuance' && (
               <IssuanceModule
-                inventory={inventory}
+                inventory={inventory || []}
                 onSaveWithdrawal={handleSaveWithdrawal}
-                withdrawals={withdrawals}
-                pendingRequests={pendingRequests}
+                withdrawals={withdrawals || []}
+                pendingRequests={pendingRequests || []}
                 onIssuePendingRequest={handleIssuePendingRequest}
                 onCancelPendingRequest={handleCancelPendingRequest}
-                batchOrders={batchOrders}
+                onUpdatePendingRequest={handleUpdatePendingRequest}
+                batchOrders={batchOrders || []}
                 onApprovePendingWithdrawal={handleApprovePendingWithdrawal}
                 onDeclineBulkWithdrawal={handleDeclineBulkWithdrawal}
                 currentRole={currentRole}
                 isMobileMode={isMobileMode}
                 prefilledItem={prefilledItem}
+                recipes={recipes}
               />
             )}
 
@@ -1913,17 +1975,17 @@ export default function App() {
 
             {activeTab === 'reports' && (
               <ReportsModule
-                inventory={inventory}
-                receivingReports={receivingReports}
-                withdrawals={withdrawals}
-                batchOrders={batchOrders}
-                adjustments={adjustments}
-                quarantineList={quarantineList}
+                inventory={inventory || []}
+                receivingReports={receivingReports || []}
+                withdrawals={withdrawals || []}
+                batchOrders={batchOrders || []}
+                adjustments={adjustments || []}
+                quarantineList={quarantineList || []}
                 currentRole={currentRole}
                 onImportInventoryCsv={handleImportInventoryCsv}
                 onRecordAudit={recordAudit}
                 onOpenImportModal={() => setIsImportModalOpen(true)}
-                purchaseOrders={purchaseOrders}
+                purchaseOrders={purchaseOrders || []}
                 onSavePurchaseOrder={handleSavePurchaseOrder}
               />
             )}
