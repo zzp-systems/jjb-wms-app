@@ -4,6 +4,7 @@ import {
   UNIFIED_PRODUCTION_LINES,
   UNIFIED_CONSUMPTION_PURPOSES,
   getMaterialUnitPresets,
+  getLowestPresetIndex,
   formatMaterialAvailability,
   evaluateBatchCutoffPht,
   computeRecipeBatchBreakdown
@@ -45,7 +46,7 @@ export default function OutletRequisitionPortal({
   const [consumptionPurpose, setConsumptionPurpose] = useState(UNIFIED_CONSUMPTION_PURPOSES[0]);
   const [notes, setNotes] = useState('');
   const [selectedMatCode, setSelectedMatCode] = useState(inventory[0]?.code || 'RM-FLR-001');
-  const [selectedPresetIdx, setSelectedPresetIdx] = useState(0);
+  const [selectedPresetIdx, setSelectedPresetIdx] = useState(() => getLowestPresetIndex(getMaterialUnitPresets(inventory[0] || {})));
   const [packCount, setPackCount] = useState(1);
   const [cartItems, setCartItems] = useState([]);
 
@@ -705,8 +706,10 @@ export default function OutletRequisitionPortal({
                 <select
                   value={selectedMatCode}
                   onChange={(e) => {
-                    setSelectedMatCode(e.target.value);
-                    setSelectedPresetIdx(0);
+                    const newCode = e.target.value;
+                    setSelectedMatCode(newCode);
+                    const newMat = inventory.find((m) => m.code === newCode) || {};
+                    setSelectedPresetIdx(getLowestPresetIndex(getMaterialUnitPresets(newMat)));
                   }}
                   className="w-full border border-gray-300 rounded-lg px-2.5 py-2 text-xs font-semibold bg-white"
                 >

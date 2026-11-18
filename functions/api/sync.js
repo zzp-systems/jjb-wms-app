@@ -198,7 +198,6 @@ async function projectWithdrawalRequestCancel(env, p, isTest) {
   const actor = str(p.cancelledBy || 'Outlet Staff');
   const stmts = [];
 
-  // Check if table exists before issuing UPDATE to avoid SQLITE_ERROR
   if (env.DB) {
     try {
       const tableCheck = await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='withdrawal_requests'").first();

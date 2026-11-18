@@ -292,7 +292,7 @@ export default function ReceivingModule({
               <option value="">-- Manual Ingest / No Pre-Linked PO --</option>
               {pendingPos.map((po) => (
                 <option key={po.poNo} value={po.poNo}>
-                  {po.poNo} · {po.supplier} ({po.items?.length || 0} SKUs — ₱{(po.totalCost || 0).toLocaleString()})
+                  {po.poNo} · {po.supplier} [Charge To: {po.chargeTo || 'Pan De Verde'}] ({po.items?.length || 0} SKUs — ₱{(po.totalCost || 0).toLocaleString()})
                 </option>
               ))}
             </select>
@@ -308,11 +308,18 @@ export default function ReceivingModule({
           </div>
 
           {selectedPoId && (
-            <div className="text-[11px] text-[#1E7A3E] bg-green-50 border border-green-200 p-2 rounded flex items-center gap-2 font-medium">
-              <CheckCircle2 size={14} />
-              <span>
-                Linked to <strong>{selectedPoId}</strong>. Quantities below are pre-loaded from Mariejohn's PO. You can modify actual received quantities, note damages, or add/remove items as delivered.
-              </span>
+            <div className="text-[11px] text-[#1E7A3E] bg-green-50 border border-green-200 p-2.5 rounded flex items-center justify-between gap-2 font-medium">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 size={14} />
+                <span>
+                  Linked to <strong>{selectedPoId}</strong>. Quantities below are pre-loaded from Mariejohn's PO.
+                </span>
+              </div>
+              {pendingPos.find(p => p.poNo === selectedPoId)?.chargeTo && (
+                <span className="bg-purple-100 text-purple-950 font-bold px-2 py-0.5 rounded text-[10px]">
+                  Charge To: {pendingPos.find(p => p.poNo === selectedPoId).chargeTo}
+                </span>
+              )}
             </div>
           )}
         </div>

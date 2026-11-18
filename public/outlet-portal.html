@@ -1729,13 +1729,30 @@
       }
     }
 
+    function getLowestPresetIndex(presets = []) {
+      if (!Array.isArray(presets) || presets.length === 0) return 0;
+      const pieceIdx = presets.findIndex(p => p.label && p.label.toLowerCase().includes('1 piece'));
+      if (pieceIdx >= 0) return pieceIdx;
+      const canIdx = presets.findIndex(p => p.badge === 'SINGLE CAN' || (p.label && p.label.toLowerCase() === '1 can'));
+      if (canIdx >= 0) return canIdx;
+      const baseIdx = presets.findIndex(p => p.badge === 'BASE UOM');
+      if (baseIdx >= 0) return baseIdx;
+      let minIdx = 0, minMult = Infinity;
+      presets.forEach((p, i) => {
+        const m = Number(p.multiplierInSec) || 0;
+        if (m > 0 && m < minMult) { minMult = m; minIdx = i; }
+      });
+      return minIdx;
+    }
     function handleMaterialItemChange() {
       const code = document.getElementById('materialSelect').value;
       const mat = catalogMaterials.find((m) => m.code === code) || catalogMaterials[0];
       currentUnitPresets = getMaterialUnitPresets(mat);
+      const defaultIdx = getLowestPresetIndex(currentUnitPresets);
       const presetSel = document.getElementById('unitPresetSelect');
       presetSel.innerHTML = currentUnitPresets.map((p, idx) => `<option value="${idx}">${p.label}</option>`).join('');
-      renderQuickPresetPills(0);
+      presetSel.value = String(defaultIdx);
+      renderQuickPresetPills(defaultIdx);
       updateMaterialConversionPreview();
     }
 

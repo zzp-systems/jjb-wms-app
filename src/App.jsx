@@ -29,19 +29,6 @@ import {
   EOD_EMAIL_RECIPIENTS
 } from './data/initialData';
 
-const INITIAL_SUPPLIERS = [
-  { id: 'SUP-001', name: 'Lucky Roma Trading / JCT Wheat', contactPerson: 'Roberto Roma', phone: '+63 917-555-1021', email: 'sales@luckyroma.com', address: 'Bldg 4, Agdao Commercial Complex, Davao City', tin: '204-918-301-000', paymentTerms: 'Net 30 Days', isActive: true },
-  { id: 'SUP-002', name: 'Mindanao Packaging & Industrial Box Corp', contactPerson: 'Clarissa Uy', phone: '+63 920-888-4491', email: 'orders@minpack.ph', address: 'Km 12 Sasa Wharf Road, Davao City', tin: '109-482-771-000', paymentTerms: 'Net 30 Days', isActive: true },
-  { id: 'SUP-003', name: 'P.L. Sebastian Corporation', contactPerson: 'Paul Sebastian', phone: '+63 918-222-9901', email: 'plsebastian@gmail.com', address: 'Monteverde Ave, Chinatown, Davao City', tin: '331-502-119-000', paymentTerms: 'Net 15 Days', isActive: true },
-  { id: 'SUP-004', name: 'Davao Great Wall Trading, Inc.', contactPerson: 'Elena Chen', phone: '+63 922-441-8890', email: 'sales@davaogreatwall.com', address: 'R. Castillo St, Agdao, Davao City', tin: '419-882-663-000', paymentTerms: 'Net 30 Days', isActive: true }
-];
-
-const INITIAL_PRICE_AGREEMENTS = [
-  { id: 'AGR-001', supplierName: 'Lucky Roma Trading / JCT Wheat', materialCode: 'RM-FLR-003', materialName: '1st Class Hard Bread Flour (Rossa)', unitCost: 1120, effectiveStartDate: '2026-11-01', effectiveEndDate: '2027-12-31', moq: '20 Sacks', notes: 'Indangan Site Master Annual Supply Rate', isActive: true },
-  { id: 'AGR-002', supplierName: 'Davao Great Wall Trading, Inc.', materialCode: 'RM-SWT-001', materialName: 'Crystal Brown Sugar', unitCost: 2200, effectiveStartDate: '2026-11-01', effectiveEndDate: '2027-12-31', moq: '10 Sacks', notes: 'Fixed Refined Brown Cane Rate', isActive: true },
-  { id: 'AGR-003', supplierName: 'Davao Great Wall Trading, Inc.', materialCode: 'RM-DRY-006', materialName: 'White Sesame Seeds — 1 kg', unitCost: 195, effectiveStartDate: '2026-11-01', effectiveEndDate: '2027-12-31', moq: '5 Packs', notes: 'Contract Quota Discount', isActive: true }
-];
-
 import { deductFefoLots, calculateRecipeIngredients } from './utils/wmsLogic';
 import {
   initOfflineDb,
@@ -179,9 +166,6 @@ export default function App() {
   const [adjustments, setAdjustments] = useState(() => getSaved('adjustments', INITIAL_ADJUSTMENTS));
   const [quarantineList, setQuarantineList] = useState(() => getSaved('quarantine', INITIAL_QUARANTINE));
   const [auditLogs, setAuditLogs] = useState(() => getSaved('audit_logs', INITIAL_AUDIT_LOGS));
-  const [purchaseOrders, setPurchaseOrders] = useState(() => getSaved('purchase_orders', []));
-  const [suppliers, setSuppliers] = useState(() => getSaved('suppliers', INITIAL_SUPPLIERS));
-  const [vendorPriceAgreements, setVendorPriceAgreements] = useState(() => getSaved('vendor_price_agreements', INITIAL_PRICE_AGREEMENTS));
 
   // UI Preferences
   const initialUiPrefs = loadUiPrefs();
@@ -783,9 +767,6 @@ export default function App() {
   useEffect(() => { saveToStorage('adjustments', adjustments); }, [adjustments]);
   useEffect(() => { saveToStorage('quarantine', quarantineList); }, [quarantineList]);
   useEffect(() => { saveToStorage('audit_logs', auditLogs); }, [auditLogs]);
-  useEffect(() => { saveToStorage('purchase_orders', purchaseOrders); }, [purchaseOrders]);
-  useEffect(() => { saveToStorage('suppliers', suppliers); }, [suppliers]);
-  useEffect(() => { saveToStorage('vendor_price_agreements', vendorPriceAgreements); }, [vendorPriceAgreements]);
 
   // Real-Time Cross-Tab & Floor Kiosk Synchronization
   useEffect(() => {
@@ -849,7 +830,7 @@ export default function App() {
       if (typeof BroadcastChannel !== 'undefined') {
         bc = new BroadcastChannel('JJB_WMS_SYNC_CHANNEL');
         bc.onmessage = (msg) => {
-          if (msg.data && msg.data.type === 'NEW_REQUISITION') {
+          if (msg.data && msg.data.type === 'NEW_REQUISITION' && msg.data.entityType !== 'issuance' && msg.data.entityType !== 'requisition_issued') {
             reloadExternalData();
             showToast(`New ${msg.data.entityType || 'floor requisition'} received from ${msg.data.origin || 'Outlet'}!`);
           }
@@ -918,178 +899,6 @@ export default function App() {
   }, [lastEodTriggerDate]);
 
   // WORKFLOW 1: Inbound Receiving Save
-  // Purchase Order Handlers (Form-PUR-002)
-  const handleSavePurchaseOrder = (newPo) => {
-    setPurchaseOrders((prev) => {
-      const exists = prev.some((p) => p.poNo === newPo.poNo);
-      if (exists) {
-        return prev.map((p) => (p.poNo === newPo.poNo ? { ...p, ...newPo, updatedAt: new Date().toISOString() } : p));
-      }
-      return [newPo, ...prev];
-    });
-    recordAudit(
-      'PO_SAVED',
-      `Purchase order ${newPo.poNo} saved for ${newPo.supplier} (Status: ${newPo.status}, Total: ₱${Number(newPo.totalCost || 0).toLocaleString()})`
-    );
-    postSyncEvent('PURCHASE_ORDER_SAVED', `PO_${newPo.poNo}_${Date.now()}`, newPo);
-    showToast(`Purchase order ${newPo.poNo} recorded!`);
-  };
-
-  const handleUpdatePoStatus = (poNo, newStatus, details = {}) => {
-    setPurchaseOrders((prev) =>
-      prev.map((po) => {
-        if (po.poNo !== poNo) return po;
-        return {
-          ...po,
-          status: newStatus,
-          receivingReportNo: details.receivingReportNo || po.receivingReportNo,
-          receivedDate: details.receivedDate || po.receivedDate,
-          receivedBy: details.receivedBy || po.receivedBy,
-          varianceNotes: details.notes || po.varianceNotes,
-          updatedAt: new Date().toISOString()
-        };
-      })
-    );
-    recordAudit(
-      'PO_STATUS_UPDATED',
-      `Purchase order ${poNo} marked as ${newStatus} by ${currentRole}`
-    );
-    postSyncEvent('PURCHASE_ORDER_UPDATED', `PO_UPD_${poNo}_${newStatus}_${Date.now()}`, {
-      poNo,
-      status: newStatus,
-      ...details
-    });
-  };
-
-  const handleDeletePurchaseOrder = (poNo) => {
-    setPurchaseOrders((prev) => prev.filter((p) => p.poNo !== poNo));
-    recordAudit('PO_DELETED', `Purchase order ${poNo} deleted from register by ${currentRole}`);
-    showToast(`Purchase order ${poNo} removed.`);
-  };
-
-  const handleSaveSupplier = (newSup) => {
-    setSuppliers((prev) => {
-      const exists = prev.some((s) => s.id === newSup.id || s.name === newSup.name);
-      if (exists) {
-        return prev.map((s) => (s.id === newSup.id || s.name === newSup.name ? { ...s, ...newSup, updatedAt: new Date().toISOString() } : s));
-      }
-      return [newSup, ...prev];
-    });
-    recordAudit('SUPPLIER_SAVED', `Supplier ${newSup.name} profile saved/updated by ${currentRole}`);
-    showToast(`Vendor ${newSup.name} recorded!`);
-  };
-
-  const handleDeleteSupplier = (supId) => {
-    setSuppliers((prev) => prev.filter((s) => s.id !== supId && s.name !== supId));
-    recordAudit('SUPPLIER_DELETED', `Supplier ${supId} removed from roster by ${currentRole}`);
-    showToast('Supplier deleted from roster.');
-  };
-
-  const handleSavePriceAgreement = (newAgr) => {
-    setVendorPriceAgreements((prev) => {
-      const exists = prev.some((a) => a.id === newAgr.id);
-      if (exists) {
-        return prev.map((a) => (a.id === newAgr.id ? { ...a, ...newAgr, updatedAt: new Date().toISOString() } : a));
-      }
-      return [newAgr, ...prev];
-    });
-    recordAudit('PRICE_AGREEMENT_SAVED', `Price agreement ${newAgr.id} for ${newAgr.materialCode} with ${newAgr.supplierName} saved (Rate: ₱${newAgr.unitCost})`);
-    showToast(`Contract rate for ${newAgr.materialCode} recorded!`);
-  };
-
-  const handleDeletePriceAgreement = (agrId) => {
-    setVendorPriceAgreements((prev) => prev.filter((a) => a.id !== agrId));
-    recordAudit('PRICE_AGREEMENT_DELETED', `Price agreement ${agrId} deleted by ${currentRole}`);
-    showToast('Price agreement removed.');
-  };
-
-  // JADE: In-Place Material Master Details Update
-  const handleUpdateMaterial = (updatedMat) => {
-    setInventory((prev) => {
-      const exists = prev.some((m) => m.code === updatedMat.code);
-      if (exists) {
-        return prev.map((m) => (m.code === updatedMat.code ? { ...m, ...updatedMat } : m));
-      }
-      return [...prev, { ...updatedMat, currentBalance: updatedMat.currentBalance || 0, lots: [] }];
-    });
-    recordAudit('MATERIAL_MASTER_UPDATED', `Item ${updatedMat.code} (${updatedMat.name}) master specifications updated by ${currentRole}`);
-    postSyncEvent('MATERIAL_UPDATED', `MAT_UPD_${updatedMat.code}_${Date.now()}`, updatedMat);
-    showToast(`Material ${updatedMat.code} specifications saved!`);
-  };
-
-  // JADE: Simplified Perpetual Inventory Count Correction
-  const handleQuickAdjustStock = (code, newPhysicalQty, reason = 'Physical Count Correction', notes = '') => {
-    const mat = inventory.find((m) => m.code === code);
-    if (!mat) return;
-    const oldBalance = Number(mat.currentBalance || 0);
-    const targetQty = Number(newPhysicalQty);
-    const variance = +(targetQty - oldBalance).toFixed(3);
-    if (variance === 0) {
-      showToast(`Count matches current balance (${targetQty} ${mat.secondaryUom}). No variance adjustment needed.`);
-      return;
-    }
-    const adjType = variance > 0 ? 'IN' : 'OUT';
-    const absVariance = Math.abs(variance);
-    const syntheticLot = `ADJ-${Date.now().toString().slice(-6)}`;
-    const newAdj = {
-      id: `ADJ-${Date.now().toString().slice(-6)}`,
-      materialCode: mat.code,
-      materialName: mat.name,
-      adjustmentType: adjType,
-      qtySec: absVariance,
-      uom: mat.secondaryUom || 'kg',
-      reason: reason || 'Physical Cycle Count Variance',
-      adjustedBy: resolveUserId(currentRole, authUser),
-      adjustedAt: new Date().toISOString(),
-      notes: `Physical count updated from ${oldBalance} to ${targetQty} ${mat.secondaryUom}. ${notes}`.trim()
-    };
-    setInventory((prev) =>
-      prev.map((item) => {
-        if (item.code !== code) return item;
-        const existingLots = item.lots || [];
-        let updatedLots;
-        if (adjType === 'IN') {
-          const newLot = {
-            lotNumber: syntheticLot,
-            expiryDate: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
-            qtySec: absVariance,
-            location: item.room || 'ADJUSTMENT'
-          };
-          updatedLots = [newLot, ...existingLots];
-        } else {
-          const fefoResult = deductFefoLots(existingLots, absVariance);
-          updatedLots = fefoResult.updatedLots;
-        }
-        return { ...item, currentBalance: targetQty, lots: updatedLots };
-      })
-    );
-    setAdjustments((prev) => [newAdj, ...prev]);
-    recordAudit('PERPETUAL_COUNT_ADJUSTMENT', `Physical count for ${mat.code} set to ${targetQty} ${mat.secondaryUom} (${variance > 0 ? '+' : ''}${variance} ${adjType}) by ${currentRole}: ${reason}`);
-    postSyncEvent('ADJUSTMENT_SAVED', `QUICK_ADJ_${code}_${Date.now()}`, {
-      ...newAdj,
-      timestamp: new Date().toISOString()
-    });
-    showToast(`Physical count saved! Balance for ${mat.code} updated to ${targetQty} ${mat.secondaryUom}.`);
-  };
-
-  const handleUpdatePendingRequest = (requestId, updates = {}) => {
-    setPendingRequests((prev) =>
-      prev.map((req) => {
-        if (req.requestId !== requestId && req.withdrawalNo !== requestId) return req;
-        return {
-          ...req,
-          ...updates,
-          updatedAt: new Date().toISOString()
-        };
-      })
-    );
-    recordAudit(
-      'WITHDRAWAL_REQUEST_UPDATED',
-      `Jade Dela Cruz updated queued requisition ${requestId} (items/quantities adjusted).`
-    );
-    showToast(`Requisition ${requestId} updated in queue.`);
-  };
-
   const handleSaveReceiving = (newReport) => {
     setReceivingReports((prev) => [newReport, ...prev]);
 
@@ -1169,7 +978,7 @@ export default function App() {
     setWithdrawals((prev) => [enrichedWithdrawal, ...prev]);
 
     setInventory((prevInv) => {
-      return prevInv.map((mat) => {
+      const updated = prevInv.map((mat) => {
         const issuedItem = normalizedItems.find((it) => it.materialCode === mat.code);
         if (!issuedItem) return mat;
 
@@ -1183,6 +992,8 @@ export default function App() {
           lots: updatedLots
         };
       });
+      saveToStorage('inventory', updated);
+      return updated;
     });
 
     recordAudit(
@@ -1314,10 +1125,11 @@ export default function App() {
       auditDetails: `Jade / ${currentRole} issued Slip ${slipNo} for queued request ${requestId} (${newWithdrawal.requestingEntity})`
     });
 
-    setPendingRequests((prev) =>
-      prev.filter((r) => r.requestId !== requestId && r.withdrawalNo !== requestId)
-    );
-    broadcastCrossTab('issuance', 'Main WMS');
+    setPendingRequests((prev) => {
+      const next = prev.filter((r) => r.requestId !== requestId && r.withdrawalNo !== requestId);
+      saveToStorage('pending_requests', next);
+      return next;
+    });
 
     showToast(`Request ${requestId} issued as Slip ${slipNo} & stock deducted!`);
   };
@@ -1399,45 +1211,39 @@ export default function App() {
     showToast(`Bulk requisition for ${order.recipeName} sent to Jade Dela Cruz in Tab 4!`);
   };
 
-  // WORKFLOW 3C — Jade Approves Romeo's Bulk Requisition (FK Protected with Review Overrides)
-  const handleApprovePendingWithdrawal = (orderId, customItems = null, customNotes = '') => {
+  // WORKFLOW 3C — Jade Approves Romeo's Bulk Requisition (FK Protected)
+  const handleApprovePendingWithdrawal = (orderId) => {
     const order = batchOrders.find((o) => o.orderId === orderId);
     if (!order) return;
 
     const recipe =
       recipes.find((r) => r.sku === order.recipeSku) ||
       MASTER_RECIPES.find((r) => r.sku === order.recipeSku);
-    if (!recipe && !customItems) return;
+    if (!recipe) return;
 
-    const slipNo = `WS-BULK-${Date.now().toString().slice(-6)}`;
+    const requiredIngredients = calculateRecipeIngredients(recipe, order.batchMultiplier);
     const nowStr = new Date().toISOString().slice(0, 19).replace('T', ' ');
+    const slipNo = `WS-BULK-${Date.now().toString().slice(-6)}`;
 
-    let rawWithdrawalItems = [];
+    const rawWithdrawalItems = requiredIngredients.map((ing) => {
+      const isSubRecipe = String(ing.code || '').startsWith('SUB-');
+      const mat = inventory.find((m) => m.code === ing.code);
+      const resolvedCode = mat ? mat.code : (isSubRecipe ? null : ing.code);
 
-    if (Array.isArray(customItems) && customItems.length > 0) {
-      rawWithdrawalItems = customItems;
-    } else {
-      const requiredIngredients = calculateRecipeIngredients(recipe, order.batchMultiplier);
-      rawWithdrawalItems = requiredIngredients.map((ing) => {
-        const isSubRecipe = String(ing.code || '').startsWith('SUB-');
-        const mat = inventory.find((m) => m.code === ing.code);
-        const resolvedCode = mat ? mat.code : (isSubRecipe ? null : ing.code);
-
-        return {
-          materialCode: resolvedCode,
-          name: ing.name || mat?.name || ing.code,
-          qtyRequestedSec: Number(ing.requiredKg || 0),
-          qtyIssuedSec: Number(ing.requiredKg || 0),
-          secondaryUom: mat?.secondaryUom || 'kg',
-          lotNumber: mat && mat.lots?.length > 0 ? (mat.lots[0]?.lotNumber || 'FEFO-AUTO') : 'FEFO-AUTO',
-          storageRoom: mat ? mat.room : 'Dry Room 1',
-          estimatedCost: mat ? +(Number(ing.requiredKg || 0) * (Number(mat.unitCost || 0) / Number(mat.conversionFactor || 1))).toFixed(2) : 0,
-          remarks: isSubRecipe
-            ? `Sub-Assembly Preparation: ${ing.name} for ${order.orderId}`
-            : `Bulk batching issue for ${order.orderId}`
-        };
-      });
-    }
+      return {
+        materialCode: resolvedCode,
+        name: ing.name || mat?.name || ing.code,
+        qtyRequestedSec: Number(ing.requiredKg || 0),
+        qtyIssuedSec: Number(ing.requiredKg || 0),
+        secondaryUom: mat?.secondaryUom || 'kg',
+        lotNumber: mat && mat.lots?.length > 0 ? (mat.lots[0]?.lotNumber || 'FEFO-AUTO') : 'FEFO-AUTO',
+        storageRoom: mat ? mat.room : 'Dry Room 1',
+        estimatedCost: mat ? +(Number(ing.requiredKg || 0) * (Number(mat.unitCost || 0) / Number(mat.conversionFactor || 1))).toFixed(2) : 0,
+        remarks: isSubRecipe
+          ? `Sub-Assembly Preparation: ${ing.name} for ${order.orderId}`
+          : `Bulk batching issue for ${order.orderId}`
+      };
+    });
 
     const newWithdrawal = {
       slipNo,
@@ -1450,14 +1256,13 @@ export default function App() {
       issuedBy: resolveUserId(currentRole, authUser),
       receivedBy: 'Romeo B. Malusay',
       items: rawWithdrawalItems,
-      status: 'ISSUED & RECONCILED',
-      notes: customNotes || order.notes || ''
+      status: 'ISSUED & RECONCILED'
     };
 
     performWithdrawal(newWithdrawal, {
       sourceChannel: 'BULK_BATCHING',
       auditAction: 'BULK_REQUISITION_APPROVED',
-      auditDetails: `Jade Dela Cruz authorized bulk bodega release (Slip: ${slipNo}) for ${order.recipeName} (${order.orderId})${customNotes ? ` [Adjustments: ${customNotes}]` : ''}. Scale & Kit unlocked for Romeo.`
+      auditDetails: `Jade Dela Cruz authorized bulk bodega release (Slip: ${slipNo}) for ${order.recipeName} (${order.orderId}). Scale & Kit unlocked for Romeo.`
     });
 
     setBatchOrders((prev) =>
@@ -1467,8 +1272,7 @@ export default function App() {
           ...o,
           bulkRequestStatus: 'BULK_ISSUED_BY_JADE',
           bulkApprovedAt: nowStr,
-          bulkApprovedBy: currentRole,
-          notes: customNotes ? [o.notes, `[Jade: ${customNotes}]`].filter(Boolean).join(' | ') : o.notes
+          bulkApprovedBy: currentRole
         };
       })
     );
@@ -1485,7 +1289,6 @@ export default function App() {
     );
 
     showToast(`Bulk materials authorized & deducted! Romeo's Scale & Kit is unlocked.`);
-    return;
   };
 
   // WORKFLOW 3D — Jade Declines Romeo's Bulk Requisition
@@ -2005,10 +1808,6 @@ export default function App() {
                 batchOrders={batchOrders}
                 withdrawals={withdrawals}
                 pendingRequests={pendingRequests}
-                onUpdateMaterial={handleUpdateMaterial}
-                onQuickAdjustStock={handleQuickAdjustStock}
-                suppliers={suppliers || []}
-                currentRole={currentRole}
               />
             )}
 
@@ -2036,33 +1835,29 @@ export default function App() {
 
             {activeTab === 'receiving' && (
               <ReceivingModule
-                inventory={inventory || []}
+                inventory={inventory}
                 onSaveReceiving={handleSaveReceiving}
-                receivingReports={receivingReports || []}
+                receivingReports={receivingReports}
                 currentRole={currentRole}
                 isMobileMode={isMobileMode}
                 prefilledItem={prefilledItem}
-                purchaseOrders={purchaseOrders || []}
-                onUpdatePoStatus={handleUpdatePoStatus}
               />
             )}
 
             {activeTab === 'issuance' && (
               <IssuanceModule
-                inventory={inventory || []}
+                inventory={inventory}
                 onSaveWithdrawal={handleSaveWithdrawal}
-                withdrawals={withdrawals || []}
-                pendingRequests={pendingRequests || []}
+                withdrawals={withdrawals}
+                pendingRequests={pendingRequests}
                 onIssuePendingRequest={handleIssuePendingRequest}
                 onCancelPendingRequest={handleCancelPendingRequest}
-                onUpdatePendingRequest={handleUpdatePendingRequest}
-                batchOrders={batchOrders || []}
+                batchOrders={batchOrders}
                 onApprovePendingWithdrawal={handleApprovePendingWithdrawal}
                 onDeclineBulkWithdrawal={handleDeclineBulkWithdrawal}
                 currentRole={currentRole}
                 isMobileMode={isMobileMode}
                 prefilledItem={prefilledItem}
-                recipes={recipes}
               />
             )}
 
@@ -2107,26 +1902,16 @@ export default function App() {
 
             {activeTab === 'reports' && (
               <ReportsModule
-                inventory={inventory || []}
-                receivingReports={receivingReports || []}
-                withdrawals={withdrawals || []}
-                batchOrders={batchOrders || []}
-                adjustments={adjustments || []}
-                quarantineList={quarantineList || []}
+                inventory={inventory}
+                receivingReports={receivingReports}
+                withdrawals={withdrawals}
+                batchOrders={batchOrders}
+                adjustments={adjustments}
+                quarantineList={quarantineList}
                 currentRole={currentRole}
                 onImportInventoryCsv={handleImportInventoryCsv}
                 onRecordAudit={recordAudit}
                 onOpenImportModal={() => setIsImportModalOpen(true)}
-                purchaseOrders={purchaseOrders || []}
-                onSavePurchaseOrder={handleSavePurchaseOrder}
-                onUpdatePoStatus={handleUpdatePoStatus}
-                onDeletePurchaseOrder={handleDeletePurchaseOrder}
-                suppliers={suppliers || []}
-                onSaveSupplier={handleSaveSupplier}
-                onDeleteSupplier={handleDeleteSupplier}
-                vendorPriceAgreements={vendorPriceAgreements || []}
-                onSavePriceAgreement={handleSavePriceAgreement}
-                onDeletePriceAgreement={handleDeletePriceAgreement}
               />
             )}
 

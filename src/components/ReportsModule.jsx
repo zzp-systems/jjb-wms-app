@@ -8,6 +8,7 @@ import {
   Building2, ShieldCheck, Check
 } from 'lucide-react';
 import { calculateReorderSuggestions } from '../utils/wmsLogic';
+import { DEFAULT_CHARGE_TO_OPTIONS } from '../data/SharedTaxonomy';
 
 const DEFAULT_AUTHORIZED_SUPPLIERS = [
   'Lucky Roma Trading / JCT Wheat',
@@ -59,6 +60,9 @@ export default function ReportsModule({
   const [customSupplierAddress, setCustomSupplierAddress] = useState('');
   const [poNo, setPoNo] = useState(`PO-2026-${Math.floor(1050 + Math.random() * 50)}`);
   const [poNotes, setPoNotes] = useState('');
+  const [selectedChargeTo, setSelectedChargeTo] = useState(DEFAULT_CHARGE_TO_OPTIONS[0]);
+  const [isCustomChargeTo, setIsCustomChargeTo] = useState(false);
+  const [customChargeToName, setCustomChargeToName] = useState('');
   const [poDraftItems, setPoDraftItems] = useState([]);
   const [addMaterialCode, setAddMaterialCode] = useState(inventory[0]?.code || 'RM-FLR-001');
   const [addQty, setAddQty] = useState(10);
@@ -231,11 +235,16 @@ export default function ReportsModule({
       ? (customSupplierName.trim() || 'Custom Lowest-Offering Vendor')
       : (selectedSupplier === 'ALL' ? 'Consolidated Vendors' : selectedSupplier);
 
+    const resolvedChargeTo = isCustomChargeTo
+      ? (customChargeToName.trim() || 'Custom Charge Entity')
+      : selectedChargeTo;
+
     const poRecord = {
       poNo,
       supplier: resolvedSupplier,
       supplierContact: isCustomSupplier ? customSupplierContact : '',
       supplierAddress: isCustomSupplier ? customSupplierAddress : '',
+      chargeTo: resolvedChargeTo,
       date: new Date().toISOString().slice(0, 10),
       generatedDate: new Date().toISOString().slice(0, 10),
       items: poDraftItems,
@@ -264,6 +273,17 @@ export default function ReportsModule({
     setPoNo(po.poNo);
     setSelectedSupplier(po.supplier);
     setPoNotes(po.notes || '');
+    if (po.chargeTo) {
+      if (DEFAULT_CHARGE_TO_OPTIONS.includes(po.chargeTo)) {
+        setSelectedChargeTo(po.chargeTo);
+        setIsCustomChargeTo(false);
+        setCustomChargeToName('');
+      } else {
+        setSelectedChargeTo('CUSTOM');
+        setIsCustomChargeTo(true);
+        setCustomChargeToName(po.chargeTo);
+      }
+    }
     if (Array.isArray(po.items)) {
       setPoDraftItems(po.items.map((it) => ({ ...it })));
     }
@@ -497,7 +517,7 @@ export default function ReportsModule({
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3 text-xs">
               <div>
                 <label className="block font-bold text-gray-700 mb-1">Target Vendor / Supplier *</label>
                 <select
@@ -512,6 +532,39 @@ export default function ReportsModule({
                   <option value="NEW_SUPPLIER">+ Enter New / Custom Lowest-Offering Vendor...</option>
                   <option value="NEW_SUPPLIER">+ Add New / Lowest-Offering Supplier...</option>
                 </select>
+              </div>
+
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">Charge To (Entity / Outlet) *</label>
+                <select
+                  value={selectedChargeTo}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val === 'CUSTOM') {
+                      setIsCustomChargeTo(true);
+                      setSelectedChargeTo('CUSTOM');
+                    } else {
+                      setIsCustomChargeTo(false);
+                      setSelectedChargeTo(val);
+                    }
+                  }}
+                  className="w-full p-2 border rounded bg-white font-medium focus:ring-2 focus:ring-[#C8963E]"
+                >
+                  {DEFAULT_CHARGE_TO_OPTIONS.map((opt) => (
+                    <option key={opt} value={opt}>{opt}</option>
+                  ))}
+                  <option value="CUSTOM">+ Enter Custom Charge To Entity...</option>
+                </select>
+                {isCustomChargeTo && (
+                  <input
+                    type="text"
+                    placeholder="Enter custom facility/outlet name *"
+                    value={customChargeToName}
+                    onChange={(e) => setCustomChargeToName(e.target.value)}
+                    className="mt-1.5 w-full p-1.5 border border-purple-300 rounded bg-white text-xs font-bold text-purple-950 focus:ring-2 focus:ring-[#C8963E]"
+                    required
+                  />
+                )}
               </div>
 
               <div>
@@ -652,6 +705,9 @@ export default function ReportsModule({
                     supplier: isCustomSupplier
                       ? (customSupplierName.trim() || 'New Supplier')
                       : (selectedSupplier === 'ALL' ? 'Consolidated Vendors' : selectedSupplier),
+                    chargeTo: isCustomChargeTo
+                      ? (customChargeToName.trim() || 'Custom Facility')
+                      : selectedChargeTo,
                     items: poDraftItems,
                     totalCost: poTotalEstimatedCost,
                     generatedDate: new Date().toISOString().slice(0, 10),
@@ -817,6 +873,7 @@ export default function ReportsModule({
                       <th className="p-2.5">PO Number</th>
                       <th className="p-2.5">Order Date</th>
                       <th className="p-2.5">Supplier / Vendor</th>
+                      <th className="p-2.5">Charge To</th>
                       <th className="p-2.5 text-right">SKUs</th>
                       <th className="p-2.5 text-right">Commitment (PHP)</th>
                       <th className="p-2.5">Delivery Status</th>
@@ -830,6 +887,7 @@ export default function ReportsModule({
                         <td className="p-2.5 font-mono font-bold text-[#5B2E7A]">{po.poNo}</td>
                         <td className="p-2.5 font-mono text-gray-600">{po.date}</td>
                         <td className="p-2.5 font-medium">{po.supplier}</td>
+                        <td className="p-2.5 font-bold text-purple-950">{po.chargeTo || 'Pan De Verde Bread Haus (Communal)'}</td>
                         <td className="p-2.5 text-right font-mono">{po.items?.length || 0}</td>
                         <td className="p-2.5 text-right font-mono font-bold text-[#1E7A3E]">
                           ₱{(po.totalCost || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}
@@ -1649,8 +1707,9 @@ export default function ReportsModule({
             </div>
 
             {/* Metadata */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs bg-[#FAF6EE] p-3 rounded border border-[#E2D1B8]">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-xs bg-[#FAF6EE] p-3 rounded border border-[#E2D1B8]">
               <div><strong>Vendor:</strong> {selectedPoPreview.supplier}</div>
+              <div><strong>Charge To:</strong> <span className="text-[#5B2E7A] font-bold">{selectedPoPreview.chargeTo || 'Pan De Verde Bread Haus (Communal)'}</span></div>
               <div><strong>Date:</strong> {selectedPoPreview.generatedDate || selectedPoPreview.date}</div>
               <div><strong>Facility:</strong> Indangan Central Plant</div>
               <div><strong>Buyer / Pre-Approver:</strong> {selectedPoPreview.preparedBy}</div>

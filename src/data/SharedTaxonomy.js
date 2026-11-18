@@ -1,3 +1,37 @@
+export const DEFAULT_CHARGE_TO_OPTIONS = [
+  'Pan De Verde Bread Haus (Communal)',
+  'Laurice Delicacies (Bankerohan)',
+  'Jang-jang Bakeshop (Indangan)',
+  'Jang-jang Bakeshop (Landmark)'
+];
+
+export function getLowestPresetIndex(presets = []) {
+  if (!Array.isArray(presets) || presets.length === 0) return 0;
+  // 1. Look for '1 Piece (pc)' specifically (e.g. eggs, packaging)
+  const pieceIdx = presets.findIndex(p => p.label && p.label.toLowerCase().includes('1 piece'));
+  if (pieceIdx >= 0) return pieceIdx;
+  
+  // 2. Look for '1 Can' (e.g. canned milk)
+  const canIdx = presets.findIndex(p => p.badge === 'SINGLE CAN' || (p.label && p.label.toLowerCase() === '1 can'));
+  if (canIdx >= 0) return canIdx;
+
+  // 3. Look for 'BASE UOM' (which is '1 kg', '1 L', 'Direct (kg)', etc.)
+  const baseIdx = presets.findIndex(p => p.badge === 'BASE UOM');
+  if (baseIdx >= 0) return baseIdx;
+
+  // 4. Fallback to smallest positive multiplierInSec
+  let minIdx = 0;
+  let minMult = Infinity;
+  presets.forEach((p, i) => {
+    const m = Number(p.multiplierInSec) || 0;
+    if (m > 0 && m < minMult) {
+      minMult = m;
+      minIdx = i;
+    }
+  });
+  return minIdx;
+}
+
 // ============================================================================
 // JJB-WMS v4.6 — Unified Production Line, Consumption Purpose, Pack Presets
 // & 3:00 PM PHT Batching Cut-Off Scheduling Engine

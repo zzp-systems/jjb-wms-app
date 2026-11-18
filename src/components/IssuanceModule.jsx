@@ -11,6 +11,7 @@ import {
   UNIFIED_PRODUCTION_LINES,
   UNIFIED_CONSUMPTION_PURPOSES,
   getMaterialUnitPresets,
+  getLowestPresetIndex,
   formatMaterialAvailability
 } from '../data/SharedTaxonomy';
 
@@ -47,7 +48,8 @@ export default function IssuanceModule({
   const [selectedMaterialCode, setSelectedMaterialCode] = useState(
     prefilledItem?.code || inventory[0]?.code || 'RM-FLR-001'
   );
-  const [selectedPresetIdx, setSelectedPresetIdx] = useState(0);
+  const initialMatObj = prefilledItem || inventory[0] || {};
+  const [selectedPresetIdx, setSelectedPresetIdx] = useState(() => getLowestPresetIndex(getMaterialUnitPresets(initialMatObj)));
   const [packCount, setPackCount] = useState(1);
   const [lineItems, setLineItems] = useState([]);
 
@@ -1044,7 +1046,7 @@ export default function IssuanceModule({
               className="w-full border border-gray-300 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:border-[#C8963E]"
             >
               {UNIFIED_PRODUCTION_LINES.map((l) => (
-                <option key={l.id} value={l.id}>{l.name} ({l.dept})</option>
+                <option key={l.id} value={l.id}>{l.label}</option>
               ))}
             </select>
             {selectedLineId === 'CUSTOM' && (
@@ -1111,8 +1113,10 @@ export default function IssuanceModule({
               <select
                 value={selectedMaterialCode}
                 onChange={(e) => {
-                  setSelectedMaterialCode(e.target.value);
-                  setSelectedPresetIdx(0);
+                  const newCode = e.target.value;
+                  setSelectedMaterialCode(newCode);
+                  const mat = inventory.find(m => m.code === newCode) || inventory[0] || {};
+                  setSelectedPresetIdx(getLowestPresetIndex(getMaterialUnitPresets(mat)));
                 }}
                 className="w-full border border-gray-300 rounded-lg px-2.5 py-2 text-xs font-semibold bg-white"
               >
