@@ -33,7 +33,9 @@ export default function ReportsModule({
   onRecordAudit,
   onOpenImportModal,
   purchaseOrders = [],
-  onSavePurchaseOrder
+  onSavePurchaseOrder,
+  onUpdatePoStatus,
+  onDeletePurchaseOrder
 }) {
   const [activeSubTab, setActiveSubTab] = useState('po_generator'); // 'po_generator' | 'ledger' | 'csv_bridge'
   const [timeframe, setTimeframe] = useState('ALL'); // 'ALL' | 'TODAY' | 'WEEK' | 'MONTH' | 'CUSTOM'
@@ -89,10 +91,13 @@ export default function ReportsModule({
       if (val !== 'ALL') {
         const filtered = lowStockSuggestions.filter((s) => s.supplier === val);
         if (filtered.length > 0) {
-          setPoDraftItems(filtered.map((it) => ({ ...it })));
+          setPoDraftItems(filtered.map((it) => ({ ...it, supplier: val, catalogSupplier: it.supplier })));
+        } else {
+          // If items already in draft, update their supplier to the newly selected target vendor
+          setPoDraftItems((prev) => prev.map((it) => ({ ...it, supplier: val, catalogSupplier: it.catalogSupplier || it.supplier })));
         }
       } else {
-        setPoDraftItems(lowStockSuggestions.map((it) => ({ ...it })));
+        setPoDraftItems(lowStockSuggestions.map((it) => ({ ...it, catalogSupplier: it.supplier })));
       }
     }
   };
@@ -136,6 +141,10 @@ export default function ReportsModule({
     const cost = Number(mat.unitCost || 1000);
     const lineTotal = +(addQty * cost).toFixed(2);
 
+    const targetVendor = isCustomSupplier
+      ? (customSupplierName.trim() || 'Custom Lowest-Offering Vendor')
+      : (selectedSupplier !== 'ALL' ? selectedSupplier : (mat.supplier || 'Lucky Roma Trading / JCT Wheat'));
+
     setPoDraftItems((prev) => {
       const existingIdx = prev.findIndex((it) => it.code === mat.code);
       if (existingIdx >= 0) {
@@ -144,6 +153,8 @@ export default function ReportsModule({
           const newQ = +(Number(it.suggestedPrimaryQty || 0) + Number(addQty)).toFixed(2);
           return {
             ...it,
+            supplier: targetVendor,
+            catalogSupplier: mat.supplier || it.catalogSupplier,
             suggestedPrimaryQty: newQ,
             totalSecondaryQty: +(newQ * factor).toFixed(3),
             estimatedCost: +(newQ * cost).toFixed(2)
@@ -156,7 +167,8 @@ export default function ReportsModule({
           code: mat.code,
           name: mat.name,
           category: mat.category,
-          supplier: mat.supplier || selectedSupplier,
+          supplier: targetVendor,
+          catalogSupplier: mat.supplier || 'General Supplier',
           room: mat.room || 'Dry Room 1',
           primaryUom: mat.primaryUom || 'Unit',
           secondaryUom: mat.secondaryUom || 'kg',
@@ -657,7 +669,12 @@ export default function ReportsModule({
                           <span className="font-bold text-gray-900">{item.name}</span>
                           <span className="block text-[10px] text-gray-500">{item.room}</span>
                         </td>
-                        <td className="p-2.5 font-medium text-gray-700">{item.supplier}</td>
+                        <td className="p-2.5 font-medium text-gray-700">
+                          <span className="font-bold text-[#3D1C52]">{item.supplier}</span>
+                          {item.catalogSupplier && item.catalogSupplier !== item.supplier && (
+                            <span className="block text-[10px] text-gray-400 font-normal">Catalog: {item.catalogSupplier}</span>
+                          )}
+                        </td>
                         <td className="p-2.5 text-right font-mono text-gray-500">
                           {item.currentBalanceSec} {item.secondaryUom}
                         </td>
@@ -793,12 +810,14 @@ export default function ReportsModule({
                             <span className="text-emerald-700 font-bold">{po.receivingReportNo}</span>
                           ) : po.status === 'PO_DRAFT' ? (
                             <span className="text-yellow-700 italic">Draft (Not Dispatched)</span>
+                          ) : po.status === 'CANCELLED' ? (
+                            <span className="text-red-500 italic">Revoked / Cancelled</span>
                           ) : (
                             <span className="text-gray-400 italic">Awaiting Dock</span>
                           )}
                         </td>
                         <td className="p-2.5 text-center">
-                          <div className="flex items-center justify-center gap-2">
+                          <div className="flex items-center justify-center gap-2 flex-wrap">
                             <button
                               type="button"
                               onClick={() => setSelectedPoPreview(po)}
@@ -806,6 +825,8 @@ export default function ReportsModule({
                             >
                               View Form
                             </button>
+
+                            {/* DRAFT PO ACTIONS */}
                             {po.status === 'PO_DRAFT' && (
                               <>
                                 <button
@@ -829,7 +850,58 @@ export default function ReportsModule({
                                 >
                                   Finalize
                                 </button>
+                                {onDeletePurchaseOrder && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (window.confirm(`Discard and delete draft PO ${po.poNo}?`)) {
+                                        onDeletePurchaseOrder(po.poNo);
+                                      }
+                                    }}
+                                    className="text-xs text-red-600 hover:underline font-bold"
+                                    title="Discard this draft PO"
+                                  >
+                                    Discard
+                                  </button>
+                                )}
                               </>
+                            )}
+
+                            {/* PENDING DELIVERY (DISPATCHED) ACTIONS */}
+                            {po.status === 'PENDING_DELIVERY' && onUpdatePoStatus && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const reason = window.prompt(
+                                    `Cancel Purchase Order ${po.poNo}?\n\nEnter cancellation reason (e.g. Supplier stockout, revoked by purchasing):`,
+                                    'Revoked by purchasing'
+                                  );
+                                  if (reason !== null) {
+                                    onUpdatePoStatus(po.poNo, 'CANCELLED', { notes: reason.trim() });
+                                    alert(`⚠️ PO ${po.poNo} has been cancelled and removed from the Inbound Dock queue.`);
+                                  }
+                                }}
+                                className="text-xs text-red-600 hover:underline font-bold"
+                                title="Cancel PO and remove from dock queue"
+                              >
+                                Cancel PO
+                              </button>
+                            )}
+
+                            {/* CANCELLED ACTIONS */}
+                            {po.status === 'CANCELLED' && onDeletePurchaseOrder && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (window.confirm(`Permanently remove cancelled record ${po.poNo} from register?`)) {
+                                    onDeletePurchaseOrder(po.poNo);
+                                  }
+                                }}
+                                className="text-xs text-gray-500 hover:text-red-600 hover:underline"
+                                title="Permanently delete cancelled PO"
+                              >
+                                Delete
+                              </button>
                             )}
                           </div>
                         </td>

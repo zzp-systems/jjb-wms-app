@@ -944,6 +944,16 @@ export default function App() {
     });
   };
 
+  const handleDeletePurchaseOrder = (poNo) => {
+    setPurchaseOrders((prev) => prev.filter((p) => p.poNo !== poNo));
+    recordAudit(
+      'PO_DELETED',
+      `Purchase order ${poNo} removed/cancelled from register by ${currentRole}`
+    );
+    postSyncEvent('PURCHASE_ORDER_DELETED', `PO_DEL_${poNo}_${Date.now()}`, { poNo });
+    showToast(`Purchase order ${poNo} removed from register.`);
+  };
+
   const handleUpdatePendingRequest = (requestId, updates = {}) => {
     setPendingRequests((prev) =>
       prev.map((req) => {
@@ -1987,6 +1997,8 @@ export default function App() {
                 onOpenImportModal={() => setIsImportModalOpen(true)}
                 purchaseOrders={purchaseOrders || []}
                 onSavePurchaseOrder={handleSavePurchaseOrder}
+                onUpdatePoStatus={handleUpdatePoStatus}
+                onDeletePurchaseOrder={handleDeletePurchaseOrder}
               />
             )}
 
