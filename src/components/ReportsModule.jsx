@@ -174,6 +174,36 @@ export default function ReportsModule({
 
   const poTotalEstimatedCost = poDraftItems.reduce((acc, it) => acc + (it.estimatedCost || 0), 0);
 
+  const handleSaveDraftPo = () => {
+    if (poDraftItems.length === 0) {
+      alert('Please add at least one material to the Purchase Order.');
+      return;
+    }
+    const resolvedSupplier = isCustomSupplier
+      ? (customSupplierName.trim() || 'Custom Lowest-Offering Vendor')
+      : (selectedSupplier === 'ALL' ? 'Consolidated Vendors' : selectedSupplier);
+
+    const poRecord = {
+      poNo,
+      supplier: resolvedSupplier,
+      supplierContact: isCustomSupplier ? customSupplierContact : '',
+      supplierAddress: isCustomSupplier ? customSupplierAddress : '',
+      date: new Date().toISOString().slice(0, 10),
+      generatedDate: new Date().toISOString().slice(0, 10),
+      items: poDraftItems,
+      totalCost: poTotalEstimatedCost,
+      status: 'PO_DRAFT',
+      preparedBy: `${currentRole} (Purchasing & Inventory Manager)`,
+      notes: poNotes
+    };
+
+    if (onSavePurchaseOrder) {
+      onSavePurchaseOrder(poRecord);
+    }
+
+    alert(`📝 Purchase Order ${poNo} saved as DRAFT. It is recorded in your PO Register below and remains editable.`);
+  };
+
   const handleSaveAndDispatchPo = () => {
     if (poDraftItems.length === 0) {
       alert('Please add at least one material to the Purchase Order.');
@@ -201,11 +231,29 @@ export default function ReportsModule({
       onSavePurchaseOrder(poRecord);
     }
 
-    alert(`✅ Purchase Order ${poNo} saved and recorded as PENDING. Dock staff (Jade) can now cross-reference deliveries against this PO.`);
+    alert(`✅ Purchase Order ${poNo} finalized and marked PENDING DELIVERY! Jade can now cross-reference dock deliveries against this PO.`);
 
     // Reset for next PO
     setPoNo(`PO-2026-${Math.floor(1050 + Math.random() * 50)}`);
     setPoNotes('');
+    setPoDraftItems([]);
+  };
+
+  const handleLoadPoIntoDraft = (po) => {
+    setPoNo(po.poNo);
+    setPoDraftItems(po.items || []);
+    setPoNotes(po.notes || '');
+    if (po.supplierContact) {
+      setIsCustomSupplier(true);
+      setCustomSupplierName(po.supplier);
+      setCustomSupplierContact(po.supplierContact || '');
+      setCustomSupplierAddress(po.supplierAddress || '');
+    } else {
+      setIsCustomSupplier(false);
+      setSelectedSupplier(po.supplier || 'ALL');
+    }
+    setActiveSubTab('po_generator');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   // Filtered Ledger Records
@@ -543,7 +591,21 @@ export default function ReportsModule({
               <div className="text-xs text-gray-600">
                 Draft SKUs: <strong className="text-[#3D1C52] font-mono">{poDraftItems.length}</strong> · Quantities and Unit Prices are editable directly in the table below.
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={handleSaveDraftPo}
+                  disabled={poDraftItems.length === 0}
+                  className={`text-xs px-3.5 py-2 rounded-lg font-bold flex items-center gap-1.5 shadow transition ${
+                    poDraftItems.length > 0
+                      ? 'bg-purple-900 hover:bg-purple-950 text-white'
+                      : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                  }`}
+                  title="Save as Draft: keep editing later without notifying dock"
+                >
+                  <FileText size={14} /> Save as Draft (PO_DRAFT)
+                </button>
+
                 <button
                   type="button"
                   onClick={handleSaveAndDispatchPo}
@@ -553,8 +615,9 @@ export default function ReportsModule({
                       ? 'bg-[#1E7A3E] hover:bg-emerald-800 text-white'
                       : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                   }`}
+                  title="Finalize PO: immediately unlocks Jade's dock cross-reference"
                 >
-                  <CheckCircle2 size={14} /> Save &amp; Record PO (Mark PENDING)
+                  <CheckCircle2 size={14} /> Finalize to Dock (PENDING_DELIVERY)
                 </button>
 
                 <button
@@ -567,10 +630,10 @@ export default function ReportsModule({
                     items: poDraftItems,
                     totalCost: poTotalEstimatedCost,
                     generatedDate: new Date().toISOString().slice(0, 10),
-                    preparedBy: 'Mariejohn F. Tacuban'
+                    preparedBy: currentRole || 'Mariejohn F. Tacuban'
                   })}
                   disabled={poDraftItems.length === 0}
-                  className={`text-xs px-4 py-2 rounded-lg font-bold flex items-center gap-1.5 shadow transition ${
+                  className={`text-xs px-3.5 py-2 rounded-lg font-bold flex items-center gap-1.5 shadow transition ${
                     poDraftItems.length > 0 
                       ? 'bg-[#C8963E] hover:bg-[#b08030] text-[#240e32]' 
                       : 'bg-gray-200 text-gray-400 cursor-not-allowed'
@@ -739,29 +802,70 @@ export default function ReportsModule({
                         <td className="p-2.5">
                           <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
                             po.status === 'RECEIVED'
-                              ? 'bg-green-100 text-green-800'
+                              ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
                               : po.status === 'RECEIVED_WITH_CHANGES'
-                              ? 'bg-amber-100 text-amber-800'
-                              : 'bg-blue-100 text-blue-800'
+                              ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                              : po.status === 'PO_DRAFT'
+                              ? 'bg-purple-100 text-purple-900 border border-purple-300'
+                              : po.status === 'CANCELLED'
+                              ? 'bg-red-100 text-red-900 border border-red-300'
+                              : 'bg-blue-100 text-blue-900 border border-blue-300'
                           }`}>
-                            {po.status === 'RECEIVED' ? '✓ RECEIVED CLEAN' : po.status === 'RECEIVED_WITH_CHANGES' ? '⚠️ RECEIVED W/ CHANGES' : '⏳ PENDING DELIVERY'}
+                            {po.status === 'RECEIVED'
+                              ? '✓ RECEIVED CLEAN'
+                              : po.status === 'RECEIVED_WITH_CHANGES'
+                              ? '⚠️ RECEIVED W/ CHANGES'
+                              : po.status === 'PO_DRAFT'
+                              ? '📝 PO DRAFT (EDITABLE)'
+                              : po.status === 'CANCELLED'
+                              ? '✕ CANCELLED'
+                              : '⏳ PENDING DELIVERY'}
                           </span>
                         </td>
                         <td className="p-2.5 font-mono text-gray-600">
                           {po.receivingReportNo ? (
                             <span className="text-emerald-700 font-bold">{po.receivingReportNo}</span>
+                          ) : po.status === 'PO_DRAFT' ? (
+                            <span className="text-purple-700 italic">Not Dispatched</span>
                           ) : (
                             <span className="text-gray-400 italic">Awaiting Dock</span>
                           )}
                         </td>
                         <td className="p-2.5 text-center">
-                          <button
-                            type="button"
-                            onClick={() => setSelectedPoPreview(po)}
-                            className="text-xs text-[#5B2E7A] hover:underline font-bold"
-                          >
-                            View Form
-                          </button>
+                          <div className="flex items-center justify-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setSelectedPoPreview(po)}
+                              className="text-xs text-[#5B2E7A] hover:underline font-bold"
+                            >
+                              View
+                            </button>
+
+                            {po.status === 'PO_DRAFT' && (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => handleLoadPoIntoDraft(po)}
+                                  className="text-xs text-amber-700 hover:underline font-bold"
+                                  title="Load this draft PO into workbench to edit"
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (onSavePurchaseOrder) {
+                                      onSavePurchaseOrder({ ...po, status: 'PENDING_DELIVERY' });
+                                    }
+                                  }}
+                                  className="text-xs text-emerald-700 hover:underline font-bold"
+                                  title="Finalize draft and dispatch to Jade's dock"
+                                >
+                                  Finalize
+                                </button>
+                              </>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     ))}

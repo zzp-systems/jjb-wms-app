@@ -30,7 +30,8 @@ export default function IssuanceModule({
   onApprovePendingWithdrawal,
   onDeclineBulkWithdrawal,
   currentRole,
-  prefilledItem
+  prefilledItem,
+  recipes = []
 }) {
   const [exitingIds, setExitingIds] = useState({});
 
@@ -53,6 +54,56 @@ export default function IssuanceModule({
   const [editingRequest, setEditingRequest] = useState(null);
   const [editAddMaterialCode, setEditAddMaterialCode] = useState(inventory[0]?.code || 'RM-FLR-001');
   const [editAddQty, setEditAddQty] = useState(1);
+
+  // Jade Bulk Requisition Review & Editing State
+  const [editingBulkOrder, setEditingBulkOrder] = useState(null);
+  const [bulkEditItems, setBulkEditItems] = useState([]);
+  const [bulkEditNotes, setBulkEditNotes] = useState('');
+  const [bulkAddMaterialCode, setBulkAddMaterialCode] = useState(inventory[0]?.code || 'RM-FLR-001');
+  const [bulkAddQty, setBulkAddQty] = useState(1);
+
+  const handleOpenBulkEdit = (ord) => {
+    const rec = (recipes || []).find((r) => r.sku === ord.recipeSku) || MASTER_RECIPES.find((r) => r.sku === ord.recipeSku);
+    const baseItems = (ord.scaledIngredients && ord.scaledIngredients.length > 0)
+      ? ord.scaledIngredients.map((ing) => ({
+          materialCode: ing.code || ing.materialCode,
+          name: ing.name,
+          qtyRequestedSec: Number(ing.requiredSec ?? ing.requiredKg ?? 0),
+          qtyIssuedSec: Number(ing.requiredSec ?? ing.requiredKg ?? 0),
+          secondaryUom: ing.secondaryUom || 'kg',
+          remarks: ing.remarks || `Bulk batching issue for ${ord.orderId}`
+        }))
+      : (rec ? calculateRecipeIngredients(rec, ord.batchMultiplier || 1).map((ing) => ({
+          materialCode: ing.code,
+          name: ing.name,
+          qtyRequestedSec: ing.requiredKg,
+          qtyIssuedSec: ing.requiredKg,
+          secondaryUom: 'kg',
+          remarks: `Bulk batching issue for ${ord.orderId}`
+        })) : []);
+
+    setEditingBulkOrder(ord);
+    setBulkEditItems(baseItems);
+    setBulkEditNotes(ord.notes || '');
+  };
+
+  const handleAddBulkEditItem = () => {
+    const mat = inventory.find((m) => m.code === bulkAddMaterialCode) || inventory[0];
+    if (!mat || Number(bulkAddQty) <= 0) return;
+    setBulkEditItems((prev) => [
+      ...prev,
+      {
+        materialCode: mat.code,
+        name: mat.name,
+        qtyRequestedSec: Number(bulkAddQty),
+        qtyIssuedSec: Number(bulkAddQty),
+        secondaryUom: mat.secondaryUom || 'kg',
+        remarks: `Added by Jade (${currentRole})`
+      }
+    ]);
+    setBulkAddQty(1);
+  };
+
 
   const selectedMatObj = inventory.find((m) => m.code === selectedMaterialCode) || inventory[0] || {};
   const unitPresets = getMaterialUnitPresets(selectedMatObj);
@@ -426,6 +477,182 @@ export default function IssuanceModule({
         </section>
       )}
 
+      
+      {/* JADE BULK BATCHING REQUISITION REVIEW & ADJUST MODAL */}
+      {editingBulkOrder && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border-2 border-purple-600 space-y-4 max-h-[90vh] flex flex-col">
+            <div className="flex justify-between items-start border-b pb-3">
+              <div>
+                <span className="font-mono text-xs font-bold bg-purple-900 text-purple-100 px-2 py-0.5 rounded">
+                  {editingBulkOrder.orderId} · BULK BATCH REVIEW
+                </span>
+                <h3 className="font-extrabold text-base text-[#240e32] mt-1">
+                  Adjust Materials for {editingBulkOrder.recipeName}
+                </h3>
+                <p className="text-xs text-gray-500">
+                  Target Outlet: {editingBulkOrder.outletName} · Adjust line quantities or substitute items before authorized release.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingBulkOrder(null)}
+                className="text-gray-400 hover:text-gray-600 font-extrabold text-lg p-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="overflow-y-auto flex-1 space-y-4 pr-1">
+              {/* Items Table */}
+              <div className="border border-gray-200 rounded-xl overflow-hidden">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-[#240e32] text-[#E5C585]">
+                    <tr>
+                      <th className="p-2">Material SKU</th>
+                      <th className="p-2">Description</th>
+                      <th className="p-2">Bodega Avail</th>
+                      <th className="p-2 w-28">Issue Qty (kg)</th>
+                      <th className="p-2 text-center w-16">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {bulkEditItems.map((item, idx) => {
+                      const mat = inventory.find((m) => m.code === item.materialCode);
+                      const currentBal = mat ? Number(mat.currentBalance || 0) : 0;
+                      const isShort = currentBal < Number(item.qtyIssuedSec || 0);
+
+                      return (
+                        <tr key={idx} className={isShort ? 'bg-red-50/60' : 'hover:bg-gray-50'}>
+                          <td className="p-2 font-mono font-bold text-[#5B2E7A]">
+                            {item.materialCode || <span className="text-amber-700 italic">Sub-Assembly</span>}
+                          </td>
+                          <td className="p-2">
+                            <div className="font-semibold text-gray-900">{item.name}</div>
+                            {item.remarks && <div className="text-[10px] text-gray-500 italic">{item.remarks}</div>}
+                          </td>
+                          <td className="p-2 font-mono">
+                            <span className={isShort ? 'text-red-700 font-bold' : 'text-emerald-700 font-bold'}>
+                              {currentBal} {item.secondaryUom || 'kg'}
+                            </span>
+                          </td>
+                          <td className="p-2">
+                            <input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              value={item.qtyIssuedSec}
+                              onChange={(e) => {
+                                const val = parseFloat(e.target.value) || 0;
+                                setBulkEditItems((prev) =>
+                                  prev.map((it, i) => (i === idx ? { ...it, qtyIssuedSec: val } : it))
+                                );
+                              }}
+                              className="w-full p-1.5 border rounded font-mono font-bold text-gray-900 text-xs"
+                            />
+                          </td>
+                          <td className="p-2 text-center">
+                            <button
+                              type="button"
+                              onClick={() => setBulkEditItems((prev) => prev.filter((_, i) => i !== idx))}
+                              className="text-red-600 hover:text-red-800 font-bold text-xs"
+                              title="Remove item from batch issue"
+                            >
+                              ✕
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Add Extra/Substitute Material */}
+              <div className="bg-[#FAF6EE] p-3 rounded-xl border border-[#C8963E]/40 space-y-2">
+                <span className="text-xs font-bold text-[#240e32]">Add Bodega Material / Substitute SKU:</span>
+                <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center">
+                  <div className="sm:col-span-7">
+                    <select
+                      value={bulkAddMaterialCode}
+                      onChange={(e) => setBulkAddMaterialCode(e.target.value)}
+                      className="w-full p-1.5 border rounded text-xs bg-white"
+                    >
+                      {inventory.map((m) => (
+                        <option key={m.code} value={m.code}>
+                          {m.code} · {m.name} ({m.currentBalance} {m.secondaryUom} in stock)
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="sm:col-span-3">
+                    <input
+                      type="number"
+                      step="0.5"
+                      min="0.1"
+                      value={bulkAddQty}
+                      onChange={(e) => setBulkAddQty(parseFloat(e.target.value) || 1)}
+                      className="w-full p-1.5 border rounded text-xs font-mono font-bold"
+                      placeholder="Qty (kg)"
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <button
+                      type="button"
+                      onClick={handleAddBulkEditItem}
+                      className="w-full bg-[#240e32] text-[#E5C585] text-xs font-bold py-1.5 px-2 rounded hover:bg-[#3D1C52] transition"
+                    >
+                      + Add
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Custodian Notes */}
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">
+                  Custodian Adjustment Remarks (Logged to Audit Trail):
+                </label>
+                <textarea
+                  value={bulkEditNotes}
+                  onChange={(e) => setBulkEditNotes(e.target.value)}
+                  placeholder="Note reason for ingredient quantity adjustment or substitution..."
+                  rows={2}
+                  className="w-full p-2 border rounded-lg text-xs"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-between items-center pt-3 border-t text-xs">
+              <button
+                type="button"
+                onClick={() => setEditingBulkOrder(null)}
+                className="px-4 py-2 text-gray-600 hover:text-gray-800 font-semibold"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (bulkEditItems.length === 0) {
+                    alert('Cannot approve an empty material requisition.');
+                    return;
+                  }
+                  triggerAnimatedAction(editingBulkOrder.orderId, () => {
+                    onApprovePendingWithdrawal(editingBulkOrder.orderId, bulkEditItems, bulkEditNotes);
+                  });
+                  setEditingBulkOrder(null);
+                }}
+                className="px-5 py-2.5 rounded-xl bg-purple-800 hover:bg-purple-900 text-white font-extrabold shadow-lg flex items-center gap-1.5 transition"
+              >
+                <CheckCircle2 size={15} />
+                <span>Authorize &amp; Deduct Adjusted Materials</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* JADE REQUISITION EDITING MODAL */}
       {editingRequest && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
@@ -647,46 +874,95 @@ export default function IssuanceModule({
                       <span className="font-mono font-bold bg-purple-900 text-purple-100 px-2 py-0.5 rounded">
                         {ord.orderId}
                       </span>
-                      <span className="text-[11px] text-gray-500 font-mono">{ord.requestDate}</span>
+                      <span className="text-[11px] text-gray-500 font-mono">{ord.requestDate || ord.scheduledScalingDate}</span>
                     </div>
                     <h3 className="font-extrabold text-sm text-purple-950">
-                      {ord.recipeName} · <span className="text-purple-800">{ord.plannedBatches} Commercial Batches</span>
+                      {ord.recipeName} · <span className="text-purple-800">{ord.batchMultiplier || ord.plannedBatches || 1}x Batch ({ord.requestedQtyPcs} pcs)</span>
                     </h3>
                     <p className="text-xs text-gray-600 mt-1">
-                      Requested by <strong>{ord.bakerName || 'Baker'}</strong> ({ord.outletName || 'Production'})
+                      Requested by <strong>{ord.bakerName || ord.requisitionedBy || 'Romeo B. Malusay'}</strong> ({ord.outletName || 'Production Line'})
                     </p>
-                    <p className="text-[11px] text-purple-900 font-semibold mt-1">
-                      Allocates bulk flour &amp; shortening from Dry Room 1.
-                    </p>
+
+                    {/* LIVE INGREDIENT BOM & STOCK AVAILABILITY BREAKDOWN */}
+                    {(() => {
+                      const rec = (recipes || []).find((r) => r.sku === ord.recipeSku) || MASTER_RECIPES.find((r) => r.sku === ord.recipeSku);
+                      const ings = (ord.scaledIngredients && ord.scaledIngredients.length > 0)
+                        ? ord.scaledIngredients
+                        : (rec ? calculateRecipeIngredients(rec, ord.batchMultiplier || 1) : []);
+
+                      return (
+                        <div className="bg-white p-2.5 rounded-xl border border-purple-200 mt-2 space-y-1.5">
+                          <div className="flex justify-between items-center text-[11px] font-bold text-[#5B2E7A] border-b pb-1">
+                            <span>BOM Ingredients to Deduct ({ings.length}):</span>
+                            <span>Scale Target</span>
+                          </div>
+                          <div className="max-h-36 overflow-y-auto space-y-1 pr-1">
+                            {ings.map((ing, idx) => {
+                              const code = ing.code || ing.materialCode;
+                              const req = Number(ing.requiredSec ?? ing.requiredKg ?? 0);
+                              const mat = inventory.find((m) => m.code === code);
+                              const currentStock = mat ? Number(mat.currentBalance || 0) : 0;
+                              const isShort = currentStock < req;
+
+                              return (
+                                <div key={idx} className="flex justify-between items-center text-[11px] hover:bg-purple-50/50 p-0.5 rounded">
+                                  <div className="truncate mr-2">
+                                    <code className="font-bold text-[#5B2E7A]">{code}</code> · {ing.name}
+                                  </div>
+                                  <div className="flex items-center gap-1.5 shrink-0">
+                                    <strong className="font-mono text-gray-900">{req} {ing.secondaryUom || 'kg'}</strong>
+                                    <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded-full ${
+                                      isShort ? 'bg-red-100 text-red-800' : 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                                    }`}>
+                                      {isShort ? `Short (${currentStock})` : `${currentStock} avail`}
+                                    </span>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
 
-                  <div className="flex items-center justify-end gap-2 pt-2 border-t border-purple-200">
-                    {onDeclineBulkWithdrawal && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const reason = window.prompt(
-                            `Decline bulk withdrawal for ${ord.orderId}? Enter audit reason:`,
-                            'Insufficient bulk stock at central warehouse'
-                          );
-                          if (reason !== null) {
-                            triggerAnimatedAction(ord.orderId, () => onDeclineBulkWithdrawal(ord.orderId, reason));
-                          }
-                        }}
-                        className="px-3 py-1.5 rounded-lg text-xs font-bold bg-red-100 hover:bg-red-600 text-red-700 hover:text-white flex items-center gap-1 transition"
-                      >
-                        <XCircle size={14} /> Decline
-                      </button>
-                    )}
-                    {onApprovePendingWithdrawal && (
-                      <button
-                        type="button"
-                        onClick={() => triggerAnimatedAction(ord.orderId, () => onApprovePendingWithdrawal(ord.orderId))}
-                        className="px-3.5 py-1.5 rounded-lg text-xs font-extrabold bg-purple-800 hover:bg-purple-900 text-white flex items-center gap-1.5 shadow transition"
-                      >
-                        <CheckCircle2 size={14} /> Approve Bulk Deduction
-                      </button>
-                    )}
+                  <div className="flex items-center justify-between gap-2 pt-2 border-t border-purple-200">
+                    <button
+                      type="button"
+                      onClick={() => handleOpenBulkEdit(ord)}
+                      className="px-3 py-1.5 rounded-lg text-xs font-bold bg-[#C8963E] hover:bg-[#b58330] text-[#240e32] flex items-center gap-1 shadow transition"
+                    >
+                      <Sliders size={13} /> Review &amp; Adjust
+                    </button>
+
+                    <div className="flex items-center gap-1.5">
+                      {onDeclineBulkWithdrawal && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const reason = window.prompt(
+                              `Decline bulk withdrawal for ${ord.orderId}? Enter audit reason:`,
+                              'Insufficient bulk stock at central warehouse'
+                            );
+                            if (reason !== null) {
+                              triggerAnimatedAction(ord.orderId, () => onDeclineBulkWithdrawal(ord.orderId, reason));
+                            }
+                          }}
+                          className="px-3 py-1.5 rounded-lg text-xs font-bold bg-red-100 hover:bg-red-600 text-red-700 hover:text-white flex items-center gap-1 transition"
+                        >
+                          <XCircle size={14} /> Decline
+                        </button>
+                      )}
+                      {onApprovePendingWithdrawal && (
+                        <button
+                          type="button"
+                          onClick={() => triggerAnimatedAction(ord.orderId, () => onApprovePendingWithdrawal(ord.orderId))}
+                          className="px-3.5 py-1.5 rounded-lg text-xs font-extrabold bg-purple-800 hover:bg-purple-900 text-white flex items-center gap-1.5 shadow transition"
+                        >
+                          <CheckCircle2 size={14} /> Approve All
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               );
