@@ -1,8 +1,15 @@
+# Dependencies
 node_modules/
+
+# Production build outputs
 dist/
+
+# Environment configurations
 .env
 .env.*
 !.env.example
+
+# Cloudflare & tooling caches
 .wrangler/
 .aistudio/
 .DS_Store
@@ -13,7 +20,15 @@ payload.json
 seed.sql
 opening-inventory.sql
 export-repo.ps1
+
+# Repository text dumps & archives (wildcard ignore)
 repository_dump.txt
+*repository_dump*
+wms_repository_dump_as_of_*.txt
 
 # Local-only recovery script — never commit
 restore-passwords.mjs
+
+# Repository text dumps & archives (wildcard ignore)
+*repository_dump*
+wms_repository_dump_as_of_*.txt
