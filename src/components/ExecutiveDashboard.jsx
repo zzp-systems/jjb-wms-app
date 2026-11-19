@@ -161,7 +161,7 @@ export default function ExecutiveDashboard({
                 conversionFactor: 25,
                 threshold: 250,
                 unitCost: 1000,
-                supplier: 'Lucky Roma Trading / JCT Wheat',
+                supplier: 'Lucky Roma Trading',
                 isNew: true
               });
               setModalActiveTab('master');
@@ -885,11 +885,17 @@ export default function ExecutiveDashboard({
                       <label className="block font-bold text-gray-700 mb-1">Primary Vendor</label>
                       <input
                         type="text"
+                        list="vendor-options-list"
                         value={editingMaterial.supplier || ''}
                         onChange={(e) => setEditingMaterial({ ...editingMaterial, supplier: e.target.value })}
                         placeholder="Default vendor name"
                         className="w-full p-2 border rounded-xl"
                       />
+                      <datalist id="vendor-options-list">
+                        {(suppliers || []).map((s) => (
+                          <option key={s.id || s.name} value={s.name} />
+                        ))}
+                      </datalist>
                     </div>
                   </div>
 

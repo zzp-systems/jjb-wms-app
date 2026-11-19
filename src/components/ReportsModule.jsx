@@ -11,7 +11,7 @@ import { calculateReorderSuggestions } from '../utils/wmsLogic';
 import { DEFAULT_CHARGE_TO_OPTIONS } from '../data/SharedTaxonomy';
 
 const DEFAULT_AUTHORIZED_SUPPLIERS = [
-  'Lucky Roma Trading / JCT Wheat',
+  'Lucky Roma Trading',
   'Mindanao Packaging & Industrial Box Corp',
   'P.L. Sebastian Corporation',
   'JCT Wheat & Sugar Products',
@@ -80,8 +80,18 @@ export default function ReportsModule({
   // Combined Authorized Suppliers list for dropdowns (Names as strings)
   const authorizedSupplierNames = useMemo(() => {
     const set = new Set(DEFAULT_AUTHORIZED_SUPPLIERS);
-    (inventory || []).forEach((i) => { if (i.supplier) set.add(i.supplier); });
-    (suppliers || []).forEach((s) => { if (s.name) set.add(s.name); });
+    (inventory || []).forEach((i) => {
+      if (i.supplier) {
+        const cleanName = i.supplier === 'Lucky Roma Trading / JCT Wheat' ? 'Lucky Roma Trading' : i.supplier;
+        set.add(cleanName);
+      }
+    });
+    (suppliers || []).forEach((s) => {
+      if (s.name) {
+        const cleanName = s.name === 'Lucky Roma Trading / JCT Wheat' ? 'Lucky Roma Trading' : s.name;
+        set.add(cleanName);
+      }
+    });
     return Array.from(set);
   }, [inventory, suppliers]);
 
@@ -1127,7 +1137,7 @@ export default function ReportsModule({
                 type="button"
                 onClick={() => setEditingAgreement({
                   id: `AGR-${Date.now().toString().slice(-5)}`,
-                  supplierName: authorizedSupplierNames[0] || 'Lucky Roma Trading / JCT Wheat',
+                  supplierName: authorizedSupplierNames[0] || 'Lucky Roma Trading',
                   materialCode: inventory[0]?.code || 'RM-FLR-001',
                   unitCost: 1050,
                   effectiveStartDate: new Date().toISOString().slice(0, 10),

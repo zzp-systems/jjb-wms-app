@@ -30,16 +30,28 @@ import {
 } from './data/initialData';
 
 const INITIAL_SUPPLIERS = [
-  { id: 'SUP-001', name: 'Lucky Roma Trading / JCT Wheat', contactPerson: 'Roberto Roma', phone: '+63 917-555-1021', email: 'sales@luckyroma.com', address: 'Bldg 4, Agdao Commercial Complex, Davao City', tin: '204-918-301-000', paymentTerms: 'Net 30 Days', isActive: true },
+  { id: 'SUP-001', name: 'Lucky Roma Trading', contactPerson: 'Roberto Roma', phone: '+63 917-555-1021', email: 'sales@luckyroma.com', address: 'Bldg 4, Agdao Commercial Complex, Davao City', tin: '204-918-301-000', paymentTerms: 'Net 30 Days', isActive: true },
   { id: 'SUP-002', name: 'Mindanao Packaging & Industrial Box Corp', contactPerson: 'Clarissa Uy', phone: '+63 920-888-4491', email: 'orders@minpack.ph', address: 'Km 12 Sasa Wharf Road, Davao City', tin: '109-482-771-000', paymentTerms: 'Net 30 Days', isActive: true },
   { id: 'SUP-003', name: 'P.L. Sebastian Corporation', contactPerson: 'Paul Sebastian', phone: '+63 918-222-9901', email: 'plsebastian@gmail.com', address: 'Monteverde Ave, Chinatown, Davao City', tin: '331-502-119-000', paymentTerms: 'Net 15 Days', isActive: true },
-  { id: 'SUP-004', name: 'Davao Great Wall Trading, Inc.', contactPerson: 'Elena Chen', phone: '+63 922-441-8890', email: 'sales@davaogreatwall.com', address: 'R. Castillo St, Agdao, Davao City', tin: '419-882-663-000', paymentTerms: 'Net 30 Days', isActive: true }
+  { id: 'SUP-004', name: 'JCT Wheat & Sugar Products', contactPerson: 'Jose Carlos Tan', phone: '+63 917-310-8842', email: 'jct.orders@gmail.com', address: 'Lapu-Lapu St, Agdao, Davao City', tin: '402-118-925-000', paymentTerms: 'Net 30 Days', isActive: true },
+  { id: 'SUP-005', name: 'Davao Great Wall Trading, Inc.', contactPerson: 'Elena Chen', phone: '+63 922-441-8890', email: 'sales@davaogreatwall.com', address: 'R. Castillo St, Agdao, Davao City', tin: '419-882-663-000', paymentTerms: 'Net 30 Days', isActive: true },
+  { id: 'SUP-006', name: 'Golden Fortune Trading Incorporated', contactPerson: 'Wellington Go', phone: '+63 919-450-2219', email: 'goldenfortune.dvo@gmail.com', address: 'C.M. Recto Ave, Davao City', tin: '285-741-602-000', paymentTerms: 'Net 30 Days', isActive: true },
+  { id: 'SUP-007', name: 'Local Poultry Coop', contactPerson: 'Danilo Macasero', phone: '+63 928-771-3304', email: 'davaopoultrycoop@yahoo.com', address: 'Calinan Poultry District, Davao City', tin: '118-903-514-000', paymentTerms: 'COD / Immediate', isActive: true },
+  { id: 'SUP-008', name: 'C-One Packaging Solutions', contactPerson: 'Cynthia Ong', phone: '+63 921-662-7788', email: 'conepackaging@gmail.com', address: 'Mamay Road, Lanang, Davao City', tin: '394-220-819-000', paymentTerms: 'Net 30 Days', isActive: true },
+  { id: 'SUP-009', name: 'Mandaue Libertad Flexible Packaging', contactPerson: 'Federico Lim', phone: '+63 917-889-4412', email: 'mlpackaging.dvo@gmail.com', address: 'Panacan Industrial Park, Davao City', tin: '501-332-908-000', paymentTerms: 'Net 30 Days', isActive: true },
+  { id: 'SUP-010', name: "D'Unibuenas Corporation (Solane LPG)", contactPerson: 'Eduardo Dizon', phone: '+63 918-902-6631', email: 'dunibuenas.solane@gmail.com', address: 'J.P. Laurel Ave, Bajada, Davao City', tin: '177-440-291-000', paymentTerms: 'Net 15 Days', isActive: true }
 ];
 
 const INITIAL_PRICE_AGREEMENTS = [
-  { id: 'AGR-001', supplierName: 'Lucky Roma Trading / JCT Wheat', materialCode: 'RM-FLR-003', materialName: '1st Class Hard Bread Flour (Rossa)', unitCost: 1120, effectiveStartDate: '2026-11-01', effectiveEndDate: '2027-12-31', moq: '20 Sacks', notes: 'Indangan Site Master Annual Supply Rate', isActive: true },
+  { id: 'AGR-001', supplierName: 'Lucky Roma Trading', materialCode: 'RM-FLR-003', materialName: '1st Class Hard Bread Flour (Rossa)', unitCost: 1120, effectiveStartDate: '2026-11-01', effectiveEndDate: '2027-12-31', moq: '20 Sacks', notes: 'Indangan Site Master Annual Supply Rate', isActive: true },
   { id: 'AGR-002', supplierName: 'Davao Great Wall Trading, Inc.', materialCode: 'RM-SWT-001', materialName: 'Crystal Brown Sugar', unitCost: 2200, effectiveStartDate: '2026-11-01', effectiveEndDate: '2027-12-31', moq: '10 Sacks', notes: 'Fixed Refined Brown Cane Rate', isActive: true },
-  { id: 'AGR-003', supplierName: 'Davao Great Wall Trading, Inc.', materialCode: 'RM-DRY-006', materialName: 'White Sesame Seeds — 1 kg', unitCost: 195, effectiveStartDate: '2026-11-01', effectiveEndDate: '2027-12-31', moq: '5 Packs', notes: 'Contract Quota Discount', isActive: true }
+  { id: 'AGR-003', supplierName: 'Davao Great Wall Trading, Inc.', materialCode: 'RM-DRY-006', materialName: 'White Sesame Seeds — 1 kg', unitCost: 195, effectiveStartDate: '2026-11-01', effectiveEndDate: '2027-12-31', moq: '5 Packs', notes: 'Contract Quota Discount', isActive: true },
+  { id: 'AGR-004', supplierName: 'JCT Wheat & Sugar Products', materialCode: 'RM-DRY-004', materialName: 'Skimmed Milk Powder (Farmland - 25kg Sack)', unitCost: 3250, effectiveStartDate: '2026-11-01', effectiveEndDate: '2027-12-31', moq: '5 Sacks', notes: 'Direct Importer Volume Pricing', isActive: true },
+  { id: 'AGR-005', supplierName: 'Golden Fortune Trading Incorporated', materialCode: 'RM-DRY-003', materialName: 'Evaporada (Master Chef - 370ml Can)', unitCost: 23.96, effectiveStartDate: '2026-11-01', effectiveEndDate: '2027-12-31', moq: '10 Boxes', notes: 'Wholesale Dairy Agreement', isActive: true },
+  { id: 'AGR-006', supplierName: 'Local Poultry Coop', materialCode: 'RM-DRY-001', materialName: 'Fresh Medium Farm Eggs (30 pcs / Tray)', unitCost: 210, effectiveStartDate: '2026-11-01', effectiveEndDate: '2027-12-31', moq: '20 Trays', notes: 'Direct Farm Contract', isActive: true },
+  { id: 'AGR-007', supplierName: 'Mindanao Packaging & Industrial Box Corp', materialCode: 'PM-BOX-001', materialName: 'Jang-Jang Bread Box Small (Printed Kraft)', unitCost: 14.50, effectiveStartDate: '2026-11-01', effectiveEndDate: '2027-12-31', moq: '500 Pcs', notes: 'Annual Packaging Contract', isActive: true },
+  { id: 'AGR-008', supplierName: 'Mandaue Libertad Flexible Packaging', materialCode: 'PM-PAP-001', materialName: 'Waxed Glassine Paper Sheets (500 sheets/Rim)', unitCost: 480, effectiveStartDate: '2026-11-01', effectiveEndDate: '2027-12-31', moq: '10 Rims', notes: 'Laminated Paper Supply Agreement', isActive: true },
+  { id: 'AGR-009', supplierName: "D'Unibuenas Corporation (Solane LPG)", materialCode: 'UT-GAS-001', materialName: 'Solane LPG 50kg Industrial Tank', unitCost: 4100, effectiveStartDate: '2026-11-01', effectiveEndDate: '2027-12-31', moq: '2 Tanks', notes: 'Central Commissary Fuel Contract', isActive: true }
 ];
 
 import { deductFefoLots, calculateRecipeIngredients } from './utils/wmsLogic';
@@ -180,8 +192,35 @@ export default function App() {
   const [quarantineList, setQuarantineList] = useState(() => getSaved('quarantine', INITIAL_QUARANTINE));
   const [auditLogs, setAuditLogs] = useState(() => getSaved('audit_logs', INITIAL_AUDIT_LOGS));
   const [purchaseOrders, setPurchaseOrders] = useState(() => getSaved('purchase_orders', []));
-  const [suppliers, setSuppliers] = useState(() => getSaved('suppliers', INITIAL_SUPPLIERS));
-  const [vendorPriceAgreements, setVendorPriceAgreements] = useState(() => getSaved('vendor_price_agreements', INITIAL_PRICE_AGREEMENTS));
+  const [suppliers, setSuppliers] = useState(() => {
+    const saved = getSaved('suppliers', null);
+    if (!saved || !Array.isArray(saved) || saved.length === 0) {
+      return INITIAL_SUPPLIERS;
+    }
+    // Merge INITIAL_SUPPLIERS so all 10 vendors are guaranteed to appear even with prior browser storage
+    const map = new Map();
+    INITIAL_SUPPLIERS.forEach((s) => map.set(s.name, { ...s }));
+    saved.forEach((s) => {
+      const cleanName = s.name === 'Lucky Roma Trading / JCT Wheat' ? 'Lucky Roma Trading' : s.name;
+      const base = map.get(cleanName) || {};
+      map.set(cleanName, { ...base, ...s, name: cleanName });
+    });
+    return Array.from(map.values());
+  });
+
+  const [vendorPriceAgreements, setVendorPriceAgreements] = useState(() => {
+    const saved = getSaved('vendor_price_agreements', null);
+    if (!saved || !Array.isArray(saved) || saved.length === 0) {
+      return INITIAL_PRICE_AGREEMENTS;
+    }
+    const map = new Map();
+    INITIAL_PRICE_AGREEMENTS.forEach((a) => map.set(a.id, { ...a }));
+    saved.forEach((a) => {
+      const cleanSup = a.supplierName === 'Lucky Roma Trading / JCT Wheat' ? 'Lucky Roma Trading' : a.supplierName;
+      map.set(a.id, { ...a, supplierName: cleanSup });
+    });
+    return Array.from(map.values());
+  });
 
   // UI Preferences
   const initialUiPrefs = loadUiPrefs();
