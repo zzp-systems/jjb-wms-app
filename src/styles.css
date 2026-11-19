@@ -2,6 +2,11 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ============================================================================
+   Jang-Jang Bakeshop Systems — Global Styles & Typography
+   Indangan Central Commissary · FDA LTO No. 3000013388488
+   ============================================================================ */
+
 :root {
   --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
   --font-serif: 'Playfair Display', Georgia, Cambria, 'Times New Roman', Times, serif;
@@ -18,6 +23,7 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Custom Font Family Utilities */
 .font-serif-title {
   font-family: var(--font-serif);
 }
@@ -26,6 +32,7 @@ body {
   font-family: var(--font-mono);
 }
 
+/* Hide scrollbar for cross-browser horizontal navigation strips */
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
@@ -34,6 +41,7 @@ body {
   scrollbar-width: none;
 }
 
+/* Animation utilities for animated actions and drawer transitions */
 .card-exit {
   opacity: 0 !important;
   transform: scale(0.94) translateY(-8px) !important;
@@ -41,6 +49,7 @@ body {
   transition: all 0.32s ease-in-out !important;
 }
 
+/* Print Stylesheet Overrides for Hard-Copy Slips & Batch Tags */
 @media print {
   .no-print {
     display: none !important;
